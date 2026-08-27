@@ -24,8 +24,10 @@ _BODY_KEY = re.compile(r"(?i)(?:^|[_-])(?:body|response_body|content|html|payloa
 
 # URL credential forms: scheme://user:pass@... and query secrets ?a=...&token=...
 _URL_CREDENTIALS = re.compile(r"(?i)\b(https?|socks[45])://([^/\s:@]+):([^@\s/]+)@")
+# Any query key containing a credential word is treated as a secret (over-redaction is safe).
 _QUERY_SECRET = re.compile(
-    r"(?i)([?&](?:token|api[-_]?key|apikey|key|secret|password|sig|signature|session|auth)[=])"
+    r"(?i)((?:^|[?&\s])[a-z0-9_.-]*(?:token|secret|password|passwd|pwd|api[-_]?key|apikey|key"
+    r"|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*=)"
     r"([^&\s'\"]+)"
 )
 
@@ -66,6 +68,8 @@ def redact_value(value: Any) -> Any:
         return MappingProxyType(clean)
     if isinstance(value, (list, tuple)):
         return tuple(redact_value(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(redact_value(item) for item in value)
     if isinstance(value, str):
         value = _URL_CREDENTIALS.sub(
             lambda m: f"{m.group(1)}://[REDACTED]@",
@@ -85,6 +89,8 @@ def format_context(context: Mapping[str, Any] | None) -> str:
         if isinstance(item, (list, tuple)):
             inner = ", ".join(_format(v) for v in item)
             return f"[{inner}]" if isinstance(item, list) else f"({inner})"
+        if isinstance(item, (set, frozenset)):
+            return "{" + ", ".join(sorted(_format(v) for v in item)) + "}"
         return str(item)
 
     safe = redact_value(dict(context or {}))
@@ -101,7 +107,7 @@ class FinvizError(Exception):
         context: Mapping[str, Any] | None = None,
     ) -> None:
         self.context: Mapping[str, Any] = redact_value(dict(context or {}))
-        super().__init__(message)
+        super().__init__(redact_value(str(message)))
 
     def __str__(self) -> str:
         rendered = format_context(self.context)

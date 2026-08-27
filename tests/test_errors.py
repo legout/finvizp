@@ -129,6 +129,45 @@ def test_format_context_redacts_nested_sensitive_keys() -> None:
     assert "secret page" not in rendered
 
 
+def test_error_message_is_redacted_before_storage() -> None:
+    error = FinvizQueryError(
+        f"request failed: https://finviz.com/api/quote.ashx?access_token={SECRET}&t=AAPL"
+    )
+    rendered = str(error)
+    assert SECRET not in rendered
+    assert "access_token=[REDACTED]" in rendered
+    assert all(SECRET not in str(arg) for arg in error.args)
+
+
+def test_error_context_scrubs_access_token_query_strings() -> None:
+    error = FinvizQueryError(
+        "bad request",
+        context={"note": f"GET https://example.invalid/?access_token={SECRET}&t=AAPL"},
+    )
+    assert SECRET not in error.context["note"]
+    assert "access_token=[REDACTED]" in error.context["note"]
+    assert SECRET not in str(error)
+
+
+def test_error_context_freezes_sets_and_redacts_elements() -> None:
+    tags = {f"https://x.invalid/?token={SECRET}", "plain"}
+    error = FinvizQueryError("bad", context={"tags": tags})
+    stored = error.context["tags"]
+    assert isinstance(stored, frozenset)
+    assert stored == frozenset({"https://x.invalid/?token=[REDACTED]", "plain"})
+    tags.add("mutated")
+    assert "mutated" not in stored
+    with pytest.raises(AttributeError):
+        stored.add("nope")  # type: ignore[attr-defined]
+
+
+def test_format_context_renders_frozensets() -> None:
+    rendered = format_context({"tags": frozenset({"a", "b"})})
+    assert "a" in rendered
+    assert "b" in rendered
+    assert "frozenset" not in rendered
+
+
 def test_redact_value_scrubs_url_credentials_in_strings() -> None:
     redacted = redact_value({"note": "request to http://user:pass@host/path failed"})
     rendered = format_context(redacted)

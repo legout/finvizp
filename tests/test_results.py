@@ -166,6 +166,27 @@ def test_quotebundle_normalizes_mutable_inputs() -> None:
         bundle.snapshot_tables["extra"] = "nope"  # type: ignore[index]
 
 
+def test_metadata_query_freezes_nested_sets() -> None:
+    query = {"t": "AAPL", "filters": {"exchanges": {"NASDAQ", "NYSE"}}}
+    metadata = _meta(query=query)
+    stored = metadata.query["filters"]["exchanges"]
+    assert isinstance(stored, frozenset)
+    assert stored == frozenset({"NASDAQ", "NYSE"})
+    query["filters"]["exchanges"].add("AMEX")
+    assert "AMEX" not in stored
+
+
+def test_quotebundle_snapshot_tables_freeze_nested_sets() -> None:
+    fetched = datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+    tables = {"snapshot": {"scalars": {"price": {1.0, 2.0}}}}
+    bundle = QuoteBundle(symbol="AAPL", fetched_at=fetched, snapshot_tables=tables)
+    stored = bundle.snapshot_tables["snapshot"]["scalars"]["price"]
+    assert isinstance(stored, frozenset)
+    assert stored == frozenset({1.0, 2.0})
+    tables["snapshot"]["scalars"]["price"].add(3.0)
+    assert 3.0 not in stored
+
+
 def test_fetchresult_is_frozen_and_generic() -> None:
     result = FetchResult[pa.Table](
         data=pa.table({"symbol": ["AAPL"]}),

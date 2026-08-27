@@ -32,11 +32,13 @@ class AccessTier(StrEnum):
 
 
 def _freeze(value: Any) -> Any:
-    """Recursively convert mappings to frozen proxies and sequences to tuples."""
+    """Recursively convert mappings to frozen proxies and sequences/sets to tuples/frozensets."""
     if isinstance(value, Mapping):
         return MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_freeze(v) for v in value)
     return value
 
 

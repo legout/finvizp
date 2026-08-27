@@ -8,7 +8,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any
 
-from finvizp.results import AccessTier, ResultStatus
+from finvizp.results import AccessTier, ResultStatus, _freeze
 
 __all__ = ["Artifact", "QuoteBundle"]
 
@@ -53,3 +53,7 @@ class QuoteBundle:
     snapshot_tables: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     status: ResultStatus = ResultStatus.EMPTY
     access_tier: AccessTier = AccessTier.UNKNOWN
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "artifacts", tuple(self.artifacts))
+        object.__setattr__(self, "snapshot_tables", _freeze(self.snapshot_tables))

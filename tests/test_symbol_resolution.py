@@ -54,9 +54,8 @@ def test_unknown_punctuation_rejected() -> None:
         normalize_symbols(["GOOG+L"])
 
 
-def test_max_length_rejected() -> None:
-    with pytest.raises(SymbolInputError):
-        normalize_symbols("A" * 13)
+def test_long_symbols_are_accepted() -> None:
+    assert normalize_symbols("A" * 13) == ["A" * 13]
 
 
 def test_positions_spelling_and_mapping_are_preserved() -> None:

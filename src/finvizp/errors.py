@@ -52,7 +52,7 @@ class UnitError:
 
 
 def redact_value(value: Any) -> Any:
-    """Recursively replace credential-bearing values with redaction markers."""
+    """Recursively replace credential-bearing values, returning frozen structures."""
     if isinstance(value, Mapping):
         clean: dict[str, Any] = {}
         for key, item in value.items():
@@ -63,10 +63,9 @@ def redact_value(value: Any) -> Any:
                 clean[key_text] = "[BODY REDACTED]"
             else:
                 clean[key_text] = redact_value(item)
-        return clean
+        return MappingProxyType(clean)
     if isinstance(value, (list, tuple)):
-        cleaned = [redact_value(item) for item in value]
-        return type(value)(cleaned) if isinstance(value, tuple) else cleaned
+        return tuple(redact_value(item) for item in value)
     if isinstance(value, str):
         value = _URL_CREDENTIALS.sub(
             lambda m: f"{m.group(1)}://[REDACTED]@",
@@ -101,7 +100,7 @@ class FinvizError(Exception):
         *,
         context: Mapping[str, Any] | None = None,
     ) -> None:
-        self.context: Mapping[str, Any] = MappingProxyType(dict(context or {}))
+        self.context: Mapping[str, Any] = redact_value(dict(context or {}))
         super().__init__(message)
 
     def __str__(self) -> str:

@@ -9,7 +9,7 @@ import pyarrow as pa
 import pytest
 
 from finvizp.errors import FinvizDataError
-from finvizp.models import Artifact
+from finvizp.models import Artifact, QuoteBundle
 from finvizp.results import (
     AccessTier,
     FetchResult,
@@ -88,6 +88,62 @@ def test_metadata_status_invariants() -> None:
             succeeded_units=2,
             failed_units=0,
         )
+
+
+def test_metadata_normalizes_mutable_inputs() -> None:
+    query = {"t": "AAPL", "filters": {"cap": "Large"}}
+    symbols = [SymbolResolutionRecord(position=0, requested="BRK.B", canonical="BRK-B")]
+    metadata = _meta(query=query, symbols=symbols)
+    query["t"] = "MSFT"
+    query["filters"]["cap"] = "Small"
+    symbols.append(SymbolResolutionRecord(position=1, requested="AAPL", canonical="AAPL"))
+    assert metadata.query["t"] == "AAPL"
+    assert metadata.query["filters"]["cap"] == "Large"
+    assert len(metadata.symbols) == 1
+    with pytest.raises(TypeError):
+        metadata.query["t"] = "MSFT"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        metadata.query["filters"]["cap"] = "Small"  # type: ignore[index]
+
+
+def test_metadata_rejects_invalid_enums_and_negative_counters() -> None:
+    with pytest.raises(FinvizDataError):
+        _meta(status="COMPLETE")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(access_tier="PUBLIC")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(requested_units=-2, succeeded_units=-2)
+    with pytest.raises(FinvizDataError):
+        _meta(attempts=-1)
+
+
+def test_quotebundle_normalizes_mutable_inputs() -> None:
+    fetched = datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+    table = pa.table({"symbol": ["AAPL"]})
+    tables = {"snapshot": table}
+    artifacts = [
+        Artifact(
+            source_url="https://finviz.com/chart.ashx?t=AAPL",
+            kind="chart",
+            media_type="image/png",
+            fetched_at=fetched,
+            symbol="AAPL",
+        )
+    ]
+    bundle = QuoteBundle(
+        symbol="AAPL",
+        fetched_at=fetched,
+        snapshot_tables=tables,
+        artifacts=artifacts,  # type: ignore[arg-type]
+    )
+    tables["snapshot"] = None
+    tables["extra"] = "mutated"
+    artifacts.append(artifacts[0])
+    assert bundle.snapshot_tables["snapshot"] is table
+    assert "extra" not in bundle.snapshot_tables
+    assert len(bundle.artifacts) == 1
+    with pytest.raises(TypeError):
+        bundle.snapshot_tables["extra"] = "nope"  # type: ignore[index]
 
 
 def test_fetchresult_is_frozen_and_generic() -> None:

@@ -9,14 +9,12 @@ from finvizp.results import SymbolResolutionRecord
 
 __all__ = ["SymbolInputError", "canonical_symbols", "normalize_symbols"]
 
-_MAX_SYMBOL_LENGTH = 12
-
 # Finviz dash notation plus reviewed dot/slash class-share forms.
 _ALLOWED = re.compile(r"^[A-Z0-9]+(?:[-./][A-Z0-9]+)*$")
 
 
 class SymbolInputError(ValueError):
-    """Raised for blank, oversized, or punctuation-bearing symbol input."""
+    """Raised for blank or punctuation-bearing symbol input."""
 
 
 def _iter_requested(symbols: str | Iterable[str] | None) -> Iterator[str]:
@@ -47,9 +45,6 @@ def _resolve(
         symbol = requested.strip().upper()
         if not symbol:
             msg = f"symbols[{position}]: blank symbol input is not allowed"
-            raise SymbolInputError(msg)
-        if len(symbol) > _MAX_SYMBOL_LENGTH:
-            msg = f"symbols[{position}]: symbol exceeds {_MAX_SYMBOL_LENGTH} characters: {symbol!r}"
             raise SymbolInputError(msg)
         if not _ALLOWED.fullmatch(symbol):
             msg = (

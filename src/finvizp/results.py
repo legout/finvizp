@@ -31,8 +31,13 @@ class AccessTier(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
-def _frozen_mapping(mapping: Mapping[str, Any] | None) -> Mapping[str, Any]:
-    return MappingProxyType(dict(mapping or {}))
+def _freeze(value: Any) -> Any:
+    """Recursively convert mappings to frozen proxies and sequences to tuples."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +58,7 @@ class ResultMetadata:
     access_tier: AccessTier
     fetched_at: datetime
     served_at: datetime | None = None
-    query: Mapping[str, Any] = field(default_factory=lambda: _frozen_mapping(None))
+    query: Mapping[str, Any] = field(default_factory=lambda: _freeze(None))
     symbols: tuple[SymbolResolutionRecord, ...] = ()
     warnings: tuple[FetchWarning, ...] = ()
     unit_errors: tuple[UnitError, ...] = ()
@@ -69,6 +74,20 @@ class ResultMetadata:
     schema_version: int | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "query", _freeze(self.query))
+        object.__setattr__(self, "symbols", tuple(self.symbols))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(self, "unit_errors", tuple(self.unit_errors))
+        if not isinstance(self.status, ResultStatus):
+            msg = f"status must be a ResultStatus, got {type(self.status).__name__}"
+            raise FinvizDataError(msg)
+        if not isinstance(self.access_tier, AccessTier):
+            msg = f"access_tier must be an AccessTier, got {type(self.access_tier).__name__}"
+            raise FinvizDataError(msg)
+        for name in ("requested_units", "succeeded_units", "failed_units", "attempts"):
+            if getattr(self, name) < 0:
+                msg = f"{name} cannot be negative, got {getattr(self, name)}"
+                raise FinvizDataError(msg)
         if self.requested_units != self.succeeded_units + self.failed_units:
             msg = (
                 f"completeness counts do not add up: requested={self.requested_units} "

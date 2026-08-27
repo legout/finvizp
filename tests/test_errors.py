@@ -9,6 +9,7 @@ import pyarrow as pa
 import pytest
 
 from finvizp.errors import (
+    REDACTED,
     FetchWarning,
     FinvizBatchError,
     FinvizBlockedError,
@@ -65,6 +66,20 @@ def test_error_context_is_immutable() -> None:
     error = FinvizQueryError("bad symbol", context={"t": "BRK.B"})
     with pytest.raises(TypeError):
         error.context["t"] = "MSFT"  # type: ignore[index]
+
+
+def test_error_context_attribute_is_redacted_and_frozen() -> None:
+    error = FinvizQueryError(
+        "bad symbol",
+        context={"cookies": SECRET, "nested": {"token": SECRET}, "t": "BRK.B"},
+    )
+    assert error.context["cookies"] == REDACTED
+    assert error.context["nested"]["token"] == REDACTED
+    assert error.context["t"] == "BRK.B"
+    with pytest.raises(TypeError):
+        error.context["extra"] = 1  # type: ignore[index]
+    with pytest.raises(TypeError):
+        error.context["nested"]["extra"] = 1  # type: ignore[index]
 
 
 def test_error_str_includes_redacted_context() -> None:

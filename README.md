@@ -50,9 +50,10 @@ verified. The public package supports Python 3.11-3.14.
 
 Start at [`docs/index.md`](docs/index.md). The research explains the complete
 Finviz surface, audits `finvizfinance`, compares overlapping Yahoo data, and
-defines what “history” means for snapshot-only statistics. The approved spec
-and confirmed decision register are complete; implementation plans have not yet
-been created.
+defines what “history” means for snapshot-only statistics. The approved spec,
+confirmed decision register, and implementation plans are complete. Start with
+the [implementation roadmap](docs/plans/2026-08-27-implementation-roadmap.md),
+which is mirrored onto a dedicated dormant Hermes Kanban board.
 
 Publication and release mechanics are documented in
 [`docs/publishing.md`](docs/publishing.md). No package has been published from

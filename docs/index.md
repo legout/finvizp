@@ -2,7 +2,7 @@
 
 **Research date:** 2026-08-27
 
-**Project status:** confirmed foundation design; no endpoint implementation plan exists yet
+**Project status:** confirmed design and implementation plans; endpoint implementation not started
 
 `finvizp` means **Finviz for Python**. It is intended to be an async,
 Arrow-native public Finviz client covering the verified 2026-08-27 public
@@ -34,9 +34,14 @@ surface and all `finvizfinance` capabilities through a smaller, deeper interface
    URLs, bounded live findings, and reproducibility caveats.
 11. [Publishing](publishing.md) — explicit version tags, GitHub Actions,
    trusted PyPI publishing, and release verification.
+12. [Implementation roadmap](plans/2026-08-27-implementation-roadmap.md) —
+    module ownership, milestone dependencies, Kanban workflow, verification,
+    and links to the executable 0.1–1.0 plans.
 
 The approved foundation design is recorded at
 [docs/superpowers/specs/2026-08-27-finvizp-foundation-design.md](superpowers/specs/2026-08-27-finvizp-foundation-design.md).
+The machine-readable dormant board graph is
+[`docs/plans/kanban-cards.json`](plans/kanban-cards.json).
 
 ## Evidence base
 

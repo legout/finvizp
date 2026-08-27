@@ -16,5 +16,8 @@ htmlcov/
 *.har
 .pypirc
 
+# Kanban worker worktrees
+.worktrees/
+
 # Virtual environments
 .venv

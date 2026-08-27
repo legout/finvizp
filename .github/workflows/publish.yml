@@ -1,0 +1,73 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Validate and publish
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/finvizp/
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.14
+        run: uv python install 3.14
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-groups --python 3.14
+
+      - name: Verify tag and package versions
+        run: |
+          PACKAGE_VERSION="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          IMPORT_VERSION="$(uv run python -c 'import finvizp; print(finvizp.__version__)')"
+          test "${GITHUB_REF_NAME}" = "v${PACKAGE_VERSION}"
+          test "${IMPORT_VERSION}" = "${PACKAGE_VERSION}"
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type check
+        run: uv run ty check src
+
+      - name: Check documentation
+        run: uv run python scripts/check_docs.py
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Validate distribution metadata
+        run: uvx --from twine twine check dist/*
+
+      - name: Publish with PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 import pyarrow as pa
@@ -104,6 +105,25 @@ def test_metadata_normalizes_mutable_inputs() -> None:
         metadata.query["t"] = "MSFT"  # type: ignore[index]
     with pytest.raises(TypeError):
         metadata.query["filters"]["cap"] = "Small"  # type: ignore[index]
+
+
+def test_metadata_default_query_is_empty_frozen_mapping() -> None:
+    metadata = _meta()
+    assert isinstance(metadata.query, Mapping)
+    assert metadata.query == {}
+    with pytest.raises(TypeError):
+        metadata.query["t"] = "MSFT"  # type: ignore[index]
+
+
+def test_metadata_rejects_non_integer_counters() -> None:
+    with pytest.raises(FinvizDataError):
+        _meta(requested_units=1.0, succeeded_units=1.0)  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(requested_units=True, succeeded_units=True)  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(attempts="1")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(failed_units=0.5, requested_units=1.5, succeeded_units=1.0)  # type: ignore[arg-type]
 
 
 def test_metadata_rejects_invalid_enums_and_negative_counters() -> None:

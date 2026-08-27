@@ -58,7 +58,7 @@ class ResultMetadata:
     access_tier: AccessTier
     fetched_at: datetime
     served_at: datetime | None = None
-    query: Mapping[str, Any] = field(default_factory=lambda: _freeze(None))
+    query: Mapping[str, Any] = field(default_factory=dict)
     symbols: tuple[SymbolResolutionRecord, ...] = ()
     warnings: tuple[FetchWarning, ...] = ()
     unit_errors: tuple[UnitError, ...] = ()
@@ -85,8 +85,13 @@ class ResultMetadata:
             msg = f"access_tier must be an AccessTier, got {type(self.access_tier).__name__}"
             raise FinvizDataError(msg)
         for name in ("requested_units", "succeeded_units", "failed_units", "attempts"):
-            if getattr(self, name) < 0:
-                msg = f"{name} cannot be negative, got {getattr(self, name)}"
+            value = getattr(self, name)
+            # bool is an int subclass; reject it along with non-int values.
+            if isinstance(value, bool) or not isinstance(value, int):
+                msg = f"{name} must be an int, got {type(value).__name__}"
+                raise FinvizDataError(msg)
+            if value < 0:
+                msg = f"{name} cannot be negative, got {value}"
                 raise FinvizDataError(msg)
         if self.requested_units != self.succeeded_units + self.failed_units:
             msg = (

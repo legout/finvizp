@@ -206,10 +206,10 @@ def _validate_dataset(dataset: Dataset) -> None:
             continue
         base_name = field.name[: -len("_raw")] if field.name.endswith("_raw") else None
         base = fmap.get(base_name) if base_name else None
-        if base is None or not base.nullable or base.unit in {"text", "map", "raw"}:
+        if base is None or not base.nullable or not base.raw or base.unit in {"text", "map", "raw"}:
             msg = (
                 f"dataset {dataset.name!r} raw companion {field.name!r} must mirror a "
-                "nullable non-text base field"
+                "nullable non-text base field that declares raw=true"
             )
             raise FinvizDataError(msg)
     for field in dataset.fields:

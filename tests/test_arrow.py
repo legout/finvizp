@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from decimal import localcontext
 
 import pyarrow as pa
 import pytest
@@ -540,6 +541,70 @@ def test_count_int64_boundaries_parse() -> None:
     # compact display scaling stays exact in Decimal space (int64 max in K)
     table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": "9,223,372,036,854,775.807K"}])
     assert _rows(table)[0]["volume"] == 2**63 - 1
+
+
+def test_count_scaling_is_independent_of_decimal_context() -> None:
+    """Run-56 item 1: count conversion is exact regardless of ambient precision."""
+    with localcontext() as ctx:
+        ctx.prec = 5  # low ambient precision must not corrupt count parsing
+        # non-integral compact stays a conversion failure; rounding it would be silent corruption
+        records: list[FetchWarning] = []
+        table = _build(
+            "quote_snapshot",
+            [{"symbol": "AAPL", "volume": "1.23456789M"}],
+            on_warning=records.append,
+        )
+        row = _rows(table)[0]
+        assert row["volume"] is None
+        assert row["volume_raw"] == "1.23456789M"
+        assert any(w.code == "conversion_failed" for w in records)
+        # integral compact still normalizes exactly, no warning
+        table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": "1.5M"}])
+        assert _rows(table)[0]["volume"] == 1_500_000
+        # compact int64 boundary stays exact under low ambient precision
+        table = _build(
+            "quote_snapshot", [{"symbol": "AAPL", "volume": "9,223,372,036,854,775.807K"}]
+        )
+        assert _rows(table)[0]["volume"] == 2**63 - 1
+
+
+def test_fetched_at_non_aware_tzinfo_rejected() -> None:
+    """Run-56 item 3: tzinfo whose utcoffset() is None is not timezone-aware."""
+
+    class _UnknownOffset(dt.tzinfo):
+        def utcoffset(self, tz_dt: dt.datetime | None) -> dt.timedelta | None:
+            return None
+
+        def dst(self, tz_dt: dt.datetime | None) -> dt.timedelta | None:
+            return None
+
+        def tzname(self, tz_dt: dt.datetime | None) -> str | None:
+            return None
+
+    with pytest.raises(FinvizDataError, match="fetched_at"):
+        fa.build_table(
+            "symbol_universe",
+            [{"symbol": "AAPL"}],
+            fetched_at=dt.datetime(2026, 8, 27, 12, 34, 56, tzinfo=_UnknownOffset()),  # type: ignore[arg-type]
+        )
+
+    # a tzinfo whose utcoffset() raises is a typed error, not a leaked exception
+    class _BrokenOffset(dt.tzinfo):
+        def utcoffset(self, tz_dt: dt.datetime | None) -> dt.timedelta | None:
+            raise ValueError("no offset known")
+
+        def dst(self, tz_dt: dt.datetime | None) -> dt.timedelta | None:
+            return None
+
+        def tzname(self, tz_dt: dt.datetime | None) -> str | None:
+            return None
+
+    with pytest.raises(FinvizDataError, match="fetched_at"):
+        fa.build_table(
+            "symbol_universe",
+            [{"symbol": "AAPL"}],
+            fetched_at=dt.datetime(2026, 8, 27, 12, 34, 56, tzinfo=_BrokenOffset()),  # type: ignore[arg-type]
+        )
 
 
 def test_response_date_not_needed_without_time_only() -> None:

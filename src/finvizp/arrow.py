@@ -13,7 +13,7 @@ import datetime as dt
 import math
 import re
 from collections.abc import Callable, Iterable, Mapping
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -74,7 +74,17 @@ def build_table(
     kept as raw + ``ambiguous`` status.
     """
     dataset = schemas.dataset(dataset_name)
-    if not isinstance(fetched_at, dt.datetime) or fetched_at.tzinfo is None:
+    if not isinstance(fetched_at, dt.datetime):
+        msg = "fetched_at must be a timezone-aware datetime"
+        raise FinvizDataError(msg)
+    try:
+        offset = fetched_at.utcoffset()
+    except Exception as exc:
+        msg = f"fetched_at must be a timezone-aware datetime: {exc}"
+        raise FinvizDataError(msg) from exc
+    if offset is None:
+        # A tzinfo that cannot produce its offset (utcoffset() -> None) is not
+        # timezone-aware; trusting it would mislabel unknown provenance as UTC.
         msg = "fetched_at must be a timezone-aware datetime"
         raise FinvizDataError(msg)
     if response_date is None:
@@ -165,8 +175,19 @@ def build_table(
                 continue
             if name == "extra_fields":
                 continue  # filled after the loop
-            if field.unit == "raw" and name.removesuffix("_raw") in known:
-                continue  # companion already mirrored from its base field
+            if field.unit == "raw":
+                base_field = fmap.get(name[: -len("_raw")]) if name.endswith("_raw") else None
+                if base_field is None or not base_field.raw:
+                    # Validator rejects this; reaching here means a malformed
+                    # schema bypassed parse_dataset(), so fail typed, not with
+                    # a raw pyarrow length mismatch.
+                    msg = (
+                        f"dataset {dataset_name!r} raw field {name!r} has no "
+                        "raw-declared base field to mirror"
+                    )
+                    raise FinvizDataError(msg)
+                if base_field.name in known:
+                    continue  # companion already mirrored from its base field
             if name.endswith("_status") and name[: -len("_status")] in status_of:
                 continue  # parse status filled from the temporal conversion below
             if field.nullable:
@@ -296,17 +317,22 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tupl
     if field.unit == "count":
         # True counts stay int64, parsed exactly in Decimal space — never
         # through binary float, which silently corrupts beyond 2**53.
-        if not _COMPACT.match(cleaned):
-            msg = f"invalid count display {text!r}"
-            raise ValueError(msg)
-        number = Decimal(_COMPACT_SUFFIX.sub("", cleaned))
-        suffix = _COMPACT_SUFFIX.search(cleaned)
-        if suffix is not None:
-            number *= _SUFFIX_SCALE[suffix.group(1).upper()]
-        if number != number.to_integral_value():
-            msg = f"non-integral count {text!r}"
-            raise ValueError(msg)
-        value = int(number)
+        # localcontext isolates scaling from the ambient Decimal context, whose
+        # precision would otherwise round mantissas like 1.23456789M into
+        # plausible-but-wrong counts.
+        with localcontext() as ctx:
+            ctx.prec = 40
+            if not _COMPACT.match(cleaned):
+                msg = f"invalid count display {text!r}"
+                raise ValueError(msg)
+            number = Decimal(_COMPACT_SUFFIX.sub("", cleaned))
+            suffix = _COMPACT_SUFFIX.search(cleaned)
+            if suffix is not None:
+                number *= _SUFFIX_SCALE[suffix.group(1).upper()]
+            if number != number.to_integral_value():
+                msg = f"non-integral count {text!r}"
+                raise ValueError(msg)
+            value = int(number)
         if not -(2**63) <= value < 2**63:
             msg = f"count {text!r} outside signed int64 range"
             raise ValueError(msg)

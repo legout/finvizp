@@ -267,6 +267,15 @@ def test_registry_payload_rejects_raw_companion_of_text_base() -> None:
         schemas.parse_dataset(_payload(fields=fields))
 
 
+def test_registry_payload_rejects_companion_without_raw_flag() -> None:
+    """Run-56 item 2: a ``_raw`` companion requires its base to declare ``raw: true``."""
+    fields = [dict(f) for f in _payload()["fields"]]  # type: ignore[arg-type]
+    fields.append({"name": "value", "type": "int64", "unit": "count", "nullable": True})  # type: ignore[arg-type]
+    fields.append({"name": "value_raw", "type": "string", "unit": "raw", "nullable": True})  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError, match="raw"):
+        schemas.parse_dataset(_payload(fields=fields))
+
+
 def test_registry_payload_rejects_missing_common_fields() -> None:
     with pytest.raises(FinvizDataError):
         schemas.parse_dataset({"name": "sample", "version": 1, "fields": []})

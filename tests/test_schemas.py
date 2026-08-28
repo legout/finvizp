@@ -51,6 +51,12 @@ def _payload(**overrides: object) -> dict[str, object]:
             "key": True,
         },
         {
+            "name": "extra_fields",
+            "type": "map_string_string",
+            "unit": "map",
+            "nullable": True,
+        },
+        {
             "name": "fetched_at",
             "type": "timestamp_us_utc",
             "unit": "timestamp",
@@ -224,4 +230,4 @@ def test_registry_payload_rejects_missing_common_fields() -> None:
 
 def test_parse_dataset_preserves_field_order() -> None:
     ds = schemas.parse_dataset(_payload())
-    assert list(ds.field_names) == ["symbol", "fetched_at"]
+    assert list(ds.field_names) == ["symbol", "extra_fields", "fetched_at"]

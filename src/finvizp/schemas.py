@@ -168,11 +168,27 @@ def _validate_dataset(dataset: Dataset) -> None:
         msg = f"dataset {dataset.name!r} symbol must be a non-null key text field"
         raise FinvizDataError(msg)
     maps = [f for f in dataset.fields if f.unit == "map"]
-    if len(maps) > 1:
-        msg = f"dataset {dataset.name!r} declares more than one map field"
+    if len(maps) != 1 or maps[0].name != "extra_fields" or not maps[0].nullable:
+        msg = f"dataset {dataset.name!r} must declare exactly one nullable 'extra_fields' map field"
         raise FinvizDataError(msg)
     for field in dataset.fields:
         if field.unit != "raw":
+            if field.raw:
+                companion = fmap.get(f"{field.name}_raw")
+                if companion is None or companion.unit != "raw" or not companion.nullable:
+                    msg = (
+                        f"dataset {dataset.name!r} field {field.name!r} declares raw=true "
+                        f"but has no nullable {field.name + '_raw'!r} companion"
+                    )
+                    raise FinvizDataError(msg)
+                if field.unit == "timestamp":
+                    status = fmap.get(f"{field.name}_status")
+                    if status is None or status.unit != "text" or not status.nullable:
+                        msg = (
+                            f"dataset {dataset.name!r} timestamp field {field.name!r} "
+                            f"requires a nullable {field.name + '_status'!r} text field"
+                        )
+                        raise FinvizDataError(msg)
             continue
         base_name = field.name[: -len("_raw")] if field.name.endswith("_raw") else None
         base = fmap.get(base_name) if base_name else None
@@ -180,6 +196,15 @@ def _validate_dataset(dataset: Dataset) -> None:
             msg = (
                 f"dataset {dataset.name!r} raw companion {field.name!r} must mirror a "
                 "nullable non-text base field"
+            )
+            raise FinvizDataError(msg)
+    for field in dataset.fields:
+        # A ``raw: true`` declaration promises the builder retains the source
+        # display; without the companion column that promise is a silent no-op.
+        if field.raw and f"{field.name}_raw" not in fmap:
+            msg = (
+                f"dataset {dataset.name!r} field {field.name!r} declares raw but "
+                f"has no {field.name + '_raw'!r} companion column"
             )
             raise FinvizDataError(msg)
 

@@ -8,6 +8,7 @@ import pyarrow as pa
 import pytest
 
 from finvizp import arrow as fa
+from finvizp import schemas
 from finvizp.errors import FetchWarning, FinvizDataError
 
 NOW = dt.datetime(2026, 8, 27, 14, 30, tzinfo=dt.UTC)
@@ -178,3 +179,134 @@ def test_field_order_is_registry_deterministic() -> None:
 def test_missing_required_symbol_rejected() -> None:
     with pytest.raises(FinvizDataError):
         _build("symbol_search", [{"company": "Apple"}])
+
+
+# --- review rework: items 1-6 -------------------------------------------------
+
+
+def test_every_registered_schema_builds_empty() -> None:
+    """Item 6: parameterize the empty-table contract over the whole registry."""
+    for name in schemas.dataset_names():
+        table = _build(name, [])
+        assert table.num_rows == 0, name
+        assert table.schema.names == list(fa.dataset_field_names(name)), name
+
+
+def test_optional_conversion_failure_yields_typed_null_raw_and_warning() -> None:
+    """Item 1: recoverable conversion failure -> null + raw + warning, no raise."""
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "price": "garbage"}],
+        on_warning=records.append,
+    )
+    row = _rows(table)[0]
+    assert row["price"] is None
+    assert row["price_raw"] == "garbage"
+    assert any(w.code == "conversion_failed" for w in records)
+
+
+def test_optional_conversion_failure_without_raw_companion_raises() -> None:
+    table = _build("symbol_search", [{"symbol": "AAPL", "div_yield": "garbage"}])
+    assert _rows(table)[0]["div_yield"] is None
+    with pytest.raises(FinvizDataError):
+        _build("quote_peers", [{"symbol": "AAPL", "peer": "MSFT", "rank": "many"}])
+
+
+def test_raw_declaration_requires_companion_column() -> None:
+    """Item 3: every ``raw: true`` base field has a registered companion."""
+    for ds in schemas.registry().values():
+        fmap = ds.field_map
+        for field in ds.fields:
+            if field.raw:
+                assert f"{field.name}_raw" in fmap, (ds.name, field.name)
+
+
+def test_extra_fields_present_where_drift_is_accepted() -> None:
+    """Item 4: datasets that accept drift keep unknown fields, not drop them."""
+    for name in schemas.dataset_names():
+        fmap = schemas.dataset(name).field_map
+        optional = [f for f in schemas.dataset(name).fields if f.nullable and not f.key]
+        if len(optional) > 1:  # drift-accepting dataset: more than symbol+fetched_at
+            assert "extra_fields" in fmap, name
+
+
+def test_unknown_field_survives_in_extra_fields_on_quote_news() -> None:
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_news",
+        [
+            {
+                "symbol": "AAPL",
+                "title": "t",
+                "url": "https://example.com/a",
+                "published_at": "10:00",
+                "provider_new": "v",
+            }
+        ],
+        on_warning=records.append,
+    )
+    row = _rows(table)[0]
+    assert row["extra_fields"] == [("provider_new", "v")]
+    assert any(w.code == "unknown_field" for w in records)
+
+
+def test_strict_schema_allows_null_sentinels() -> None:
+    """Item 5: ordinary missing data stays null even under strict mode."""
+    table = _build("quote_snapshot", [{"symbol": "AAPL", "price": "N/A"}], strict_schema=True)
+    row = _rows(table)[0]
+    assert row["price"] is None
+    assert row["price_raw"] == "N/A"
+
+
+def test_time_only_anchors_to_response_date() -> None:
+    """Item 2: time-only values use the response date, never 1900-01-01."""
+    response_date = dt.date(2026, 8, 20)
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+        response_date=response_date,
+    )
+    published = _rows(table)[0]["published_at"]
+    assert published == dt.datetime(2026, 8, 20, 14, 0, tzinfo=dt.UTC)  # 10:00 EDT
+
+
+def test_time_only_parse_status_and_raw() -> None:
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+        response_date=dt.date(2026, 8, 20),
+    )
+    row = _rows(table)[0]
+    assert row["published_at_raw"] == "10:00"
+    assert row["published_at_status"] == "anchored"  # date assumed from response
+
+
+def test_time_only_dst_spring_gap_is_ambiguous() -> None:
+    """A nonexistent local time (spring-forward gap) is marked, not silently UTC."""
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "02:30"}],
+        response_date=dt.date(2026, 3, 8),  # US spring-forward day
+    )
+    row = _rows(table)[0]
+    assert row["published_at_status"] == "ambiguous"
+    assert row["published_at_raw"] == "02:30"
+
+
+def test_explicit_datetime_timestamp_is_exact() -> None:
+    table = _build(
+        "quote_news",
+        [
+            {
+                "symbol": "AAPL",
+                "title": "t",
+                "url": "u",
+                "published_at": "2026-08-20 10:00:00",
+            }
+        ],
+    )
+    row = _rows(table)[0]
+    assert row["published_at"] == dt.datetime(2026, 8, 20, 14, 0, tzinfo=dt.UTC)
+    assert row["published_at_status"] == "exact"
+    assert row["published_at_raw"] == "2026-08-20 10:00:00"

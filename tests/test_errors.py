@@ -249,6 +249,23 @@ def test_warning_and_unit_error_public_fields_are_redacted() -> None:
     assert all(SECRET not in str(item) for item in meta.unit_errors)
 
 
+def test_error_message_redacts_header_values_after_equals_sign() -> None:
+    """Round 6: header names may directly follow ``=`` and arbitrary cookie names."""
+    error = FinvizError(f"upstream=Authorization: Bearer {SECRET}")
+    assert SECRET not in str(error.args[0])
+    cookie_error = FinvizError(f"Set-Cookie: sid={SECRET}; Path=/")
+    assert SECRET not in str(cookie_error)
+    assert SECRET not in cookie_error.args[0]
+
+
+def test_error_message_redacts_labelled_proxy_urls() -> None:
+    error = FinvizError(f"proxy URL: http://user:{SECRET}@proxy-gw.example.invalid:8080")
+    text = str(error)
+    assert SECRET not in text
+    assert "proxy-gw.example.invalid" not in text
+    assert SECRET not in error.args[0]
+
+
 def test_warning_and_unit_error_records_are_frozen() -> None:
     warning = FetchWarning(code="extra_field", message="unknown label", symbol="AAPL")
     unit_error = UnitError(code="unit_convert", message="bad unit", raw="1.2x", symbol="AAPL")

@@ -31,16 +31,18 @@ _QUERY_SECRET = re.compile(
     r"([^&\s'\"]+)"
 )
 # Header-style credential values: consume the ENTIRE value (any scheme word
-# included) — "Authorization: Bearer x", "Proxy-Authorization: Basic x",
-# "Cookie: session=x".
+# included) — "Authorization: Bearer ***", "Proxy-Authorization: Basic ***",
+# "Set-Cookie: sid=...", arbitrary "x=Authorization: ..." labels. The boundary
+# includes "=" so labelled headers embedded in key=value context are caught.
 _HEADER_SECRET = re.compile(
-    r"(?i)((?:^|[\s,;\"'])(?:proxy[-_]authorization|authorization|auth|cookies?)\s*[:=]\s*)"
+    r"(?i)((?:^|[\s,;\"'=])(?:set[-_]cookie|proxy[-_]authorization|authorization|auth|cookies?)\s*[:=]\s*)"
     r"(?:(?:bearer|basic|digest|token)\s+)?[^\s,;'\"=][^\s,;'\"]*"
 )
-# Proxy URL in prose or assignment: "via proxy http://...", "proxy=http://...".
-# The whole URL (host included) is route-sensitive and consumed in full.
+# Proxy URL in prose or assignment: "via proxy http://...", "proxy=http://...",
+# "proxy URL: http://...". The whole URL (host included) is route-sensitive
+# and consumed in full.
 _PROXY_URL = re.compile(
-    r"(?i)((?:^|[\s,;(])(?:proxy(?:_[a-z0-9]+)?|route)\s*[:=]?\s*)"
+    r"(?i)((?:^|[\s,;(])(?:proxy(?:_[a-z0-9]+)?|route)(?:\s+[a-z0-9_-]{1,10})?\s*[:=]?\s*)"
     r"((?:https?|socks[45])://[^\s'\"<>]+)"
 )
 # Quoted or bare key=value secrets: token="x", access_token=x, cookies=x.

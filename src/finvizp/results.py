@@ -80,9 +80,20 @@ class ResultMetadata:
             msg = f"query must be a Mapping, got {type(self.query).__name__}"
             raise FinvizDataError(msg)
         object.__setattr__(self, "query", _freeze(self.query))
-        object.__setattr__(self, "symbols", tuple(self.symbols))
-        object.__setattr__(self, "warnings", tuple(self.warnings))
-        object.__setattr__(self, "unit_errors", tuple(self.unit_errors))
+        for name, record_type in (
+            ("symbols", SymbolResolutionRecord),
+            ("warnings", FetchWarning),
+            ("unit_errors", UnitError),
+        ):
+            elements = tuple(getattr(self, name))
+            for element in elements:
+                if not isinstance(element, record_type):
+                    msg = (
+                        f"{name} elements must be {record_type.__name__}, "
+                        f"got {type(element).__name__}"
+                    )
+                    raise FinvizDataError(msg)
+            object.__setattr__(self, name, elements)
         if not isinstance(self.status, ResultStatus):
             msg = f"status must be a ResultStatus, got {type(self.status).__name__}"
             raise FinvizDataError(msg)

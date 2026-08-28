@@ -220,6 +220,35 @@ def test_quotebundle_freezes_relation_dicts_and_validates_declared_types() -> No
         QuoteBundle(symbol="AAPL", fetched_at=fetched, snapshot_tables=None)  # type: ignore[arg-type]
 
 
+def test_metadata_rejects_untyped_record_elements() -> None:
+    """Round 6: record collections must contain their declared record types."""
+    with pytest.raises(FinvizDataError):
+        _meta(symbols=({"position": 0},))  # type: ignore[list-item]
+    with pytest.raises(FinvizDataError):
+        _meta(warnings=("raw",))  # type: ignore[list-item]
+    with pytest.raises(FinvizDataError):
+        _meta(unit_errors=({"code": "x"},))  # type: ignore[list-item]
+
+
+def test_metadata_rejects_mutable_source_alias_in_records() -> None:
+    warnings = [{"code": "w", "message": "m"}]
+    with pytest.raises(FinvizDataError):
+        _meta(warnings=warnings)  # type: ignore[list-item]
+
+
+def test_quotebundle_artifacts_require_artifact_elements() -> None:
+    """Round 6: artifacts must be Artifact instances; no mutable nested values."""
+    fetched = datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+    with pytest.raises(FinvizDataError):
+        QuoteBundle(
+            symbol="AAPL",
+            fetched_at=fetched,
+            artifacts=({"url": "https://x"},),  # type: ignore[list-item]
+        )
+    with pytest.raises(FinvizDataError):
+        QuoteBundle(symbol="AAPL", fetched_at=fetched, artifacts="chart.png")  # type: ignore[arg-type]
+
+
 def test_fetchresult_is_frozen_and_generic() -> None:
     result = FetchResult[pa.Table](
         data=pa.table({"symbol": ["AAPL"]}),

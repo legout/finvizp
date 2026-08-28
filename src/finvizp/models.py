@@ -65,7 +65,12 @@ class QuoteBundle:
         if not isinstance(self.snapshot_tables, Mapping):
             msg = f"snapshot_tables must be a Mapping, got {type(self.snapshot_tables).__name__}"
             raise FinvizDataError(msg)
-        object.__setattr__(self, "artifacts", tuple(self.artifacts))
+        artifacts = tuple(self.artifacts)
+        for element in artifacts:
+            if not isinstance(element, Artifact):
+                msg = f"artifacts elements must be Artifact, got {type(element).__name__}"
+                raise FinvizDataError(msg)
+        object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(self, "snapshot_tables", _freeze(self.snapshot_tables))
         # Freeze every container-valued relation so caller-owned dicts/lists
         # cannot mutate the "frozen" bundle through their original reference.

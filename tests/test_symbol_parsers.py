@@ -372,3 +372,44 @@ def test_suggestion_missing_or_malformed_company_exchange_is_parse_drift() -> No
     ):
         with pytest.raises(FinvizParseError):
             symbols_parser.parse_suggestions([record])
+
+
+@pytest.mark.parametrize(
+    ("company", "exchange"),
+    [
+        ("", "NASDAQ"),  # blank: Arrow would null-coerce
+        ("   ", "NASDAQ"),  # whitespace-only: nonblank required
+        ("Apple", ""),  # blank exchange
+        ("Apple", "  \t "),  # whitespace-only exchange
+        ("NA", "NASDAQ"),  # Arrow null-sentinel spelling
+        ("N/A", "NASDAQ"),  # Arrow null-sentinel spelling
+        ("Apple", "None"),  # Arrow null-sentinel spelling
+        ("Apple", "-"),  # Arrow null-sentinel spelling
+    ],
+)
+def test_suggestion_blank_or_sentinel_company_exchange_is_parse_drift(
+    company: str, exchange: str
+) -> None:
+    # Blank/whitespace strings and every Arrow null-sentinel spelling are
+    # provider drift: parse_suggestions rejects them BEFORE Arrow
+    # normalization, so no value can be silently null-coerced downstream.
+    record = {"ticker": "AAPL", "company": company, "exchange": exchange}
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_suggestions([record])
+
+
+def test_suggestion_valid_company_exchange_text_is_retained_verbatim() -> None:
+    # Legit source text — including dash-bearing names and sentinel-LOOKING
+    # substrings — passes through untouched.
+    rows = symbols_parser.parse_suggestions(
+        json.dumps(
+            [
+                {"ticker": "AAPL", "company": "AT&T Inc.", "exchange": "NYSE"},
+                {"ticker": "BIG", "company": "N/A-tron Ltd.", "exchange": "NasdaqGS"},
+            ]
+        )
+    )
+    assert [(r["company"], r["exchange"]) for r in rows] == [
+        ("AT&T Inc.", "NYSE"),
+        ("N/A-tron Ltd.", "NasdaqGS"),
+    ]

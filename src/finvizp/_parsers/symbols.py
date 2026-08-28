@@ -15,6 +15,7 @@ from lxml.html import (
     etree,
 )
 
+from finvizp.arrow import _NULL_SENTINELS
 from finvizp.errors import FetchWarning, FinvizParseError
 
 __all__ = ["parse_sitemap", "parse_suggestions"]
@@ -178,8 +179,10 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
     hands parsed JSON to parsers) or the raw text. Preserves provider ranking
     verbatim and maps ``ticker`` to the canonical ``symbol`` field. A ticker
     must be an unpadded ASCII ``[A-Za-z0-9-]+`` source value, and company and
-    exchange must be present strings — anything else is provider drift, never
-    null-coerced. Any other source field passes through untouched so the
+    exchange must be present nonblank strings — anything else (including any
+    Arrow null-sentinel spelling such as ``NA``/``N/A``/``-`` that would be
+    null-coerced downstream) is provider drift, never null-coerced. Any other
+    source field passes through untouched so the
     Arrow builder can preserve it in ``extra_fields`` with an
     ``unknown_field`` warning. Recognized empty (``[]``) is empty, not drift;
     any other shape deviation (including JSON ``null``) raises
@@ -209,6 +212,16 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
         # silently converted to null.
         if not isinstance(company, str) or not isinstance(exchange, str):
             msg = f"suggestion {position} is missing company or exchange"
+            raise FinvizParseError(msg)
+        # Blank or null-sentinel strings ("", whitespace, "NA", "N/A", "-",
+        # "None", "null", …) are drift too: Arrow's null-sentinel table would
+        # null-coerce them, silently recreating prohibited null conversion.
+        # Shared with the Arrow builder so the gate can never drift from what
+        # Arrow would coerce.
+        blank = not company.strip() or not exchange.strip()
+        sentinel = company in _NULL_SENTINELS or exchange in _NULL_SENTINELS
+        if blank or sentinel:
+            msg = f"suggestion {position} has a blank or null-sentinel company/exchange"
             raise FinvizParseError(msg)
         row: dict[str, Any] = {
             "symbol": ticker.upper(),

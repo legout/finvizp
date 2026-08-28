@@ -97,10 +97,11 @@ class _CacheFacets:
     representation: str
     parser_version: str
     schema_version: int
-    # Endpoint-scoped transport control (default preserves client behavior);
-    # it alters which response a route yields, so ops that change it (the
+    # Endpoint-scoped transport controls (defaults preserve client behavior);
+    # they alter which response a route yields, so ops that change them (the
     # one-request manifest) are also distinguished by their representation.
     follow_redirects: bool = True
+    retry: bool = True
 
 
 def _facets_parse(
@@ -666,6 +667,7 @@ class FinvizClient:
         parser_version: str = "1",
         schema_version: int = 1,
         follow_redirects: bool = True,
+        retry: bool = True,
         parse: Callable[[ClientResponse], FetchResult[Any]],
     ) -> FetchResult[Any]:
         """Cache + single-flight wrapper around ``_fetch``.
@@ -678,10 +680,11 @@ class FinvizClient:
 
         ``follow_redirects=False`` enforces a one-request transport contract:
         a redirect response surfaces as transport drift instead of being
-        followed. ``parse`` is required: only reviewed endpoint parsers
-        produce the normalized immutable ``FetchResult`` values that may ever
-        be stored. Parser/schema facet facts are stamped into every result's
-        metadata.
+        followed, and ``retry=False`` extends that contract to retries: the
+        first failure surfaces instead of a second attempt. ``parse`` is
+        required: only reviewed endpoint parsers produce the normalized
+        immutable ``FetchResult`` values that may ever be stored. Parser/schema
+        facet facts are stamped into every result's metadata.
         """
         effective_query = dict(params or {})
         store = self._cache
@@ -691,7 +694,11 @@ class FinvizClient:
         if not cache or self._cache_ttl is None or store is None:
             return parse(
                 await self._fetch(
-                    path, params=effective_query, proxy=proxy, follow_redirects=follow_redirects
+                    path,
+                    params=effective_query,
+                    proxy=proxy,
+                    follow_redirects=follow_redirects,
+                    retry=retry,
                 )
             )
         # The auth-aware resolver is shared with the transport, so keys and
@@ -710,6 +717,7 @@ class FinvizClient:
             parser_version=parser_version,
             schema_version=schema_version,
             follow_redirects=follow_redirects,
+            retry=retry,
         )
         key = self._cache_key(facets)
         if refresh:
@@ -719,6 +727,7 @@ class FinvizClient:
                     params=facets.query,
                     proxy=facets.proxy,
                     follow_redirects=facets.follow_redirects,
+                    retry=facets.retry,
                 )
             )
             self._store(facets, key, result)
@@ -784,6 +793,7 @@ class FinvizClient:
                     params=facets.query,
                     proxy=facets.proxy,
                     follow_redirects=facets.follow_redirects,
+                    retry=facets.retry,
                 )
             )
         except FinvizError as exc:
@@ -919,6 +929,7 @@ class FinvizClient:
         parser_version: str = "1",
         schema_version: int = 1,
         follow_redirects: bool = True,
+        retry: bool = True,
         parse: Callable[[ClientResponse], FetchResult[Any]],
     ) -> Callable[[], Coroutine[Any, Any, FetchResult[Any]]]:
         """Bind one reviewed endpoint operation to its route and cache inputs.
@@ -929,9 +940,10 @@ class FinvizClient:
         turns the classified transport envelope into the endpoint's immutable
         ``FetchResult``; only that parsed value is ever cached. Per-call
         ``cache=False``/``refresh=True``, the strict ``follow_redirects=False``
-        one-request contract, and the representation/parser/schema key facets
-        are bound here so endpoint modules can expose the required controls
-        without a generic-request hatch.
+        one-request contract (with ``retry=False`` forbidding retry attempts
+        as well), and the representation/parser/schema key facets are bound
+        here so endpoint modules can expose the required controls without a
+        generic-request hatch.
         """
         params = dict(query or {})
 
@@ -946,6 +958,7 @@ class FinvizClient:
                 parser_version=parser_version,
                 schema_version=schema_version,
                 follow_redirects=follow_redirects,
+                retry=retry,
                 parse=parse,
             )
 
@@ -958,6 +971,7 @@ class FinvizClient:
         params: Mapping[str, Any] | None = None,
         proxy: str | bool | None = None,
         follow_redirects: bool = True,
+        retry: bool = True,
     ) -> ClientResponse:
         """Fetch one explicit same-origin route and return its classified envelope.
 
@@ -968,6 +982,8 @@ class FinvizClient:
         ``follow_redirects=False`` enforces a one-request contract: any
         redirect response surfaces as transport drift instead of being
         followed, regardless of the client's global safety checking.
+        ``retry=False`` extends the contract to attempts: client retry policy
+        is ignored and the first failure surfaces after exactly one request.
         """
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             msg = f"route must be a relative {self.base_url} path, got {path!r}"
@@ -995,6 +1011,10 @@ class FinvizClient:
         # route for every attempt, and never retries typed finvizp verdicts.
         # ponytail: re-implements fastreq RetryStrategy's 20-line loop so its
         # loguru logging stays off; revisit if retry policy grows policies.
+        # The one-request manifest forbids retries entirely: a zero budget
+        # surfaces the first retryable failure as transport drift instead of
+        # issuing the second request.
+        retry_budget = self._retry_attempts if retry else 0
         while True:
             attempts += 1
             try:
@@ -1060,7 +1080,7 @@ class FinvizClient:
                 retryable = not isinstance(exc, _NEVER_RETRY) and isinstance(
                     exc, (BackendError, RetryableResponse)
                 )
-                if not retryable or attempts > self._retry_attempts:
+                if not retryable or attempts > retry_budget:
                     break
                 delay = _parse_retry_after(getattr(exc, "retry_after", None))
                 if delay is None:
@@ -1074,7 +1094,7 @@ class FinvizClient:
                         retry_after=_parse_retry_after(response.headers.get("retry-after")),
                         url=url,
                     )
-                    if attempts > self._retry_attempts:
+                    if attempts > retry_budget:
                         break
                     delay = _parse_retry_after(getattr(last_error, "retry_after", None))
                     if delay is None:

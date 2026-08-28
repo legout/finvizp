@@ -150,8 +150,10 @@ async def symbols_async(
             parser_version=_PARSER_VERSION,
             schema_version=_SCHEMA_VERSION,
             # One-request contract: a redirect — even same-origin — is
-            # transport drift, never a followed second request.
+            # transport drift, never a followed second request; a retryable
+            # failure is never a retried second request either.
             follow_redirects=False,
+            retry=False,
             parse=_parse_manifest,
         )
         return await op()

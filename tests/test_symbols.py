@@ -33,9 +33,9 @@ def _suggestions() -> str:
     return (FIXTURES / "suggestions.json").read_text("utf-8")
 
 
-def _resp(body: bytes, content_type: str, url: str) -> NormalizedResponse:
+def _resp(body: bytes, content_type: str, url: str, *, status: int = 200) -> NormalizedResponse:
     return NormalizedResponse.from_backend(
-        status_code=200,
+        status_code=status,
         headers={"Content-Type": content_type},
         content=body,
         url=url,
@@ -469,6 +469,39 @@ async def test_search_missing_company_is_parse_drift_not_null() -> None:
     )
     with pytest.raises(FinvizParseError):
         await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
+
+
+async def test_manifest_retryable_first_response_makes_exactly_one_request() -> None:
+    """One-request contract covers retries, not just redirects.
+
+    A scripted retryable 503 followed by a 200 must surface as a typed
+    transport failure after exactly one backend call — the strict manifest op
+    never retries — even under the client's default retry settings.
+    """
+    fake = RecordingTransport(
+        _resp(b"", "text/xml", f"{BASE}/sitemap.xml", status=503),
+        _resp(_sitemap().encode(), "text/xml", f"{BASE}/sitemap.xml"),
+    )
+    result: Any = None
+    with pytest.raises(FinvizTransportError):
+        result = await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert len(fake.urls) == 1  # no retry: the second (200) was never requested
+    assert result is None
+
+
+async def test_search_retryable_first_response_still_retries_then_succeeds() -> None:
+    """Ordinary endpoint operations keep their retry policy.
+
+    A scripted 503 then 200 on /api/suggestions retries and returns COMPLETE
+    after exactly two backend calls under default retry settings.
+    """
+    fake = RecordingTransport(
+        _resp(b"", "application/json", f"{BASE}/api/suggestions", status=503),
+        _resp(_suggestions().encode(), "application/json", f"{BASE}/api/suggestions"),
+    )
+    result = await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
+    assert len(fake.urls) == 2  # retried once per client policy
+    assert result.metadata.status is ResultStatus.COMPLETE
 
 
 async def test_manifest_encoded_and_padded_tickers_warn_not_normalize() -> None:

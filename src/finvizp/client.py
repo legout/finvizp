@@ -20,10 +20,11 @@ from urllib.parse import urlsplit
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
 from fastreq.backends.curl_cffi import CurlCffiBackend
 from fastreq.exceptions import BackendError, RetryableResponse
-from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig
+from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig, _is_valid_proxy
 from fastreq.utils.rate_limiter import AsyncRateLimiter, RateLimitConfig
 
 from finvizp.errors import (
+    REDACTED,
     FinvizBlockedError,
     FinvizEntitlementError,
     FinvizError,
@@ -32,8 +33,8 @@ from finvizp.errors import (
     FinvizQueryError,
     FinvizRateLimitError,
     FinvizTransportError,
-    redact_value,
 )
+from finvizp.models import Artifact
 from finvizp.results import AccessTier
 
 __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
@@ -91,7 +92,7 @@ def _normalize_kind(content_type: str) -> str | None:
     """Map a Content-Type header value to one classified content kind."""
     base = content_type.split(";")[0].strip().lower()
     if base in ("", "application/octet-stream") or base.startswith("image/"):
-        return None if not base else "bytes"
+        return None if not base else "artifact"
     if base == "application/json" or base.endswith("+json"):
         return "json"
     if "html" in base:
@@ -108,8 +109,16 @@ def _proxy_seed(proxy: str | None) -> str:
     return f"{digest}-direct" if proxy is None else digest
 
 
+# Header-specific sanitization: redact credential-bearing headers by label
+# (Set-Cookie*, Cookie, Authorization, Proxy-Authorization) while preserving
+# safe protocol metadata such as content-type/content-length.
+_SAFE_HEADER = re.compile(r"^(?:set-)?cookie\d*$|^(?:proxy-)?authorization$", re.I)
+
+
 def _safe_headers(headers: Mapping[str, str]) -> MappingProxyType[str, str]:
-    return MappingProxyType(dict(redact_value(headers)))
+    return MappingProxyType(
+        {key: (REDACTED if _SAFE_HEADER.match(key) else value) for key, value in headers.items()}
+    )
 
 
 def _is_elite_location(final_url: str) -> bool:
@@ -155,8 +164,9 @@ class ClientResponse:
     """Immutable, classified envelope for one route fetch.
 
     ``data`` is the typed payload: parsed JSON for ``json``, decoded text for
-    ``html``/``xml``, raw bytes (image/chart artifacts) for ``bytes``. Raw
-    bytes are hashed then released; text kinds never retain the bytes object.
+    ``html``/``xml``, an ``Artifact`` descriptor (hash + length, never bytes)
+    for ``artifact``. Raw bytes are hashed then discarded; the envelope never
+    retains the body.
     """
 
     endpoint: str
@@ -215,8 +225,17 @@ def classify_response(
         if data is None:
             msg = f"malformed JSON body for {endpoint!r}"
             raise FinvizParseError(msg)
-    elif kind == "bytes":
-        data = response.content
+    elif kind == "artifact":
+        # Image/chart bodies are hashed for identity; the envelope keeps only
+        # a descriptor, so raw provider bytes are never retained by callers.
+        data: Any = Artifact(
+            source_url=url,
+            kind="image",
+            media_type=content_type.split(";")[0].strip().lower(),
+            fetched_at=fetched_at,
+            content_hash=hashlib.sha256(response.content).hexdigest(),
+            content_length=len(response.content),
+        )
     else:
         data = response.text
     return ClientResponse(
@@ -243,13 +262,13 @@ class FinvizClient:
         transport: pre-built fastreq ``Backend`` (hermetic tests); it is
             driven by this client but never replaced by it.
         base_url: must be the canonical ``https://finviz.com`` origin; caller
-            cookies are never sent anywhere else.
+            cookies are never sent anywhere else. Read-only after construction.
         proxy: explicit proxy URL; ``False``/``""`` forces direct.
         proxies: explicit pool list; ``False``/``[]`` disables all discovery.
         auth_cookies: caller-supplied session state, sent per request only;
             never read from the environment, never persisted.
         browser_profile: fixed browser/TLS identity (``"none"`` disables
-            impersonation); no randomization.
+            impersonation); no randomization. Read-only after construction.
         rate_limit: requests per second, or ``None`` for no limit.
         concurrency: maximum in-flight requests.
         timeout: per-request timeout in seconds.
@@ -257,6 +276,19 @@ class FinvizClient:
         retry_backoff: base seconds for exponential backoff (capped at 60s).
         on_event: opt-in diagnostic callback receiving ``ClientEvent`` values.
     """
+
+    base_url: str
+    browser_profile: str
+
+    _FROZEN_ATTRS = frozenset({"base_url", "browser_profile"})
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # The canonical origin and TLS identity are fixed for the client's
+        # lifetime; a mutable base_url would let caller cookies be retargeted.
+        if name in self._FROZEN_ATTRS and name in vars(self):
+            msg = f"{name} is fixed for the lifetime of the client"
+            raise AttributeError(msg)
+        object.__setattr__(self, name, value)
 
     def __init__(
         self,
@@ -277,8 +309,13 @@ class FinvizClient:
         if (normalized := base_url.rstrip("/")) != BASE_URL:
             msg = f"base_url must be {BASE_URL}, got {base_url!r}"
             raise FinvizQueryError(msg)
-        self.base_url = normalized
-        self.browser_profile = browser_profile
+        # Canonical origin only: caller cookies must never be retargetable to
+        # another host, so the origin is fixed at construction and read-only.
+        object.__setattr__(self, "base_url", normalized)
+        if browser_profile == "random":
+            msg = "browser_profile='random' violates the fixed-identity contract"
+            raise FinvizQueryError(msg)
+        object.__setattr__(self, "browser_profile", browser_profile)
         self._auth_cookies: Mapping[str, str] = (
             MappingProxyType(dict(auth_cookies)) if auth_cookies else MappingProxyType({})
         )
@@ -290,26 +327,41 @@ class FinvizClient:
         self._retry_backoff = max(0.0, float(retry_backoff))
 
         # Proxy precedence: explicit > FINVIZP_PROXY > fastreq env pool > direct.
+        # Every proxy URL is validated before any pool is constructed, so an
+        # invalid entry fails fast here instead of surfacing fastreq log output.
         self._force_direct = False
         self._explicit_proxy: str | None = None
         if proxy is False or proxy == "":
             self._force_direct = True
         elif isinstance(proxy, str):
+            if not _is_valid_proxy(proxy):
+                msg = f"invalid proxy URL: {proxy!r}"
+                raise FinvizQueryError(msg)
             self._explicit_proxy = proxy
         self._pool: ProxyPool | None = None
         if proxies is False or (isinstance(proxies, (list, tuple)) and not proxies):
             self._force_direct = True
         elif isinstance(proxies, (list, tuple)):
+            invalid = [p for p in proxies if not _is_valid_proxy(p)]
+            if invalid:
+                msg = f"invalid proxy URL(s): {invalid!r}"
+                raise FinvizQueryError(msg)
             self._pool = ProxyPool(proxies=list(proxies), config=ProxyPoolConfig())
         if not self._force_direct and self._explicit_proxy is None and self._pool is None:
             import os
 
             if env_proxy := os.getenv("FINVIZP_PROXY", ""):
+                if not _is_valid_proxy(env_proxy):
+                    msg = f"invalid FINVIZP_PROXY value: {env_proxy!r}"
+                    raise FinvizQueryError(msg)
                 self._explicit_proxy = env_proxy
             else:
-                self._pool = ProxyPool.from_env() or None
-                if self._pool is not None and self._pool.count() == 0:
-                    self._pool = None
+                env_entries = [
+                    p.strip() for p in os.getenv("FASTREQ_PROXIES", "").split(",") if p.strip()
+                ]
+                env_entries = [p for p in env_entries if _is_valid_proxy(p)]
+                if env_entries:
+                    self._pool = ProxyPool(proxies=env_entries, config=ProxyPoolConfig())
         self._pinned_proxy: Any = _UNPINNED
         self._auth_route: Any = _UNPINNED
 
@@ -385,10 +437,10 @@ class FinvizClient:
         the selection itself surface as transport errors.
         """
         async with self._route_lock:
-            if self._force_direct:
-                selected = None
-            elif override is not _UNPINNED:
+            if override is not _UNPINNED:
                 selected = override
+            elif self._force_direct:
+                selected = None
             elif self._explicit_proxy is not None:
                 selected = self._explicit_proxy
             else:
@@ -421,14 +473,25 @@ class FinvizClient:
         """Fetch one explicit same-origin route and return its classified envelope.
 
         ``proxy`` is a per-call override: a URL takes precedence over the
-        client proxy, ``False`` forces direct, ``None`` keeps client config.
+        client proxy (including forced-direct), ``False`` forces direct,
+        ``None`` keeps client config.
         """
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             msg = f"route must be a relative {self.base_url} path, got {path!r}"
             raise FinvizQueryError(msg)
+        if "?" in path or "#" in path:
+            msg = (
+                "route must not carry a query or fragment; pass parameters "
+                f"through the params mapping instead, got {path!r}"
+            )
+            raise FinvizQueryError(msg)
         url = f"{self.base_url}{path}"
         query = dict(params or {})
         per_call_proxy = self._normalize_per_call_proxy(proxy)
+        # A per-call URL wins over forced-direct; a per-call False/None on a
+        # forced-direct client keeps direct. Conflicts surface via
+        # _acquire_proxy's authenticated-route pin.
+        selected = None if self._force_direct and per_call_proxy is _UNPINNED else per_call_proxy
         await self._ensure_entered()
         attempts = 0
         last_error: Exception | None = None
@@ -443,7 +506,7 @@ class FinvizClient:
             attempts += 1
             try:
                 if not route_selected:
-                    selected_proxy = await self._acquire_proxy(per_call_proxy)
+                    selected_proxy = await self._acquire_proxy(selected)
                     route_selected = True
                 if self._limiter is not None:
                     await self._limiter.acquire()
@@ -458,6 +521,12 @@ class FinvizClient:
                             proxy=selected_proxy,
                         )
                     )
+                    # The backend caches proxy-scoped sessions, and curl_cffi
+                    # sessions persist server Set-Cookie state across calls.
+                    # Caller authentication is per-request and never retained:
+                    # strip everything the server may have planted before the
+                    # session is reused for the next request.
+                    self._purge_backend_cookies(selected_proxy)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -506,7 +575,7 @@ class FinvizClient:
                 endpoint=path,
                 ok=False,
                 attempts=attempts,
-                route_fingerprint=self._route_fingerprint(),
+                route_fingerprint=self._route_fingerprint(selected_proxy),
             )
         )
         raise self._classify_failure(
@@ -520,6 +589,27 @@ class FinvizClient:
         if self.browser_profile == "none":
             headers["User-Agent"] = _FALLBACK_UA
         return headers
+
+    def _purge_backend_cookies(self, proxy: str | None) -> None:
+        """Clear server-set cookies on the backend session used for ``proxy``.
+
+        Only CurlCffiBackend caches cookie-bearing sessions; other backends
+        (including test doubles) simply have no cookie state to purge.
+        """
+        backend = self._backend
+        sessions = getattr(backend, "_sessions", None)
+        if not isinstance(sessions, dict):
+            return
+        from fastreq.backends.base import TransportKey
+
+        for key, session in sessions.items():
+            if isinstance(key, TransportKey) and key.proxy == proxy:
+                jar = getattr(session, "cookies", None)
+                if jar is not None:
+                    try:
+                        jar.clear()
+                    except Exception:
+                        session.cookies = {}
 
     def _finish(
         self,

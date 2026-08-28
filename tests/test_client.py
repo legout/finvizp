@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 from datetime import UTC, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import MappingProxyType
 from typing import Any
 
 import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
+from fastreq.backends.curl_cffi import CurlCffiBackend
 from fastreq.exceptions import BackendError
 
 from finvizp.client import ClientEvent, ClientResponse, FinvizClient
@@ -22,6 +25,7 @@ from finvizp.errors import (
     FinvizRateLimitError,
     FinvizTransportError,
 )
+from finvizp.models import Artifact
 from finvizp.results import AccessTier
 
 BASE = "https://finviz.com"
@@ -283,11 +287,16 @@ async def test_xml_response_classified() -> None:
     assert "<urlset/>" in resp.data
 
 
-async def test_image_bytes_are_preserved_for_artifacts() -> None:
+async def test_image_responses_return_descriptor_not_raw_bytes() -> None:
     body = b"\x89PNG fake"
     resp = await _client(FakeTransport(_resp(200, body, "image/png"))).fetch("/chart.ashx")
-    assert resp.content_kind == "bytes"
-    assert resp.data == body
+    assert resp.content_kind == "artifact"
+    assert isinstance(resp.data, Artifact)
+    assert not isinstance(resp.data, bytes)
+    assert resp.data.content_hash == hashlib.sha256(body).hexdigest()
+    assert resp.data.content_length == len(body)
+    assert resp.data.media_type == "image/png"
+    assert resp.data.source_url == f"{BASE}/chart.ashx"
     assert resp.response_hash == hashlib.sha256(body).hexdigest()
 
 
@@ -742,3 +751,149 @@ async def test_authenticated_per_call_proxy_cannot_switch_the_pinned_route() -> 
 async def test_owned_transport_is_closed_with_client() -> None:
     client = FinvizClient()
     await client.close()  # must not raise against the real curl backend
+
+
+# --- remediation round 3: isolation contract regressions ----------------------
+
+
+async def test_base_url_mutation_cannot_retarget_the_origin() -> None:
+    fake = FakeTransport(_resp())
+    client = _client(fake, auth_cookies={"sid": "secret"})
+    with pytest.raises((AttributeError, TypeError)):
+        client.base_url = "https://example.invalid"  # type: ignore[misc]
+    with pytest.raises(FinvizQueryError):
+        FinvizClient(transport=fake, base_url="https://example.invalid", auth_cookies={"sid": "x"})
+    assert fake.calls == []
+
+
+async def test_random_browser_profile_is_rejected_before_transport() -> None:
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError):
+        _client(fake, browser_profile="random")
+    assert fake.enters == 0
+
+
+async def test_invalid_proxy_is_rejected_before_pool_construction(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(FinvizQueryError):
+        FinvizClient(proxies=["invalid-proxy"])
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+async def test_per_call_proxy_overrides_forced_direct_client_proxy() -> None:
+    fake = FakeTransport()
+    client = _client(fake, proxy=False)
+    await client.fetch("/quote.ashx", proxy="http://call-proxy:2")
+    assert [call.proxy for call in fake.calls] == ["http://call-proxy:2"]
+
+
+async def test_response_headers_preserve_metadata_and_redact_all_cookie_forms() -> None:
+    fake = FakeTransport(
+        _resp(
+            headers={
+                "Content-Type": "text/html",
+                "Content-Length": "42",
+                "Set-Cookie": "sid=secret",
+                "Set-Cookie2": "sid2=secret2",
+                "Proxy-Authorization": "Basic c2VjcmV0",
+            }
+        )
+    )
+    response = await _client(fake).fetch("/quote.ashx")
+    assert response.headers["content-type"] == "text/html"
+    assert response.headers["content-length"] == "42"
+    rendered = repr(response.headers)
+    assert "secret" not in rendered
+    assert "secret2" not in rendered
+    assert "c2VjcmV0" not in rendered
+
+
+async def test_paths_with_query_or_fragment_are_rejected() -> None:
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError):
+        await _client(fake).fetch("/quote.ashx?t=AAPL")
+    with pytest.raises(FinvizQueryError):
+        await _client(fake).fetch("/quote.ashx#frag")
+    assert fake.calls == []
+
+
+async def test_request_provenance_never_retains_a_url_query_secret() -> None:
+    fake = FakeTransport(_resp(200, b'{"ok": true}', "application/json"))
+    resp = await _client(fake).fetch("/api/suggestions", params={"q": "sup3rs3cret"})
+    assert "?" not in resp.url
+    rendered = repr(resp)
+    assert "?" not in rendered
+    events: list[ClientEvent] = []
+    await _client(fake, on_event=events.append).fetch("/api/suggestions", params={"q": "x"})
+    assert all("?" not in repr(event) for event in events)
+
+
+async def test_image_bytes_are_discarded_after_descriptor_creation() -> None:
+    body = b"\x89PNG fake" * 8
+    fake = FakeTransport(_resp(200, body, "image/png"))
+    resp = await _client(fake).fetch("/chart.ashx")
+    assert isinstance(resp.data, Artifact)
+    assert all(
+        not isinstance(getattr(resp, field_name), bytes)
+        for field_name in ClientResponse.__dataclass_fields__
+    )
+    assert "PNG" not in repr(resp)
+
+
+async def test_browser_profile_is_read_only() -> None:
+    client = _client(FakeTransport())
+    with pytest.raises(AttributeError):
+        client.browser_profile = "random"  # type: ignore[misc]
+
+
+# --- real-backend integration: server cookie state must be request-local ------
+
+
+class _CookieProbingHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.server.saw_cookies.append(self.headers.get("Cookie"))
+        body = b"COOKIE-LEAK" if self.headers.get("Cookie") else b"clean"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Set-Cookie", "tracked=1; Path=/")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+class _LocalRewriteBackend(CurlCffiBackend):
+    """Real curl_cffi transport with requests retargeted to a local server."""
+
+    def __init__(self, target: str) -> None:
+        super().__init__()
+        self._target = target
+
+    async def request(self, config: Any, stream_callback: Any = None) -> Any:
+        finviz_url = config.url
+        config.url = finviz_url.replace("https://finviz.com", self._target, 1)
+        response = await super().request(config, stream_callback)
+        response.url = finviz_url  # classify against the Finviz origin
+        return response
+
+
+async def test_real_backend_does_not_persist_server_cookies() -> None:
+    probe: list[str | None] = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _CookieProbingHandler)
+    server.saw_cookies = probe  # type: ignore[attr-defined]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        backend = _LocalRewriteBackend(f"http://127.0.0.1:{server.server_address[1]}")
+        client = FinvizClient(transport=backend, proxy=False)
+        first = await client.fetch("/quote.ashx")
+        second = await client.fetch("/quote.ashx")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert first.data == "clean"
+    assert second.data == "clean"  # no server Set-Cookie replayed on request 2
+    assert probe == [None, None]

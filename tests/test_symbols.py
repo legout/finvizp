@@ -498,3 +498,16 @@ async def test_manifest_with_standard_optional_children_still_parses() -> None:
     )
     fake = RecordingTransport(_resp(xml.encode(), "text/xml", f"{BASE}/sitemap.xml"))
     await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+
+
+async def test_manifest_deep_unknown_element_in_loc_raises_to_endpoint() -> None:
+    """Typed drift for element descendants under loc reaches symbols_async."""
+    xml = (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL<widget/></loc></url>"
+        "</urlset>"
+    )
+    fake = RecordingTransport(_resp(xml.encode(), "text/xml", f"{BASE}/sitemap.xml"))
+    with pytest.raises(FinvizParseError):
+        await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert fake.urls == [f"{BASE}/sitemap.xml"]  # one request, nothing followed

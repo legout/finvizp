@@ -149,6 +149,12 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
             # are structure drift, never ordinary data.
             msg = "sitemap URL entry must contain exactly one loc"
             raise FinvizParseError(msg)
+        # The accepted leaf tags (loc and the optional children) carry only
+        # text: any element descendant of them is structure drift too, never
+        # ordinary data. Comments/PIs stay ignored (filtered by _elements).
+        if any(_elements(child) for child in children):
+            msg = f"unexpected sitemap element nested inside {locs[0].tag!r} siblings"
+            raise FinvizParseError(msg)
         text = (locs[0].text or "").strip()
         symbol = _canonical_symbol(text)
         if symbol is None:

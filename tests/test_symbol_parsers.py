@@ -207,6 +207,24 @@ def test_unknown_nested_element_inside_url_is_structure_drift() -> None:
         )
 
 
+def test_unknown_element_descendants_of_accepted_leaf_tags_are_drift() -> None:
+    # loc/lastmod/changefreq/priority carry only text: unknown element
+    # descendants at any depth below them are structure drift, while
+    # comments/PIs inside them remain ignored content.
+    for xml in (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL<widget/></loc></url></urlset>",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
+        "<lastmod>2026-08-28<widget/></lastmod></url></urlset>",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
+        "<priority>0.5<sub xmlns='urn:x'/></priority></url></urlset>",
+    ):
+        with pytest.raises(FinvizParseError):
+            symbols_parser.parse_sitemap(xml)
+
+
 def test_parse_suggestions_preserves_provider_ranking() -> None:
     rows = symbols_parser.parse_suggestions(_suggestions())
     assert [(r["symbol"], r["company"], r["exchange"]) for r in rows] == [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 from collections.abc import Coroutine
 from typing import Any
@@ -84,21 +85,38 @@ def _client(fake: CountingTransport, **kwargs: Any) -> FinvizClient:
     return FinvizClient(transport=fake, retry_attempts=0, retry_backoff=0.0, **kwargs)
 
 
+def _meta(response: ClientResponse) -> ResultMetadata:
+    """Shared reviewed-parser metadata: provenance carried into the result."""
+    return ResultMetadata(
+        endpoint=response.endpoint,
+        status=ResultStatus.COMPLETE,
+        access_tier=response.access_tier,
+        fetched_at=response.fetched_at,
+        query=dict(response.query),
+        attempts=response.attempts,
+        response_hash=response.response_hash,
+        route_fingerprint=response.route_fingerprint,
+    )
+
+
 def _parsed_quote(response: ClientResponse) -> FetchResult[dict[str, Any]]:
-    """Example reviewed endpoint parser: raw envelope in, immutable result out."""
+    """Example reviewed endpoint parser: raw envelope in, normalized result out."""
     return FetchResult(
         {"symbols": ["AAPL"], "source_hash": response.response_hash},
-        ResultMetadata(
-            endpoint=response.endpoint,
-            status=ResultStatus.COMPLETE,
-            access_tier=response.access_tier,
-            fetched_at=response.fetched_at,
-            query=dict(response.query),
-            attempts=response.attempts,
-            response_hash=response.response_hash,
-            route_fingerprint=response.route_fingerprint,
-        ),
+        _meta(response),
     )
+
+
+def _json_only_parser(response: ClientResponse) -> FetchResult[dict[str, Any]]:
+    """Reviewed endpoint parser that only accepts structured JSON bodies."""
+    if response.content_kind != "json":
+        raise FinvizParseError(f"endpoint parses JSON only, got raw {response.content_kind} body")
+    return _parsed_quote(response)
+
+
+def _rows_parser(response: ClientResponse) -> FetchResult[dict[str, Any]]:
+    """Reviewed parser for a row payload: extracts provider rows into a list."""
+    return FetchResult({"rows": tuple(response.data["rows"])}, _meta(response))
 
 
 class RecordingAdapter:
@@ -134,8 +152,8 @@ class RecordingAdapter:
 async def test_cache_hit_preserves_facts_and_updates_provenance() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    first = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
-    second = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
+    first = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
+    second = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
     assert fake.calls == 1  # one underlying request
     assert isinstance(first, FetchResult) and isinstance(second, FetchResult)
     assert second.metadata.response_hash == first.metadata.response_hash
@@ -146,40 +164,42 @@ async def test_cache_hit_preserves_facts_and_updates_provenance() -> None:
     assert meta.cache_hit is True and meta.stale is False
     assert first.metadata.cache_hit is False
     # Different query is a different key.
-    await client._endpoint_op("/quote.ashx", query={"t": "MSFT"})()
+    await client._endpoint_op("/quote.ashx", query={"t": "MSFT"}, parse=_parsed_quote)()
     assert fake.calls == 2
 
 
 async def test_expired_ttl_refetches() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=0.05)
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     await asyncio.sleep(0.08)
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2
-    second_hit = await client._endpoint_op("/quote.ashx")()  # re-cached after refetch
+    second_hit = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # re-cached after refetch
     assert second_hit.metadata.cache_hit is True
 
 
 async def test_default_has_no_ttl_and_cache_false_disables() -> None:
     fake = CountingTransport()
     client = _client(fake)
-    await client._endpoint_op("/quote.ashx")()
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2  # default: no TTL -> no caching
     fresh = _client(fake, cache_ttl=60.0)
-    await fresh._cached_fetch("/quote.ashx", cache=False)
-    await fresh._cached_fetch("/quote.ashx", cache=False)
+    await fresh._cached_fetch("/quote.ashx", cache=False, parse=_parsed_quote)
+    await fresh._cached_fetch("/quote.ashx", cache=False, parse=_parsed_quote)
     assert fake.calls == 4
 
 
 async def test_refresh_bypasses_and_replaces_entry() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    await client._endpoint_op("/quote.ashx")()
-    await client._cached_fetch("/quote.ashx", refresh=True)
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    await client._cached_fetch("/quote.ashx", refresh=True, parse=_parsed_quote)
     assert fake.calls == 2
-    hit = await client._endpoint_op("/quote.ashx")()
+    hit = await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2  # refresh replaced the entry
     assert hit.metadata.cache_hit is True
 
@@ -187,15 +207,15 @@ async def test_refresh_bypasses_and_replaces_entry() -> None:
 async def test_invalidate_and_clear() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
+    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
     assert client.invalidate("/quote.ashx", params={"t": "AAPL"}) is True
-    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
+    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
     assert fake.calls == 2
     assert client.invalidate("/quote.ashx", params={"t": "AAPL"}) is True
     assert client.invalidate("/nope.ashx") is False
-    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
+    await client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
     assert fake.calls == 3
-    await client._endpoint_op("/quote.ashx", query={"t": "MSFT"})()
+    await client._endpoint_op("/quote.ashx", query={"t": "MSFT"}, parse=_parsed_quote)()
     assert client.clear_cache() == 2
     assert client.clear_cache() == 0
 
@@ -203,8 +223,8 @@ async def test_invalidate_and_clear() -> None:
 async def test_cache_disabled_entirely_by_configuration() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0, cache=False)
-    await client._endpoint_op("/quote.ashx")()
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2
     assert client.clear_cache() == 0
 
@@ -216,18 +236,18 @@ async def test_cache_keys_isolate_access_tier_route_and_profile() -> None:
     fake = CountingTransport()
     authed = _client(fake, auth_cookies={"sid": "abc"}, cache_ttl=60.0)
     public = _client(fake, cache_ttl=60.0)
-    await authed._endpoint_op("/quote.ashx")()
-    await public._endpoint_op("/quote.ashx")()
+    await authed._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    await public._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2  # auth scope never shares a key with public
-    await authed._endpoint_op("/quote.ashx")()
+    await authed._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2
     # Different route via client construction (a per-call proxy override on an
     # authenticated client is rejected by route pinning).
     via_pool = _client(fake, proxies=["http://pool-9:1"], cache_ttl=60.0)
-    await via_pool._endpoint_op("/quote.ashx")()
+    await via_pool._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 3  # different route -> different key
     profiled = _client(fake, browser_profile="chrome131", cache_ttl=60.0)
-    await profiled._endpoint_op("/quote.ashx")()
+    await profiled._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 4  # different browser identity -> different key
 
 
@@ -239,14 +259,14 @@ async def test_shared_cache_isolates_distinct_authenticated_scopes() -> None:
     fake3 = CountingTransport()
     first = _client(fake1, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
     second = _client(fake2, auth_cookies={"sid": "bbb"}, cache=shared, cache_ttl=60.0)
-    await first._endpoint_op("/api/quote")()
-    await second._endpoint_op("/api/quote")()
+    await first._endpoint_op("/api/quote", parse=_parsed_quote)()
+    await second._endpoint_op("/api/quote", parse=_parsed_quote)()
     assert fake1.calls == 1 and fake2.calls == 1  # distinct scopes: no sharing
     assert shared.stats()["entries"] == 2
-    await first._endpoint_op("/api/quote")()  # same scope may share
+    await first._endpoint_op("/api/quote", parse=_parsed_quote)()  # same scope may share
     assert fake1.calls == 1
     same_scope = _client(fake3, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
-    await same_scope._endpoint_op("/api/quote")()
+    await same_scope._endpoint_op("/api/quote", parse=_parsed_quote)()
     assert fake3.calls == 0  # identical auth state shares the entry
 
 
@@ -256,19 +276,21 @@ async def test_shared_cache_isolates_distinct_authenticated_scopes() -> None:
 async def test_stale_if_error_disabled_by_default() -> None:
     fake = CountingTransport(_resp(), BackendError("boom"))
     client = _client(fake, cache_ttl=0.05)
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     await asyncio.sleep(0.08)  # entry is now expired/stale
     with pytest.raises(FinvizTransportError):
-        await client._endpoint_op("/quote.ashx")()
+        await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2
 
 
 async def test_explicit_stale_if_error_serves_stale_on_transport_failure() -> None:
     fake = CountingTransport(_resp(), BackendError("boom"))
     client = _client(fake, cache_ttl=0.05, stale_if_error=True)
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     await asyncio.sleep(0.08)
-    stale = await client._endpoint_op("/quote.ashx")()  # transport failure -> stale fallback
+    stale = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # transport failure -> stale fallback
     assert fake.calls == 2  # the failure was still a real underlying attempt
     assert stale.metadata.stale is True and stale.metadata.cache_hit is True
     assert stale.metadata.served_at is not None
@@ -288,10 +310,10 @@ async def test_stale_if_error_never_masks_verdict_errors(
 ) -> None:
     fake = CountingTransport(_resp(), scripted)  # first fetch caches, second fails
     client = _client(fake, cache_ttl=0.05, stale_if_error=True)
-    await client._endpoint_op("/quote.ashx")()
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     await asyncio.sleep(0.08)
     with pytest.raises(error):  # a verdict, never silently replaced by stale data
-        await client._endpoint_op("/quote.ashx")()
+        await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 2
 
 
@@ -302,7 +324,10 @@ async def test_concurrent_identical_misses_collapse_to_one_request() -> None:
     slow = SlowTransport()
     client = _client(slow, cache_ttl=60.0)
     results = await asyncio.gather(
-        *(client._endpoint_op("/quote.ashx", query={"t": "AAPL"})() for _ in range(8))
+        *(
+            client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)()
+            for _ in range(8)
+        )
     )
     assert slow.calls == 1  # one underlying call, eight waiters
     hashes = {r.metadata.response_hash for r in results}
@@ -313,8 +338,8 @@ async def test_concurrent_identical_misses_collapse_to_one_request() -> None:
 async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> None:
     slow = SlowTransport()
     client = _client(slow, cache_ttl=60.0)
-    winner = asyncio.create_task(client._endpoint_op("/quote.ashx")())
-    loser = asyncio.create_task(client._endpoint_op("/quote.ashx")())
+    winner = asyncio.create_task(client._endpoint_op("/quote.ashx", parse=_parsed_quote)())
+    loser = asyncio.create_task(client._endpoint_op("/quote.ashx", parse=_parsed_quote)())
     await asyncio.sleep(0.01)
     loser.cancel()
     completed = await winner
@@ -322,7 +347,7 @@ async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> 
     with pytest.raises(asyncio.CancelledError):
         await loser
     # The cache still holds a valid entry afterwards.
-    again = await client._endpoint_op("/quote.ashx")()
+    again = await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert slow.calls == 1
     assert again.metadata.cache_hit is True
 
@@ -331,8 +356,10 @@ async def test_singleflight_released_after_failure_so_retry_can_succeed() -> Non
     flaky = CountingTransport(BackendError("boom"))
     client = _client(flaky, cache_ttl=60.0)
     with pytest.raises(FinvizTransportError):
-        await client._endpoint_op("/quote.ashx")()
-    ok = await client._endpoint_op("/quote.ashx")()  # must not be poisoned by the failed flight
+        await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    ok = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # must not be poisoned by the failed flight
     assert flaky.calls == 2
     assert ok.metadata.cache_hit is False
 
@@ -343,12 +370,12 @@ async def test_singleflight_released_after_failure_so_retry_can_succeed() -> Non
 async def test_creator_cancellation_does_not_spawn_a_second_backend_call() -> None:
     slow = SlowTransport()
     client = _client(slow, cache_ttl=60.0)
-    leader = asyncio.create_task(client._endpoint_op("/quote.ashx")())
+    leader = asyncio.create_task(client._endpoint_op("/quote.ashx", parse=_parsed_quote)())
     await asyncio.sleep(0.01)  # leader has registered its flight
     leader.cancel()
     with pytest.raises(asyncio.CancelledError):
         await leader
-    await client._endpoint_op("/quote.ashx")()  # immediately: must join the orphaned flight
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()  # immediately: must join
     await asyncio.sleep(0.1)  # let the shielded miss finish before asserting
     assert slow.calls == 1  # the completed flight still serves the later caller
 
@@ -356,18 +383,18 @@ async def test_creator_cancellation_does_not_spawn_a_second_backend_call() -> No
 async def test_fresh_hits_refresh_lru_recency_and_hit_stats() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0, cache_max_entries=2)
-    await client._endpoint_op("/quote.ashx", query={"t": "A"})()  # miss
-    await client._endpoint_op("/quote.ashx", query={"t": "B"})()  # miss
-    await client._endpoint_op("/quote.ashx", query={"t": "A"})()  # hit -> A becomes MRU
-    await client._endpoint_op("/quote.ashx", query={"t": "C"})()  # miss -> evicts B, keeps A
-    await client._endpoint_op("/quote.ashx", query={"t": "A"})()  # hit: A survived its re-read
+    await client._endpoint_op("/quote.ashx", query={"t": "A"}, parse=_parsed_quote)()  # miss
+    await client._endpoint_op("/quote.ashx", query={"t": "B"}, parse=_parsed_quote)()  # miss
+    await client._endpoint_op("/quote.ashx", query={"t": "A"}, parse=_parsed_quote)()  # hit
+    await client._endpoint_op("/quote.ashx", query={"t": "C"}, parse=_parsed_quote)()  # miss
+    await client._endpoint_op("/quote.ashx", query={"t": "A"}, parse=_parsed_quote)()  # hit
     assert fake.calls == 3
     assert client._cache is not None
     assert client._cache.stats()["hits"] == 2  # fresh hits counted
 
 
 async def test_json_responses_are_byte_bounded() -> None:
-    payload = json.dumps({"data": "x" * 300_000}).encode()
+    payload = json.dumps({"rows": ["x" * 300_000]}).encode()
     fake = CountingTransport(
         *[
             _resp(
@@ -380,31 +407,25 @@ async def test_json_responses_are_byte_bounded() -> None:
     )
     client = _client(fake, cache_ttl=60.0, cache_max_bytes=400_000)
     for i in range(4):
-        await client._endpoint_op("/api/quote", query={"t": f"S{i}"})()
+        await client._endpoint_op("/api/quote", query={"t": f"S{i}"}, parse=_rows_parser)()
     assert client._cache is not None
     stats = client._cache.stats()
     assert stats["approx_bytes"] <= 400_000
-    assert stats["entries"] < 4  # big JSON entries actually evicted
+    assert stats["entries"] < 4  # big parsed entries actually evicted
 
 
-async def test_cached_json_payload_is_immutable_across_hits() -> None:
-    payload = {"price": 100, "tags": ["a"]}
-    fake = CountingTransport(
-        _resp(
-            body=json.dumps(payload).encode(),
-            content_type="application/json",
-            url=f"{BASE}/api/quote",
-        )
-    )
+async def test_cached_parsed_payload_is_immutable_across_hits() -> None:
+    fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    first = await client._endpoint_op("/api/quote")()
+    op = client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)
+    first = await op()
     with pytest.raises(TypeError):
-        first.data["price"] = 999  # type: ignore[index]
-    with pytest.raises((TypeError, AttributeError)):
-        first.data["tags"].append("mutated")  # type: ignore[index,union-attr]
-    second = await client._endpoint_op("/api/quote")()
+        first.data["symbols"] = ("mutated",)  # type: ignore[index]
+    second = await op()
     assert fake.calls == 1
-    assert dict(second.data) == {"price": 100, "tags": ("a",)}  # frozen payload
+    # The payload survived the first serve untouched.
+    assert dict(second.data) == dict(first.data)
+    assert second.data["source_hash"] == first.metadata.response_hash
 
 
 async def test_injected_caller_cache_adapter_is_sufficient() -> None:
@@ -434,8 +455,8 @@ async def test_injected_caller_cache_adapter_is_sufficient() -> None:
 
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0, cache=DocumentedAdapter())
-    first = await client._endpoint_op("/quote.ashx")()
-    second = await client._endpoint_op("/quote.ashx")()
+    first = await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    second = await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fake.calls == 1
     assert second.metadata.cache_hit is True
     assert first.metadata.response_hash == second.metadata.response_hash
@@ -444,18 +465,24 @@ async def test_injected_caller_cache_adapter_is_sufficient() -> None:
 async def test_provenance_reports_cache_age_on_hit_and_stale() -> None:
     fake = CountingTransport(_resp(), _resp(), BackendError("boom"))
     client = _client(fake, cache_ttl=0.05, stale_if_error=True)
-    fresh = await client._endpoint_op("/quote.ashx")()
+    fresh = await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
     assert fresh.metadata.cache_hit is False
     assert fresh.metadata.cache_age is None  # a miss has no cache age
     await asyncio.sleep(0.08)  # first entry is now stale
-    hit = await client._endpoint_op("/quote.ashx")()  # miss -> underlying refetch
+    hit = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # miss -> underlying refetch
     assert fake.calls == 2 and hit.metadata.cache_hit is False
-    aged = await client._endpoint_op("/quote.ashx")()  # fresh hit on the second entry
+    aged = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # fresh hit on the second entry
     assert aged.metadata.cache_hit is True
     assert aged.metadata.cache_age is not None
     assert 0.0 <= aged.metadata.cache_age < 0.05
     await asyncio.sleep(0.08)  # second entry is now stale too
-    stale = await client._endpoint_op("/quote.ashx")()  # transport failure -> stale fallback
+    stale = await client._endpoint_op(
+        "/quote.ashx", parse=_parsed_quote
+    )()  # transport failure -> stale fallback
     assert stale.metadata.stale is True and stale.metadata.cache_hit is True
     assert stale.metadata.cache_age is not None and stale.metadata.cache_age >= 0.08
 
@@ -478,7 +505,7 @@ async def test_cache_adapter_never_receives_raw_authenticated_body() -> None:
     adapter = RecordingAdapter()
     fake = CountingTransport(_resp(body=b"<html>SESSION-PAGE</html>", content_type="text/html"))
     client = _client(fake, auth_cookies={"sid": "abc"}, cache=adapter, cache_ttl=60.0)
-    op = client._endpoint_op("/quote.ashx", query={"t": "AAPL"})
+    op = client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_json_only_parser)
     with pytest.raises(FinvizParseError):
         await op()
     assert adapter.entries == []  # raw HTML body never entered the cache
@@ -490,10 +517,13 @@ async def test_cache_adapter_never_receives_raw_authenticated_body() -> None:
     )
     adapter2 = RecordingAdapter()
     client2 = _client(fake2, auth_cookies={"sid": "abc"}, cache=adapter2, cache_ttl=60.0)
-    op2 = client2._endpoint_op("/api/quote", query={"t": "AAPL"})
+    op2 = client2._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)
     result = await op2()
     assert fake2.calls == 1
-    assert dict(result.data) == {"quote": {"t": "AAPL", "price": 100}}
+    assert dict(result.data) == {
+        "symbols": ("AAPL",),
+        "source_hash": result.metadata.response_hash,
+    }
     assert adapter2.entries and isinstance(adapter2.entries[0], CacheEntry)
     assert isinstance(adapter2.entries[0].result, FetchResult)
     assert adapter2.entries[0].result.data == result.data
@@ -513,11 +543,11 @@ async def test_stale_joiner_preserves_stale_and_age_provenance() -> None:
         BackendError("boom"),
     )
     client = _client(transport, cache_ttl=0.05, stale_if_error=True)
-    await client._endpoint_op("/api/quote", query={"t": "AAPL"})()
+    await client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)()
     await asyncio.sleep(0.08)  # entry is now stale
 
     def _op() -> Coroutine[Any, Any, FetchResult[Any]]:
-        return client._endpoint_op("/api/quote", query={"t": "AAPL"})()
+        return client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)()
 
     leader = asyncio.ensure_future(_op())
     joiner = asyncio.ensure_future(_op())
@@ -539,7 +569,7 @@ async def test_invalidate_matches_per_call_proxy_route_keys() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
     await client._endpoint_op(
-        "/api/quote", query={"t": "AAPL"}, proxy="http://proxy.example:8080"
+        "/api/quote", query={"t": "AAPL"}, proxy="http://proxy.example:8080", parse=_parsed_quote
     )()
     assert fake.calls == 1
     # Default-route invalidation misses; route-matched invalidation hits.
@@ -560,7 +590,7 @@ async def test_cache_stores_parsed_fetchresult_never_raw_envelope() -> None:
     adapter = RecordingAdapter()
     fake = CountingTransport()
     client = _client(fake, cache=adapter, cache_ttl=60.0)
-    op = client._endpoint_op("/api/quote", query={"t": "AAPL"})
+    op = client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)
     result = await op()
     second = await op()
     assert fake.calls == 1
@@ -570,7 +600,10 @@ async def test_cache_stores_parsed_fetchresult_never_raw_envelope() -> None:
     entry = adapter.entries[0]
     assert isinstance(entry, CacheEntry) and isinstance(entry.result, FetchResult)
     assert not isinstance(entry.result.data, ClientResponse)
-    assert dict(entry.result.data) == {"quote": {"t": "AAPL", "price": 100}}
+    assert dict(entry.result.data) == {
+        "symbols": ("AAPL",),
+        "source_hash": entry.result.metadata.response_hash,
+    }
 
 
 async def test_parsed_html_endpoint_result_is_cacheable() -> None:
@@ -601,14 +634,14 @@ async def test_endpoint_op_controls_disable_and_refresh() -> None:
     """Per-call cache=False and refresh=True are bound on the endpoint seam."""
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    nocache = client._endpoint_op("/api/quote", cache=False)
+    nocache = client._endpoint_op("/api/quote", cache=False, parse=_parsed_quote)
     await nocache()
     await nocache()
     assert fake.calls == 2  # bypassed the store entirely
     assert client.invalidate("/api/quote") is False  # nothing was stored
-    await client._endpoint_op("/api/quote", refresh=True)()
+    await client._endpoint_op("/api/quote", refresh=True, parse=_parsed_quote)()
     assert fake.calls == 3  # refresh fetched a fresh copy...
-    hit = await client._endpoint_op("/api/quote")()
+    hit = await client._endpoint_op("/api/quote", parse=_parsed_quote)()
     assert fake.calls == 3  # ...and replaced the cached entry
     assert hit.metadata.cache_hit is True
 
@@ -617,12 +650,105 @@ async def test_keys_thread_representation_parser_and_schema_versions() -> None:
     """Distinct representation/parser/schema facets never share endpoint entries."""
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    await client._endpoint_op("/api/quote", representation="default")()
-    await client._endpoint_op("/api/quote", representation="structured")()
+    await client._endpoint_op("/api/quote", representation="default", parse=_parsed_quote)()
+    await client._endpoint_op("/api/quote", representation="structured", parse=_parsed_quote)()
     assert fake.calls == 2  # representation differs -> no sharing
-    await client._endpoint_op("/api/quote", parser_version="2")()
+    await client._endpoint_op("/api/quote", parser_version="2", parse=_parsed_quote)()
     assert fake.calls == 3  # parser revision differs -> no sharing
-    await client._endpoint_op("/api/quote", schema_version=2)()
+    await client._endpoint_op("/api/quote", schema_version=2, parse=_parsed_quote)()
     assert fake.calls == 4  # schema revision differs -> no sharing
-    await client._endpoint_op("/api/quote")()  # identical facets share
+    await client._endpoint_op("/api/quote", parse=_parsed_quote)()  # identical facets share
     assert fake.calls == 4
+
+
+# --- fourth review round regressions --------------------------------------------
+
+
+async def test_missing_parser_is_rejected_before_any_request() -> None:
+    """Unnormalized provider payloads can never be cached: a parser is required."""
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0)
+    with pytest.raises(TypeError):
+        client._endpoint_op("/api/quote", query={"t": "AAPL"})  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        client._cached_fetch("/api/quote", cache=False)  # type: ignore[call-arg]
+    assert fake.calls == 0  # nothing was fetched...
+    assert client._cache is not None and client._cache.stats()["entries"] == 0  # ...or stored
+
+
+async def test_pool_route_keys_use_the_resolved_proxy() -> None:
+    """Pool entries are keyed by the pinned proxy, so identical calls share one."""
+    fake = CountingTransport()
+    client = _client(fake, proxies=["http://pool-a:1"], cache_ttl=60.0)
+    first = await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    second = await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake.calls == 1  # same resolved route -> one underlying call
+    assert second.metadata.cache_hit is True
+    assert second.data == first.data  # same pinned-route payload
+    assert client.invalidate("/api/quote") is True  # the entry stays addressable
+    assert client._cache is not None and client._cache.stats()["entries"] == 0
+
+
+async def test_distinct_pools_sharing_a_cache_never_share_entries() -> None:
+    """Different configured pools are different routes even with a shared adapter."""
+    shared = ResultCache()
+    fake1 = CountingTransport()
+    fake2 = CountingTransport()
+    a = _client(fake1, proxies=["http://pool-a:1"], cache=shared, cache_ttl=60.0)
+    b = _client(fake2, proxies=["http://pool-b:2"], cache=shared, cache_ttl=60.0)
+    ra = await a._endpoint_op("/api/quote", parse=_parsed_quote)()
+    rb = await b._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake1.calls == 1 and fake2.calls == 1  # no cross-pool sharing
+    assert rb.metadata.cache_hit is False
+    assert ra.metadata.route_fingerprint != rb.metadata.route_fingerprint
+    assert shared.stats()["entries"] == 2
+    assert a.invalidate("/api/quote") is True  # each entry addressable by its owner
+    assert shared.stats()["entries"] == 1
+    assert b.invalidate("/api/quote") is True
+    assert shared.stats()["entries"] == 0
+
+
+async def test_parser_and_schema_facets_reach_result_metadata() -> None:
+    """Bound facet facts land in immutable metadata on miss and hit."""
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0)
+    op = client._endpoint_op(
+        "/api/quote", parser_version="7", schema_version=42, parse=_parsed_quote
+    )
+    miss = await op()
+    hit = await op()
+    assert fake.calls == 1
+    assert miss.metadata.parser_version == "7" and miss.metadata.schema_version == 42
+    assert hit.metadata.parser_version == "7" and hit.metadata.schema_version == 42
+
+
+async def test_cancelled_leader_orphan_failure_never_reaches_the_loop_handler() -> None:
+    """A cancelled creator + failing flight must not warn the loop, but joiners
+    still receive the error."""
+    contexts: list[Any] = []
+    loop = asyncio.get_running_loop()
+    previous = loop.get_exception_handler()
+
+    def handler(loop: asyncio.AbstractEventLoop, context: Any) -> None:
+        contexts.append(context)
+
+    loop.set_exception_handler(handler)
+    try:
+        transport = SlowTransport(
+            BackendError("boom"),  # the flight fails only after the leader's cancel
+        )
+        client = _client(transport, cache_ttl=60.0)
+        leader = asyncio.create_task(client._endpoint_op("/api/quote", parse=_parsed_quote)())
+        joiner = asyncio.create_task(client._endpoint_op("/api/quote", parse=_parsed_quote)())
+        await asyncio.sleep(0.01)
+        leader.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await leader
+        with pytest.raises(FinvizTransportError):
+            await joiner  # an active joiner still sees the real failure
+        await asyncio.sleep(0.05)  # let the done callback run
+        del leader, joiner
+        gc.collect()  # force any unretrieved-exception reporting right now
+    finally:
+        loop.set_exception_handler(previous)
+    assert contexts == []  # no "exception was never retrieved" loop warning

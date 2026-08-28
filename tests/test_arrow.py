@@ -488,3 +488,81 @@ def test_compact_count_normalized_to_int64() -> None:
     # invalid count on a field without a companion raises
     with pytest.raises(FinvizDataError):
         _build("quote_peers", [{"symbol": "AAPL", "peer": "MSFT", "rank": "many"}])
+
+
+# --- review run 50: items 1-2 -------------------------------------------------
+
+
+def test_count_parses_exact_beyond_float53() -> None:
+    """Run-50 item 1: int64 counts never round-trip through binary float."""
+    exact = 9_007_199_254_740_993  # 2**53 + 1: float() would round it to ...992
+    table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": str(exact)}])
+    row = _rows(table)[0]
+    assert row["volume"] == exact
+    assert row["volume_raw"] == str(exact)
+    # comma displays parse the same, exactly
+    table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": "9,007,199,254,740,993"}])
+    assert _rows(table)[0]["volume"] == exact
+
+
+def test_count_out_of_int64_range_is_conversion_failure() -> None:
+    """Run-50 item 1: overflow is recoverable drift, never a raw OverflowError."""
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "volume": str(2**63)}],
+        on_warning=records.append,
+    )
+    row = _rows(table)[0]
+    assert row["volume"] is None
+    assert row["volume_raw"] == str(2**63)
+    assert any(w.code == "conversion_failed" for w in records)
+    # without a raw companion the same overflow is a typed error, not OverflowError
+    with pytest.raises(FinvizDataError, match="int64"):
+        _build("quote_peers", [{"symbol": "AAPL", "peer": "MSFT", "rank": str(2**63)}])
+    with pytest.raises(FinvizDataError):
+        _build(
+            "quote_snapshot",
+            [{"symbol": "AAPL", "volume": str(2**63)}],
+            strict_schema=True,
+        )
+
+
+def test_count_int64_boundaries_parse() -> None:
+    """Exact int64 limits (and a compact display of one) are representable."""
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "volume": str(2**63 - 1), "average_volume": str(-(2**63))}],
+    )
+    row = _rows(table)[0]
+    assert row["volume"] == 2**63 - 1
+    assert row["average_volume"] == -(2**63)
+    # compact display scaling stays exact in Decimal space (int64 max in K)
+    table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": "9,223,372,036,854,775.807K"}])
+    assert _rows(table)[0]["volume"] == 2**63 - 1
+
+
+def test_response_date_not_needed_without_time_only() -> None:
+    """Run-50 item 2: response_date is required only to anchor time-only displays."""
+    # non-temporal rows on a temporal dataset's sibling
+    table = fa.build_table("symbol_universe", [{"symbol": "AAPL"}], fetched_at=NOW)
+    assert table.num_rows == 1
+    # empty rows, even on a dataset carrying timestamps
+    table = fa.build_table("quote_news", [], fetched_at=NOW)
+    assert table.num_rows == 0
+    # a fully dated timestamp carries its own anchor
+    table = fa.build_table(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "2026-08-20 10:00:00"}],
+        fetched_at=NOW,
+    )
+    row = _rows(table)[0]
+    assert row["published_at"] == dt.datetime(2026, 8, 20, 14, 0, tzinfo=dt.UTC)
+    assert row["published_at_status"] == "exact"
+    # ...while a time-only display still demands the response date
+    with pytest.raises(FinvizDataError, match="response_date"):
+        fa.build_table(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+            fetched_at=NOW,
+        )

@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 from collections.abc import Callable, Iterable, Mapping
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -34,7 +35,12 @@ _PERCENT = re.compile(r"(?i)%\s*$")
 _TIME_ONLY = re.compile(r"^\d{1,2}:\d{2}(?::\d{2})?$")
 _DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_SUFFIX_SCALE = {"T": 1e12, "B": 1e9, "M": 1e6, "K": 1e3}
+_SUFFIX_SCALE = {
+    "T": Decimal("1e12"),
+    "B": Decimal("1e9"),
+    "M": Decimal("1e6"),
+    "K": Decimal("1e3"),
+}
 _EASTERN = ZoneInfo("America/New_York")
 
 
@@ -61,23 +67,21 @@ def build_table(
     NaN, in strict mode too — ordinary missing data is not drift. Missing
     required keys always raise. Time-only displays anchor to ``response_date``
     in ``America/New_York``; ``response_date`` is the provider response's own
-    date and must be supplied explicitly (``"fetched_at"`` opts into using the
-    provenance timestamp's US-Eastern date). DST fold/gap local times have no
-    unambiguous UTC instant and are kept as raw + ``ambiguous`` status.
+    date and is required only when a time-only display is actually converted
+    (``"fetched_at"`` opts into using the provenance timestamp's US-Eastern
+    date). DST fold/gap local times have no unambiguous UTC instant and are
+    kept as raw + ``ambiguous`` status.
     """
     dataset = schemas.dataset(dataset_name)
     if fetched_at.tzinfo is None:
         msg = "fetched_at must be timezone-aware"
         raise FinvizDataError(msg)
     if response_date is None:
-        # fetched_at is request provenance, not the provider's response date;
-        # guessing it can attach time-only events to the wrong day.
-        msg = (
-            "response_date is required for time-only anchoring; pass the "
-            "provider response date or response_date='fetched_at' to opt in"
-        )
-        raise FinvizDataError(msg)
-    if isinstance(response_date, str):
+        # Only a time-only display actually needs an anchor; the review work
+        # below checks that per value, so a missing response_date is deferred
+        # until one is seen (empty/non-temporal/dated input never requires it).
+        anchor_date = None
+    elif isinstance(response_date, str):
         if response_date != "fetched_at":
             msg = f"unknown response_date sentinel {response_date!r}"
             raise FinvizDataError(msg)
@@ -183,11 +187,15 @@ def _convert(
     field: schemas.Field,
     value: Any,
     dataset_name: str,
-    anchor_date: dt.date,
+    anchor_date: dt.date | None,
     warnings: list[FetchWarning],
     strict_schema: bool,
 ) -> tuple[Any, str | None]:
-    """Convert one source-near value; returns the typed value and parse status."""
+    """Convert one source-near value; returns the typed value and parse status.
+
+    ``anchor_date`` may be ``None`` while no time-only display has been seen;
+    ``_typed`` raises when one appears without a response date.
+    """
     if value is None:
         return None, None
     text = value if isinstance(value, str) else str(value)
@@ -257,31 +265,38 @@ def _parse_eastern(
     return naive.replace(tzinfo=_EASTERN).astimezone(dt.UTC), exact_status
 
 
-def _typed(field: schemas.Field, text: str, anchor_date: dt.date) -> tuple[Any, str | None]:
+def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tuple[Any, str | None]:
     if field.unit == "text":
         return text, None
     # Numeric cleaning applies only to numeric units; text keeps its display.
     cleaned = _COMMA.sub("", text)
     if field.unit == "count":
-        # True counts stay int64: plain or compact displays, base units only.
-        if _COMPACT.match(cleaned):
-            suffix = _COMPACT_SUFFIX.search(cleaned)
-            if suffix is not None:
-                scale = _SUFFIX_SCALE[suffix.group(1).upper()]
-                cleaned = str(float(_COMPACT_SUFFIX.sub("", cleaned)) * scale)
-        value = float(cleaned)
-        if not value.is_integer():
+        # True counts stay int64, parsed exactly in Decimal space — never
+        # through binary float, which silently corrupts beyond 2**53.
+        if not _COMPACT.match(cleaned):
+            msg = f"invalid count display {text!r}"
+            raise ValueError(msg)
+        number = Decimal(_COMPACT_SUFFIX.sub("", cleaned))
+        suffix = _COMPACT_SUFFIX.search(cleaned)
+        if suffix is not None:
+            number *= _SUFFIX_SCALE[suffix.group(1).upper()]
+        if number != number.to_integral_value():
             msg = f"non-integral count {text!r}"
             raise ValueError(msg)
-        return int(value), None
+        value = int(number)
+        if not -(2**63) <= value < 2**63:
+            msg = f"count {text!r} outside signed int64 range"
+            raise ValueError(msg)
+        return value, None
     if field.unit == "compact":
         if not _COMPACT.match(cleaned):
             return float(cleaned), None
         suffix = _COMPACT_SUFFIX.search(cleaned)
         if suffix is None:
             return float(cleaned), None
-        scale = _SUFFIX_SCALE[suffix.group(1).upper()]
-        return float(_COMPACT_SUFFIX.sub("", cleaned)) * scale, None
+        return float(
+            Decimal(_COMPACT_SUFFIX.sub("", cleaned)) * _SUFFIX_SCALE[suffix.group(1).upper()]
+        ), None
     if field.unit == "percent":
         return float(_PERCENT.sub("", cleaned)) / 100.0, None
     if field.unit == "number":
@@ -295,17 +310,25 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date) -> tuple[Any, 
         # Event displays: full datetimes are exact; time-only displays anchor to
         # the response date in America/New_York and convert to UTC only when
         # unambiguous. Fold/gap local times stay untyped (None + status).
-        if _TIME_ONLY.match(text) or _DATETIME.match(text):
-            if _TIME_ONLY.match(text):
-                fmt = "%H:%M:%S" if text.count(":") == 2 else "%H:%M"
-                naive = dt.datetime.strptime(text, fmt).replace(
-                    year=anchor_date.year, month=anchor_date.month, day=anchor_date.day
+        if _TIME_ONLY.match(text):
+            if anchor_date is None:
+                # Only time-only displays need the provider response date; a
+                # missing one is a typed error here, not at call time. Raised
+                # directly so a raw companion can't downgrade it to drift.
+                msg = (
+                    "response_date is required for time-only anchoring; pass the "
+                    "provider response date or response_date='fetched_at' to opt in"
                 )
-                status_label = "anchored"
-            else:
-                naive = dt.datetime.fromisoformat(text.replace("T", " "))
-                status_label = "exact"
-            utc, status = _parse_eastern(naive, status_label)
+                raise FinvizDataError(msg)
+            fmt = "%H:%M:%S" if text.count(":") == 2 else "%H:%M"
+            naive = dt.datetime.strptime(text, fmt).replace(
+                year=anchor_date.year, month=anchor_date.month, day=anchor_date.day
+            )
+            utc, status = _parse_eastern(naive, "anchored")
+            return utc, status
+        if _DATETIME.match(text):
+            naive = dt.datetime.fromisoformat(text.replace("T", " "))
+            utc, status = _parse_eastern(naive, "exact")
             return utc, status
         msg = f"unrecognized timestamp display {text!r}"
         raise ValueError(msg)

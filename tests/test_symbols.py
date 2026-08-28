@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
+import json
 from pathlib import Path
 from typing import Any
 
@@ -162,7 +163,13 @@ async def test_symbols_unexpected_urls_surface_as_warnings() -> None:
 
 
 async def test_symbols_empty_manifest_is_recognized_empty() -> None:
-    fake = RecordingTransport(_resp(b"<urlset></urlset>", "text/xml", f"{BASE}/sitemap.xml"))
+    fake = RecordingTransport(
+        _resp(
+            b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+            "text/xml",
+            f"{BASE}/sitemap.xml",
+        )
+    )
     result = await symbols_api.symbols_async(client=FinvizClient(transport=fake))
     assert result.metadata.status is ResultStatus.EMPTY
     assert result.table.num_rows == 0
@@ -311,6 +318,28 @@ async def test_search_with_indices_passes_provider_parameter() -> None:
         "AAP", client=FinvizClient(transport=fake), with_indices=True
     )
     assert fake.params == [{"input": "AAP", "withIndices": 1}]
+
+
+async def test_search_additive_fields_reach_extra_fields_with_warning() -> None:
+    # Provider drift survives end to end: unknown fields land in extra_fields
+    # and the unknown_field warning reaches result metadata.
+    payload = json.dumps(
+        [
+            {
+                "ticker": "AAPL",
+                "company": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "provider_added": "v",
+            }
+        ]
+    )
+    fake = RecordingTransport(
+        _resp(payload.encode(), "application/json", f"{BASE}/api/suggestions")
+    )
+    result = await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
+    row = result.table.to_pylist()[0]
+    assert row["extra_fields"] == [("provider_added", "v")]
+    assert any(w.code == "unknown_field" for w in result.metadata.warnings)
 
 
 async def test_search_empty_result_is_recognized_empty() -> None:

@@ -98,7 +98,6 @@ def test_non_canonical_query_and_fragment_variants_are_rejected() -> None:
 @pytest.mark.parametrize(
     "xml",
     [
-        "<urlset></urlset>",
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
     ],
 )
@@ -106,6 +105,15 @@ def test_recognized_empty_manifest_is_empty_not_drift(xml: str) -> None:
     rows, warnings = symbols_parser.parse_sitemap(xml)
     assert rows == []
     assert warnings == []
+
+
+def test_non_namespaced_urlset_with_payload_is_parse_drift() -> None:
+    # Structure drift carrying data: without the sitemap namespace the manifest
+    # is not a recognized shape, and must never silently degrade to EMPTY.
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_sitemap(
+            "<urlset><url><loc>https://finviz.com/stock?t=AAPL</loc></url></urlset>"
+        )
 
 
 def test_malformed_and_out_of_range_ports_are_skipped_not_raised() -> None:
@@ -150,6 +158,22 @@ def test_parse_suggestions_preserves_provider_ranking() -> None:
     assert [(r["symbol"], r["company"], r["exchange"]) for r in rows] == [
         ("AAPL", "Apple Inc.", "NASDAQ"),
         ("AAP", "Advance Auto Parts", "NYSE"),
+    ]
+
+
+def test_parse_suggestions_preserves_additive_fields() -> None:
+    # Provider drift must survive: non-schema fields are kept for the Arrow
+    # builder, which lands them in ``extra_fields`` with ``unknown_field``.
+    rows = symbols_parser.parse_suggestions(
+        '[{"ticker": "AAPL", "company": "Apple Inc.", "exchange": "NASDAQ", "provider_added": "v"}]'
+    )
+    assert rows == [
+        {
+            "symbol": "AAPL",
+            "company": "Apple Inc.",
+            "exchange": "NASDAQ",
+            "provider_added": "v",
+        }
     ]
 
 

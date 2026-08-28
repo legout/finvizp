@@ -107,14 +107,20 @@ def _parse_manifest(response: Any) -> FetchResult[Any]:
 
 def _parse_suggestions(response: Any, params: dict[str, Any]) -> FetchResult[Any]:
     rows = symbols_parser.parse_suggestions(response.data)
-    table = build_table("symbol_search", rows, fetched_at=response.fetched_at)
+    builder_warnings: list[Any] = []
+    table = build_table(
+        "symbol_search",
+        rows,
+        fetched_at=response.fetched_at,
+        on_warning=builder_warnings.append,
+    )
     return _envelope(
         path=response.endpoint,
         table=table,
         query=params,
         fetched_at=response.fetched_at,
         response_hash=response.response_hash,
-        warnings=[],
+        warnings=builder_warnings,
     )
 
 

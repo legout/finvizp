@@ -97,7 +97,7 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
         # at the upstream boundary rather than resolved.
         msg = "sitemap XML must not declare a DOCTYPE"
         raise FinvizParseError(msg)
-    if root.tag not in (_SITEMAP_NS + "urlset", "urlset"):
+    if root.tag != _SITEMAP_NS + "urlset":
         msg = f"unexpected sitemap root {root.tag!r}"
         raise FinvizParseError(msg)
 
@@ -124,9 +124,11 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
 
     Accepts the already-decoded JSON value (the classified client envelope
     hands parsed JSON to parsers) or the raw text. Preserves provider ranking
-    verbatim and maps ``ticker`` to the canonical ``symbol`` field.
-    Recognized empty (``[]``) is empty, not drift; any other shape deviation
-    (including JSON ``null``) raises :class:`FinvizParseError`.
+    verbatim and maps ``ticker`` to the canonical ``symbol`` field. Any other
+    source field passes through untouched so the Arrow builder can preserve it
+    in ``extra_fields`` with an ``unknown_field`` warning. Recognized empty
+    (``[]``) is empty, not drift; any other shape deviation (including JSON
+    ``null``) raises :class:`FinvizParseError`.
     """
     if isinstance(payload, str):
         try:
@@ -148,11 +150,17 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
             raise FinvizParseError(msg)
         company = record.get("company")
         exchange = record.get("exchange")
-        rows.append(
-            {
-                "symbol": ticker.strip().upper(),
-                "company": company if isinstance(company, str) else None,
-                "exchange": exchange if isinstance(exchange, str) else None,
-            }
+        row: dict[str, Any] = {
+            "symbol": ticker.strip().upper(),
+            "company": company if isinstance(company, str) else None,
+            "exchange": exchange if isinstance(exchange, str) else None,
+        }
+        # Additive provider fields pass through verbatim: the Arrow builder
+        # preserves them in ``extra_fields`` and warns ``unknown_field``.
+        row.update(
+            (key, value)
+            for key, value in record.items()
+            if key not in ("ticker", "company", "exchange")
         )
+        rows.append(row)
     return rows

@@ -374,6 +374,21 @@ async def test_redirect_policy_is_part_of_cache_identity() -> None:
     assert slow.calls == 2  # two policies -> two flights, never coalesced
     assert {r.metadata.cache_hit for r in (first, second)} == {False}
 
+    # Invalidation addresses the redirect policy like any other facet.
+    await client._endpoint_op("/quote.ashx", follow_redirects=False, parse=_parsed_quote)()
+    assert (
+        client.invalidate("/quote.ashx", params={"t": "AAPL"}, follow_redirects=False) is False
+    )  # different query: nothing at that strict key yet
+    await client._endpoint_op(
+        "/quote.ashx", query={"t": "AAPL"}, follow_redirects=False, parse=_parsed_quote
+    )()
+    assert client.invalidate("/quote.ashx", params={"t": "AAPL"}, follow_redirects=False) is True
+    strict_after = await client._endpoint_op(
+        "/quote.ashx", query={"t": "AAPL"}, follow_redirects=False, parse=_parsed_quote
+    )()
+    assert strict_after.metadata.cache_hit is False  # the strict entry was really dropped
+    assert fake.calls == 6
+
 
 async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> None:
     slow = SlowTransport()

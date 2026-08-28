@@ -875,11 +875,13 @@ class FinvizClient:
         representation: str = "default",
         parser_version: str = "1",
         schema_version: int = 1,
+        follow_redirects: bool = True,
     ) -> bool:
         """Drop one cached route entry; ``True`` when an entry was held.
 
         Takes the same route identity inputs as the cached operation, so
-        per-call-proxy routes are addressable.
+        per-call-proxy routes are addressable. ``follow_redirects=False``
+        addresses a strict one-request entry (e.g. the symbols manifest).
         """
         store = self._cache
         if store is None:
@@ -893,6 +895,7 @@ class FinvizClient:
                     representation=representation,
                     parser_version=parser_version,
                     schema_version=schema_version,
+                    follow_redirects=follow_redirects,
                 )
             )
         )

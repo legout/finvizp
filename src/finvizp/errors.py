@@ -30,19 +30,20 @@ _URL_CREDENTIALS = re.compile(r"(?i)\b(https?|socks[45])://([^/\s:@]+):([^@\s/]+
 # words ("Bearer x", "Basic x"), response_body=..., HTTP_PROXY=...,
 # proxy-url: ..., access_token=... in query strings, etc.
 _SECRET_LABEL = re.compile(
-    r"(?i)((?:^|[\s,;(\"'=]|[?&])[a-z0-9_.-]*(?:"
+    r"(?i)((?:^|[\s,{\"'=\[]|[?&])[a-z0-9_.-]*(?:"
     r"authorization|auth[-_]?token|api[-_]?key|apikey|access[-_]?token|credential"
     r"|cookie|session|password|passwd|pwd|secret|token"
     r"|body|payload|content|html"
-    r")[a-z0-9_.-]*\s*[:=]\s*)"
+    r")[a-z0-9_.-]*\s*\"?\s*[:=]\s*)"
     r"(?:(?:bearer|basic|digest|token)\s+)?(?:\"[^\"]*\"|'[^']*'|[^\s&;,\"']+)"
 )
 # Proxy URLs are route-sensitive: consume the whole URL (host included) when
 # the surrounding text names it as a proxy/route ("via proxy http://...",
-# "proxy URL: http://...", "proxy-url: socks5://...", "HTTP_PROXY=...").
+# "proxy URL: http://...", "proxy-url: socks5://...", "HTTP_PROXY=...",
+# '"proxy_url": "http://..."'). The optional quote handles JSON keys/values.
 _PROXY_URL = re.compile(
-    r"(?i)((?:^|[\s,;(])[a-z0-9_.-]*(?:proxy|proxies|route)[a-z0-9_.-]*\s*"
-    r"(?:\s+[a-z0-9_.-]{1,10})?\s*[:=]?\s*)"
+    r"(?i)((?:^|[\s,{\"'=(\[])[a-z0-9_.-]*(?:proxy|proxies|route)[a-z0-9_.-]*\s*"
+    r"(?:\s+[a-z0-9_.-]{1,10})?\s*\"?\s*[:=]?\s*\"?\s*)"
     r"((?:https?|socks[45])://[^\s'\"<>]+)"
 )
 

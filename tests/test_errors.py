@@ -300,3 +300,30 @@ def test_warning_and_unit_error_redact_labelled_secrets() -> None:
     error = FinvizQueryError("bad", context={"note": f"api-key: {SECRET}"})
     assert SECRET not in error.context["note"]
     assert SECRET not in str(error)
+
+
+def test_error_message_redacts_json_quoted_secret_labels() -> None:
+    """Round 8: JSON-style quoted labels (``"access_token": "..."``) must not leak."""
+    for text in (
+        '{"error": "auth failed", "access_token": "' + SECRET + '"}',
+        '{"proxy_url": "http://gate.example.invalid:8080/' + SECRET + '"}',
+    ):
+        error = FinvizError(text)
+        rendered = str(error)
+        assert SECRET not in rendered
+        assert SECRET not in error.args[0]
+        assert "[REDACTED]" in rendered
+    proxy_error = FinvizError('{"proxy_url": "http://gate.example.invalid:8080/' + SECRET + '"}')
+    assert "gate.example.invalid" not in str(proxy_error)
+
+
+def test_error_context_and_records_redact_json_quoted_labels() -> None:
+    """Round 8: quoted JSON labels in nested context and public records."""
+    note = '{"access_token": "' + SECRET + '"}'
+    error = FinvizQueryError("bad", context={"note": note})
+    assert SECRET not in error.context["note"]
+    assert SECRET not in str(error)
+    warning = FetchWarning(code="leak", message=note)
+    unit_error = UnitError(code="unit", message="bad", raw=note)
+    assert SECRET not in warning.message
+    assert SECRET not in (unit_error.raw or "")

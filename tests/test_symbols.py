@@ -7,6 +7,7 @@ Transport is hermetic (scripted fake backend); no live network.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,8 @@ class RecordingTransport(Backend):
         self.scripted = list(scripted)
         self.urls: list[str] = []
         self.params: list[dict[str, Any] | None] = []
+        self.entered = 0
+        self.closed = 0
 
     @property
     def name(self) -> str:
@@ -58,12 +61,15 @@ class RecordingTransport(Backend):
         self.params.append(dict(config.params) if config.params else None)
         return self.scripted.pop(0)
 
-    async def close(self) -> None: ...
+    async def close(self) -> None:
+        self.closed += 1
 
     async def __aenter__(self) -> RecordingTransport:
+        self.entered += 1
         return self
 
-    async def __aexit__(self, *args: Any) -> None: ...
+    async def __aexit__(self, *args: Any) -> None:
+        self.closed += 1
 
     def supports_http2(self) -> bool:
         return True
@@ -129,6 +135,18 @@ def test_builder_preserves_key_sentinel_spellings() -> None:
         assert table.column("symbol").to_pylist() == ["NA"]
 
 
+def test_builder_still_rejects_other_sentinels_on_key_fields() -> None:
+    """The key-field exemption is exactly ``symbol='NA'``; nothing wider."""
+    from finvizp import arrow as fa
+    from finvizp.errors import FinvizDataError
+
+    now = dt.datetime.now(dt.UTC)
+    for dataset in ("symbol_universe", "symbol_search"):
+        for value in ("", "-", "--", "None", "null"):
+            with pytest.raises(FinvizDataError, match="non-nullable"):
+                fa.build_table(dataset, [{"symbol": value}], fetched_at=now)
+
+
 async def test_symbols_returns_registered_arrow_schema() -> None:
     from finvizp import schemas
 
@@ -179,14 +197,72 @@ async def test_symbols_uses_client_cache_and_refresh() -> None:
     await client.close()
 
 
+async def test_symbols_cache_false_bypasses_cache_per_call() -> None:
+    fake = _manifest_transport(
+        _resp(_sitemap().encode(), "text/xml", f"{BASE}/sitemap.xml"),
+        _resp(_sitemap().encode(), "text/xml", f"{BASE}/sitemap.xml"),
+    )
+    client = FinvizClient(transport=fake, cache_ttl=60.0)
+    first = await symbols_api.symbols_async(client=client)
+    second = await symbols_api.symbols_async(client=client, cache=False)
+    assert len(fake.urls) == 2  # cache=False never reads or writes the cache
+    assert second.metadata.cache_hit is False
+    assert second.metadata.fetched_at > first.metadata.fetched_at
+    third = await symbols_api.symbols_async(client=client)
+    assert third.metadata.cache_hit is True  # cache=False left the cache intact
+    await client.close()
+
+
+async def test_search_cache_false_bypasses_cache_per_call() -> None:
+    fake = RecordingTransport(
+        _resp(_suggestions().encode(), "application/json", f"{BASE}/api/suggestions"),
+        _resp(_suggestions().encode(), "application/json", f"{BASE}/api/suggestions"),
+    )
+    client = FinvizClient(transport=fake, cache_ttl=60.0)
+    await symbols_api.search_symbols_async("apple", client=client)
+    second = await symbols_api.search_symbols_async("apple", client=client, cache=False)
+    assert len(fake.urls) == 2
+    assert second.metadata.cache_hit is False
+    await client.close()
+
+
 async def test_transient_client_is_used_when_client_omitted() -> None:
-    # The transient-client path is exercised live separately (bounded probe);
-    # hermetically we only verify the helper produces a working client.
     from finvizp.symbols import _client_or_transient
 
-    assert isinstance(_client_or_transient(None), FinvizClient)
+    async with _client_or_transient(None) as transient:
+        assert isinstance(transient, FinvizClient)
     client = FinvizClient(transport=_manifest_transport())
-    assert _client_or_transient(client) is client
+    async with _client_or_transient(client) as yielded:
+        assert yielded is client
+
+
+async def test_transient_client_is_closed_on_success_and_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Omitted client: the lifecycle is owned by the call, so the transport is
+    # entered and closed exactly once — on success and on failure alike.
+    for scripted, expect_raise in (
+        (_resp(_sitemap().encode(), "text/xml", f"{BASE}/sitemap.xml"), False),
+        (_resp(b"{oops", "application/json", f"{BASE}/sitemap.xml"), True),
+    ):
+        fake = RecordingTransport(scripted)
+
+        def factory(*_a: Any, fake: RecordingTransport = fake, **_kw: Any) -> FinvizClient:
+            return FinvizClient(transport=fake)
+
+        monkeypatch.setattr(symbols_api, "FinvizClient", factory)
+        with pytest.raises(Exception) if expect_raise else contextlib.nullcontext():
+            await symbols_api.symbols_async()
+        assert fake.entered == 1
+        assert fake.closed == 1
+
+
+async def test_caller_client_is_never_closed() -> None:
+    fake = _manifest_transport()
+    client = FinvizClient(transport=fake)
+    await symbols_api.symbols_async(client=client)
+    assert client._entered is True  # still open for reuse by the caller
+    await client.close()
 
 
 # --- search_symbols_async: bounded ranked suggestions ---------------------------
@@ -253,6 +329,13 @@ async def test_search_sync_delegates_through_run_sync() -> None:
     result = await asyncio.to_thread(call_sync)
     assert fake.urls == [f"{BASE}/api/suggestions"]
     assert result.table.num_rows == 2
+
+
+async def test_search_json_null_drift_raises_typed_parse_error() -> None:
+    fake = RecordingTransport(_resp(b"null", "application/json", f"{BASE}/api/suggestions"))
+    with pytest.raises(FinvizParseError):
+        await symbols_api.search_symbols_async("AAP", client=FinvizClient(transport=fake))
+    assert fake.urls == [f"{BASE}/api/suggestions"]
 
 
 async def test_search_rejects_non_string_query_before_network() -> None:

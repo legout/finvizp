@@ -12,22 +12,34 @@ from finvizp.errors import FetchWarning, FinvizParseError
 __all__ = ["parse_sitemap", "parse_suggestions"]
 
 _SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
-_STOCK_LOC_SUFFIX = "/stock"
+_STOCK_PATH = "/stock"
+_CANONICAL_HOST = "finviz.com"
 _SYMBOL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-")
 
 
 def _symbol_from_loc(loc: str) -> str | None:
-    """Canonical symbol from one sitemap ``<loc>`` URL, or ``None``.
+    """Canonical symbol from one canonical sitemap ``<loc>`` URL, or ``None``.
 
-    Only the ``t`` query parameter of a ``.../stock`` URL carries a symbol;
-    the ``ty=oc`` variant resolves to the same symbol and dedupes — it is
-    never optionability evidence.
+    Only the canonical ``https://finviz.com/stock?t=...`` shape carries a
+    symbol; the ``ty=oc`` variant resolves to the same symbol and dedupes —
+    it is never optionability evidence. Foreign hosts, near-match paths, and
+    an absent or ambiguous ``t`` are not symbols.
     """
     parts = urlsplit(loc)
-    if parts.scheme not in ("http", "https") or not parts.path.endswith(_STOCK_LOC_SUFFIX):
+    if (
+        parts.scheme != "https"
+        or parts.hostname != _CANONICAL_HOST
+        or parts.port is not None
+        or parts.username is not None
+        or parts.password is not None
+        or parts.path != _STOCK_PATH
+    ):
         return None
-    query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    symbol = query.get("t", "").strip().upper()
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    t_values = [value for key, value in pairs if key == "t"]
+    if len(t_values) != 1:
+        return None
+    symbol = t_values[0].strip().upper()
     if not symbol or any(ch not in _SYMBOL_CHARS for ch in symbol):
         return None
     return symbol
@@ -75,7 +87,7 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
     hands parsed JSON to parsers) or the raw text. Preserves provider ranking
     verbatim and maps ``ticker`` to the canonical ``symbol`` field.
     Recognized empty (``[]``) is empty, not drift; any other shape deviation
-    raises :class:`FinvizParseError`.
+    (including JSON ``null``) raises :class:`FinvizParseError`.
     """
     if isinstance(payload, str):
         try:
@@ -83,8 +95,6 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
         except json.JSONDecodeError as exc:
             msg = f"malformed suggestions JSON: {exc}"
             raise FinvizParseError(msg) from None
-    if payload is None:
-        return []
     if not isinstance(payload, list):
         msg = f"suggestions payload must be a JSON array, got {type(payload).__name__}"
         raise FinvizParseError(msg)

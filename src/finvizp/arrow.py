@@ -288,11 +288,11 @@ def _convert(
     if value is None:
         return None, None
     text = value if isinstance(value, str) else str(value)
-    if text in _NULL_SENTINELS and not field.key:
-        # Sentinel -> null everywhere except key fields: a key carries row
-        # identity, so a real ticker spelled ``NA`` is data, never a missing
-        # marker (live-probe drift). Non-nullable non-key fields still fall
-        # through to the null -> typed-error check below.
+    if text in _NULL_SENTINELS and not (field.key and text == "NA" and field.name == "symbol"):
+        # Sentinel -> null, except the documented real ticker ``NA`` on the
+        # symbol key: key identity, live-probe drift — data, never a missing
+        # marker. Non-nullable non-key fields still fall through to the
+        # null -> typed-error check below.
         warnings.append(
             FetchWarning(
                 code="null_sentinel",

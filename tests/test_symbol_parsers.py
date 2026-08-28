@@ -50,11 +50,30 @@ def test_dash_forms_are_preserved_verbatim() -> None:
 
 def test_unexpected_url_shapes_warn_and_are_skipped() -> None:
     rows, warnings = symbols_parser.parse_sitemap(_sitemap())
-    # screener URL, bare /stock, empty t, punctuation t: all skipped with warnings.
+    # screener URL, bare /stock, empty t, punctuation t, foreign host,
+    # near-match path: all skipped with warnings, never returned as symbols.
     assert "AAPL" in rows
+    assert "EVIL" not in rows
+    assert "BRK" not in rows
     assert len(rows) == 5
-    assert len(warnings) == 4
+    assert len(warnings) == 6
     assert all(w.code == "unexpected_url" for w in warnings)
+
+
+def test_non_canonical_hosts_and_paths_are_rejected() -> None:
+    # Only the canonical https://finviz.com/stock?t=... shape carries a symbol.
+    for loc in (
+        "https://other.example/stock?t=EVIL",
+        "http://finviz.com/stock?t=HTTP",
+        "https://finviz.com/stocks?t=BRK",
+        "https://finviz.com/other/stock?t=PATH",
+        "https://finviz.com/stock?ty=oc",
+    ):
+        rows, warnings = symbols_parser.parse_sitemap(
+            f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+        )
+        assert rows == []
+        assert [w.code for w in warnings] == ["unexpected_url"]
 
 
 @pytest.mark.parametrize(
@@ -98,6 +117,12 @@ def test_parse_suggestions_empty_list_is_recognized_empty() -> None:
 def test_parse_suggestions_missing_ticker_is_parse_drift() -> None:
     with pytest.raises(FinvizParseError):
         symbols_parser.parse_suggestions('[{"company": "Apple", "exchange": "NASDAQ"}]')
+
+
+def test_parse_suggestions_json_null_is_parse_drift_not_empty() -> None:
+    # Only ``[]`` is the recognized empty shape; ``null`` is provider drift.
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_suggestions("null")
 
 
 def test_parse_suggestions_non_list_is_parse_drift() -> None:

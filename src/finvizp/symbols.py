@@ -9,11 +9,14 @@ endpoint and returns provider-ranked ``symbol_search`` rows; empty input is
 rejected before any network and is never treated as a universe source.
 
 Endpoint functions accept a reusable ``client``; if omitted, a transient
-client is created and closed around the call.
+client is created, entered, and closed around the call — on success and
+failure alike. The caller-owned client is used unchanged and never closed.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from finvizp._parsers import symbols as symbols_parser
@@ -70,10 +73,19 @@ def _envelope(
     )
 
 
-def _client_or_transient(client: FinvizClient | None) -> FinvizClient:
+@asynccontextmanager
+async def _client_or_transient(client: FinvizClient | None) -> AsyncIterator[FinvizClient]:
+    """Yield a ready client; own the lifecycle only when we created it.
+
+    A caller-supplied client is entered by the caller and left open; a
+    transient one is entered and closed here, on success and error alike.
+    """
     if client is not None:
-        return client
-    return FinvizClient()
+        await client._ensure_entered()
+        yield client
+        return
+    async with FinvizClient() as transient:
+        yield transient
 
 
 def _parse_manifest(response: Any) -> FetchResult[Any]:
@@ -109,6 +121,7 @@ def _parse_suggestions(response: Any, params: dict[str, Any]) -> FetchResult[Any
 async def symbols_async(
     *,
     client: FinvizClient | None = None,
+    cache: bool = True,
     refresh: bool = False,
 ) -> FetchResult[Any]:
     """Read the published stock manifest once and return its symbol universe.
@@ -116,26 +129,30 @@ async def symbols_async(
     Exactly one request to ``/sitemap.xml?t=0&p=0``; listed URLs and sibling
     sitemaps are never requested. Unexpected URL shapes warn and are skipped;
     a recognized empty manifest is an ``EMPTY`` result, not drift.
+    ``cache=False`` bypasses the client cache for this call.
     """
-    op = _client_or_transient(client)._endpoint_op(
-        _MANIFEST_PATH,
-        query=_MANIFEST_QUERY,
-        refresh=refresh,
-        representation="universe",
-        parser_version=_PARSER_VERSION,
-        schema_version=_SCHEMA_VERSION,
-        parse=_parse_manifest,
-    )
-    return await op()
+    async with _client_or_transient(client) as op_client:
+        op = op_client._endpoint_op(
+            _MANIFEST_PATH,
+            query=_MANIFEST_QUERY,
+            cache=cache,
+            refresh=refresh,
+            representation="universe",
+            parser_version=_PARSER_VERSION,
+            schema_version=_SCHEMA_VERSION,
+            parse=_parse_manifest,
+        )
+        return await op()
 
 
 def symbols(
     *,
     client: FinvizClient | None = None,
+    cache: bool = True,
     refresh: bool = False,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`symbols_async` via the run-sync bridge."""
-    return run_sync(symbols_async(client=client, refresh=refresh))
+    return run_sync(symbols_async(client=client, cache=cache, refresh=refresh))
 
 
 async def search_symbols_async(
@@ -143,6 +160,7 @@ async def search_symbols_async(
     *,
     client: FinvizClient | None = None,
     with_indices: bool = False,
+    cache: bool = True,
     refresh: bool = False,
 ) -> FetchResult[Any]:
     """Ranked bounded suggestions for one nonblank query.
@@ -151,21 +169,24 @@ async def search_symbols_async(
     query safely, makes exactly one ``/api/suggestions`` request, and
     preserves provider ranking. Never treats empty input as a universe
     source; a recognized empty result is an ``EMPTY`` result, not drift.
+    ``cache=False`` bypasses the client cache for this call.
     """
     text = _validate_search_input(query)
     params: dict[str, Any] = {"input": text}
     if with_indices:
         params["withIndices"] = 1
-    op = _client_or_transient(client)._endpoint_op(
-        _SEARCH_PATH,
-        query=params,
-        refresh=refresh,
-        representation="suggestions",
-        parser_version=_PARSER_VERSION,
-        schema_version=_SCHEMA_VERSION,
-        parse=lambda response: _parse_suggestions(response, params),
-    )
-    return await op()
+    async with _client_or_transient(client) as op_client:
+        op = op_client._endpoint_op(
+            _SEARCH_PATH,
+            query=params,
+            cache=cache,
+            refresh=refresh,
+            representation="suggestions",
+            parser_version=_PARSER_VERSION,
+            schema_version=_SCHEMA_VERSION,
+            parse=lambda response: _parse_suggestions(response, params),
+        )
+        return await op()
 
 
 def search_symbols(
@@ -173,9 +194,12 @@ def search_symbols(
     *,
     client: FinvizClient | None = None,
     with_indices: bool = False,
+    cache: bool = True,
     refresh: bool = False,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`search_symbols_async` via the run-sync bridge."""
     return run_sync(
-        search_symbols_async(query, client=client, with_indices=with_indices, refresh=refresh)
+        search_symbols_async(
+            query, client=client, with_indices=with_indices, cache=cache, refresh=refresh
+        )
     )

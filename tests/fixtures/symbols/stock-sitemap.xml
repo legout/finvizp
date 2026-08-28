@@ -33,4 +33,10 @@
   <url>
     <loc>https://finviz.com/stock?t=AA%21</loc>
   </url>
+  <url>
+    <loc>https://other.example/stock?t=EVIL</loc>
+  </url>
+  <url>
+    <loc>https://finviz.com/stocks?t=BRK</loc>
+  </url>
 </urlset>

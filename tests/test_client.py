@@ -498,6 +498,9 @@ async def test_default_client_emits_no_output(capsys: pytest.CaptureFixture[str]
 
 def test_owned_transport_construction_is_silent(capsys: pytest.CaptureFixture[str]) -> None:
     FinvizClient()  # real curl transport construction; must not log anything
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 # --- review regressions -------------------------------------------------------
@@ -642,6 +645,98 @@ async def test_success_attempts_equal_actual_backend_calls() -> None:
     assert len(fake.calls) == 2
     assert resp.attempts == 2
     assert events[-1].attempts == 2
+
+
+async def test_response_headers_redact_sensitive_values() -> None:
+    fake = FakeTransport(
+        _resp(
+            headers={
+                "Content-Type": "text/html",
+                "Set-Cookie": "sid=secret",
+                "Proxy-Authorization": "Basic c2VjcmV0",
+            }
+        )
+    )
+    response = await _client(fake).fetch("/quote.ashx")
+    rendered = repr(response.headers)
+    assert "secret" not in rendered
+    assert "c2VjcmV0" not in rendered
+
+
+class SlowSwitchingPool(SwitchingPool):
+    async def acquire(self) -> str:
+        await asyncio.sleep(0.01)
+        return await super().acquire()
+
+
+async def test_concurrent_authenticated_calls_pin_one_pool_route() -> None:
+    pool = SlowSwitchingPool("http://pool-1:1", "http://pool-2:2")
+    fake = FakeTransport(_resp(), _resp())
+    client = _client(fake, auth_cookies={"sid": "secret"})
+    client._pool = pool
+    await asyncio.gather(client.fetch("/quote.ashx"), client.fetch("/quote.ashx"))
+    assert [call.proxy for call in fake.calls] == ["http://pool-1:1"] * 2
+    assert pool.acquires == 1
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://elite.finviz.com/elite.ashx",
+        f"{BASE}/login.aspx?next=%2Fquote.ashx",
+    ],
+)
+async def test_elite_locations_raise_entitlement(url: str) -> None:
+    with pytest.raises(FinvizEntitlementError):
+        await _client(FakeTransport(_resp(200, url=url))).fetch("/quote.ashx")
+
+
+async def test_external_redirect_is_not_classified_as_a_finviz_response() -> None:
+    fake = FakeTransport(_resp(200, url="https://example.invalid/landing"))
+    with pytest.raises(FinvizTransportError):
+        await _client(fake).fetch("/quote.ashx")
+
+
+async def test_pool_route_fingerprints_are_distinct_and_safe() -> None:
+    responses = []
+    for proxy in ("http://pool-one:1", "http://pool-two:2"):
+        client = _client(FakeTransport(_resp()))
+        client._pool = SwitchingPool(proxy)
+        responses.append(await client.fetch("/quote.ashx"))
+    assert responses[0].route_fingerprint != responses[1].route_fingerprint
+    assert all("http" not in response.route_fingerprint for response in responses)
+    assert all("pool-" not in response.route_fingerprint for response in responses)
+
+
+class SlowEnterFake(FakeTransport):
+    async def __aenter__(self) -> SlowEnterFake:
+        self.enters += 1
+        await asyncio.sleep(0.01)
+        return self
+
+
+async def test_concurrent_first_fetch_enters_transport_once() -> None:
+    fake = SlowEnterFake(_resp(), _resp())
+    client = _client(fake)
+    await asyncio.gather(client.fetch("/quote.ashx"), client.fetch("/quote.ashx"))
+    assert fake.enters == 1
+
+
+async def test_per_call_proxy_overrides_client_proxy_and_can_force_direct() -> None:
+    fake = FakeTransport(_resp(), _resp())
+    client = _client(fake, proxy="http://client-proxy:1")
+    await client.fetch("/quote.ashx", proxy="http://call-proxy:2")
+    await client.fetch("/quote.ashx", proxy=False)
+    assert [call.proxy for call in fake.calls] == ["http://call-proxy:2", None]
+
+
+async def test_authenticated_per_call_proxy_cannot_switch_the_pinned_route() -> None:
+    fake = FakeTransport(_resp(), _resp())
+    client = _client(fake, auth_cookies={"sid": "secret"})
+    await client.fetch("/quote.ashx", proxy="http://pool-one:1")
+    with pytest.raises(FinvizQueryError):
+        await client.fetch("/quote.ashx", proxy="http://pool-two:2")
+    assert [call.proxy for call in fake.calls] == ["http://pool-one:1"]
 
 
 async def test_owned_transport_is_closed_with_client() -> None:

@@ -2,7 +2,7 @@
 
 Owns one fastreq ``Backend`` (transport seam), explicit same-origin routes,
 proxy precedence, caller-supplied auth isolation, SHA-256 hashing, bounded
-retries (fastreq ``RetryStrategy``), and typed response classification.
+retries, and typed response classification.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
 from fastreq.backends.curl_cffi import CurlCffiBackend
@@ -31,6 +32,7 @@ from finvizp.errors import (
     FinvizQueryError,
     FinvizRateLimitError,
     FinvizTransportError,
+    redact_value,
 )
 from finvizp.results import AccessTier
 
@@ -44,7 +46,6 @@ _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _UNPINNED = object()  # sentinel: no pool proxy acquired yet
 _ROUTE_PREFIX = "finviz-route-v1"
 _ELITE_PATH = re.compile(r"(?:^|/)(?:login\.aspx|elite\.aspx)$")
-_ELITE_HOST = re.compile(r"(?i)(?:^|\.)elite\.finviz\.com$")
 
 _DEFAULT_HEADERS = {
     "Accept": (
@@ -108,16 +109,35 @@ def _proxy_seed(proxy: str | None) -> str:
 
 
 def _safe_headers(headers: Mapping[str, str]) -> MappingProxyType[str, str]:
-    return MappingProxyType(
-        {
-            str(k): "[REDACTED]" if k.lower() in ("cookie", "authorization") else str(v)
-            for k, v in headers.items()
-        }
-    )
+    return MappingProxyType(dict(redact_value(headers)))
 
 
 def _is_elite_location(final_url: str) -> bool:
-    return bool(_ELITE_PATH.search(final_url) or _ELITE_HOST.search(final_url))
+    try:
+        parts = urlsplit(final_url)
+    except ValueError:
+        return False
+    return bool(
+        _ELITE_PATH.search(parts.path)
+        or parts.hostname == "elite.finviz.com"
+        or (parts.hostname or "").endswith(".elite.finviz.com")
+    )
+
+
+def _is_finviz_location(final_url: str) -> bool:
+    """Return whether a followed redirect remains at the canonical origin."""
+    try:
+        parts = urlsplit(final_url)
+        port = parts.port
+    except ValueError:
+        return False
+    return (
+        parts.scheme == "https"
+        and parts.hostname == "finviz.com"
+        and port in (None, 443)
+        and parts.username is None
+        and parts.password is None
+    )
 
 
 def _is_timeout_error(exc: BaseException) -> bool:
@@ -291,6 +311,7 @@ class FinvizClient:
                 if self._pool is not None and self._pool.count() == 0:
                     self._pool = None
         self._pinned_proxy: Any = _UNPINNED
+        self._auth_route: Any = _UNPINNED
 
         self._backend: Backend = (
             transport
@@ -303,14 +324,19 @@ class FinvizClient:
             else None
         )
         self._semaphore = asyncio.Semaphore(max(1, int(concurrency)))
+        self._lifecycle_lock = asyncio.Lock()
+        self._route_lock = asyncio.Lock()
         self._entered = False
 
     # --- lifecycle ---------------------------------------------------------
 
     async def _ensure_entered(self) -> None:
-        if not self._entered:
-            await self._backend.__aenter__()
-            self._entered = True
+        if self._entered:
+            return
+        async with self._lifecycle_lock:
+            if not self._entered:
+                await self._backend.__aenter__()
+                self._entered = True
 
     async def __aenter__(self) -> FinvizClient:
         await self._ensure_entered()
@@ -321,19 +347,36 @@ class FinvizClient:
 
     async def close(self) -> None:
         """Close the transport session; safe to call repeatedly."""
-        if self._entered:
-            self._entered = False
-            await self._backend.__aexit__(None, None, None)
-        else:
-            await self._backend.close()
+        async with self._lifecycle_lock:
+            if self._entered:
+                self._entered = False
+                await self._backend.__aexit__(None, None, None)
+            else:
+                await self._backend.close()
 
     # --- request path --------------------------------------------------------
 
-    def _route_fingerprint(self) -> str:
-        proxy = self._explicit_proxy or ("pool" if self._pool is not None else None)
-        return f"{_ROUTE_PREFIX}:{_proxy_seed(proxy)}"
+    def _route_fingerprint(self, proxy: str | object | None = _UNPINNED) -> str:
+        if proxy is _UNPINNED:
+            proxy = self._explicit_proxy
+            if proxy is None and self._pinned_proxy is not _UNPINNED:
+                proxy = self._pinned_proxy
+            elif proxy is None and self._pool is not None:
+                proxy = "pool"
+        return f"{_ROUTE_PREFIX}:{_proxy_seed(proxy if isinstance(proxy, str) else None)}"
 
-    async def _acquire_proxy(self) -> str | None:
+    @staticmethod
+    def _normalize_per_call_proxy(proxy: str | bool | None) -> str | object | None:
+        if proxy is None:
+            return _UNPINNED
+        if proxy is False or proxy == "":
+            return None
+        if isinstance(proxy, str):
+            return proxy
+        msg = "proxy must be a URL, False, or None"
+        raise FinvizQueryError(msg)
+
+    async def _acquire_proxy(self, override: str | object | None = _UNPINNED) -> str | None:
         """Select the route's proxy once; the result is pinned for this client.
 
         Authenticated state (cookies) is bound to one exit route: once a proxy
@@ -341,13 +384,28 @@ class FinvizClient:
         can never rotate the identity mid-session or after a 429. Failures of
         the selection itself surface as transport errors.
         """
-        if self._force_direct:
-            return None
-        if self._explicit_proxy is not None:
-            return self._explicit_proxy
-        if self._pinned_proxy is _UNPINNED:
-            self._pinned_proxy = await self._pool.acquire() if self._pool is not None else None
-        return self._pinned_proxy
+        async with self._route_lock:
+            if self._force_direct:
+                selected = None
+            elif override is not _UNPINNED:
+                selected = override
+            elif self._explicit_proxy is not None:
+                selected = self._explicit_proxy
+            else:
+                if self._pinned_proxy is _UNPINNED:
+                    self._pinned_proxy = (
+                        await self._pool.acquire() if self._pool is not None else None
+                    )
+                selected = self._pinned_proxy
+
+            if self._auth_cookies:
+                if self._auth_route is _UNPINNED:
+                    self._auth_route = selected
+                elif override is not _UNPINNED and selected != self._auth_route:
+                    raise FinvizQueryError("authenticated client route is already pinned")
+                else:
+                    selected = self._auth_route
+            return selected if isinstance(selected, str) else None
 
     def _emit(self, event: ClientEvent) -> None:
         if self._on_event is not None:
@@ -358,16 +416,24 @@ class FinvizClient:
         path: str,
         *,
         params: Mapping[str, Any] | None = None,
+        proxy: str | bool | None = None,
     ) -> ClientResponse:
-        """Fetch one explicit same-origin route and return its classified envelope."""
+        """Fetch one explicit same-origin route and return its classified envelope.
+
+        ``proxy`` is a per-call override: a URL takes precedence over the
+        client proxy, ``False`` forces direct, ``None`` keeps client config.
+        """
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             msg = f"route must be a relative {self.base_url} path, got {path!r}"
             raise FinvizQueryError(msg)
         url = f"{self.base_url}{path}"
         query = dict(params or {})
+        per_call_proxy = self._normalize_per_call_proxy(proxy)
         await self._ensure_entered()
         attempts = 0
         last_error: Exception | None = None
+        selected_proxy: str | None = None
+        route_selected = False
 
         # Client-local retry loop: silent by design (no log records), pins one
         # route for every attempt, and never retries typed finvizp verdicts.
@@ -376,7 +442,9 @@ class FinvizClient:
         while True:
             attempts += 1
             try:
-                proxy = await self._acquire_proxy()
+                if not route_selected:
+                    selected_proxy = await self._acquire_proxy(per_call_proxy)
+                    route_selected = True
                 if self._limiter is not None:
                     await self._limiter.acquire()
                 async with self._semaphore:
@@ -387,7 +455,7 @@ class FinvizClient:
                             headers=self._headers(),
                             cookies=dict(self._auth_cookies),
                             timeout=self._timeout,
-                            proxy=proxy,
+                            proxy=selected_proxy,
                         )
                     )
             except asyncio.CancelledError:
@@ -418,13 +486,18 @@ class FinvizClient:
                         delay = min(60.0, self._retry_backoff * (2 ** (attempts - 1)))
                     await asyncio.sleep(delay)
                     continue
-                if proxy is not None and self._pool is not None:
-                    await self._pool.mark_success(proxy)
+                if (
+                    selected_proxy is not None
+                    and self._pool is not None
+                    and selected_proxy == self._pinned_proxy
+                ):
+                    await self._pool.mark_success(selected_proxy)
                 return self._finish(
                     endpoint=path,
                     url=url,
                     query=query,
                     response=response,
+                    proxy=selected_proxy,
                     attempts=attempts,
                 )
 
@@ -455,6 +528,7 @@ class FinvizClient:
         url: str,
         query: Mapping[str, Any],
         response: NormalizedResponse,
+        proxy: str | None,
         attempts: int,
     ) -> ClientResponse:
         status = response.status_code
@@ -465,6 +539,8 @@ class FinvizClient:
                 "elite/login route reached",
                 context={"endpoint": endpoint},
             )
+        elif not _is_finviz_location(final_url):
+            error = FinvizTransportError("cross-origin redirect", context={"endpoint": endpoint})
         elif status == 403:
             error = FinvizBlockedError("access blocked (403)", context={"endpoint": endpoint})
         elif status == 429:
@@ -494,7 +570,7 @@ class FinvizClient:
                     ok=False,
                     status_code=status,
                     attempts=attempts,
-                    route_fingerprint=self._route_fingerprint(),
+                    route_fingerprint=self._route_fingerprint(proxy),
                 )
             )
             raise error
@@ -507,7 +583,7 @@ class FinvizClient:
             fetched_at=datetime.now(UTC),
             access_tier=AccessTier.AUTHENTICATED if self._auth_cookies else AccessTier.PUBLIC,
             browser_profile=self.browser_profile,
-            route_fingerprint=self._route_fingerprint(),
+            route_fingerprint=self._route_fingerprint(proxy),
             attempts=attempts,
         )
         self._emit(
@@ -517,7 +593,7 @@ class FinvizClient:
                 status_code=status,
                 content_kind=classified.content_kind,
                 attempts=attempts,
-                route_fingerprint=self._route_fingerprint(),
+                route_fingerprint=self._route_fingerprint(proxy),
             )
         )
         # Raw bytes were hashed and classified; nothing retains them past here.

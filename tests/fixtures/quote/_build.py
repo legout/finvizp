@@ -270,14 +270,23 @@ def _header() -> str:
 
 
 def _auxiliary_tables() -> list[str]:
-    """Six inert furniture tables that complete the verified sixteen.
+    """Six verified non-parser furniture tables that complete the sixteen.
 
-    The live stock page carries sixteen tables total; these represent the
-    title strip, overview/roadmap ticker links, quote links, footer, and
-    sponsor slots. They carry no parser markers, so none may leak into any
-    parsed relation.
+    The live 2026-08 stock page carries sixteen tables total (live-verified
+    2026-08-28): six snapshot regions plus signals, ratings, news wrapper,
+    insider, the `h-px` profile-divider row, two top ad wrappers (payload
+    excluded — ads are scrubbed), the statements-JSON carrier, the news
+    wrapper, and the export-links strip. Only the ad payloads are dropped;
+    the wrapper structures stay so the page still counts sixteen tables.
+    They carry no parser markers, so none may leak into any parsed relation.
     """
     return [
+        # Top ad wrapper (live: two nested class-less tables around IC_D_*).
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
+        '<tr><td align="center" valign="top">'
+        '<table style="table-layout:fixed" width="100%"><tr>'
+        '<td align="center" valign="top"><div class="mt-1"></div></td>'
+        "</tr></table></td></tr></table>",
         '<table class="fullview-title"><tr><td>AAPL - Sample Technologies Inc</td></tr></table>',
         '<table class="ticker-links"><tr><td>'
         '<a href="screener.ashx?v=111&amp;f=cap_large">Large Caps</a>: Overview</td></tr></table>',
@@ -286,8 +295,6 @@ def _auxiliary_tables() -> list[str]:
         "1-Week Performers</a>: Roadmap</td></tr></table>",
         '<table class="quote-links"><tr><td>'
         '<a href="http://www.google.com/search?q=AAPL">Google</a></td></tr></table>',
-        '<table class="footer-links"><tr><td>Data provided for testing purposes</td></tr></table>',
-        '<table class="sponsor-table"><tr><td>sponsor placeholder</td></tr></table>',
     ]
 
 

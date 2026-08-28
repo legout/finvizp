@@ -22,7 +22,7 @@ companions, and additive ``extra_fields`` drift. The parser therefore:
   passes every unmapped label through as its own row key (builder routes it
   to ``extra_fields`` with an ``unknown_field`` warning);
 - enforces the verified six-region snapshot contract: fewer regions, or a
-  region with malformed label/value cell pairs, raises ``FinvizParseError``;
+  region with no valid label/value cell pairs, raises ``FinvizParseError``;
 - normalizes provider temporal displays into builder-compatible shapes:
   full datetimes become ISO ``YYYY-MM-DD HH:MM`` US-Eastern strings, news
   time-only displays keep ``HH:MM`` so the builder anchors them to the
@@ -184,6 +184,8 @@ def parse_quote_page(
         return [] if rows is None else rows
 
     snapshot = build("quote_snapshot", [row])
+    # Tri-state: None = bio structure absent (missing optional region);
+    # "" = structure present but empty payload -> registered empty table.
     description_text = _parse_description(document)
     ratings_rows = _parse_ratings(document, symbol, warn)
     news_rows = _parse_news(document, symbol, response_date)
@@ -202,9 +204,14 @@ def parse_quote_page(
     description = build(
         "quote_description",
         rows_or_empty(
-            [{"symbol": symbol, "description": description_text}]
-            if description_text is not None
-            else None
+            None
+            if description_text is None
+            else (
+                [{"symbol": symbol, "description": description_text}]
+                if description_text
+                # Present-but-empty payload: no rows, registered schema kept.
+                else []
+            )
         ),
     )
     ratings = build("quote_ratings", rows_or_empty(ratings_rows))
@@ -334,9 +341,11 @@ def _merge_snapshot_tables(
         )
     for table in tables:
         cells = table.xpath(f".//td[{_CLASS.format('snapshot-td2')}]")
-        if len(cells) % 2:
+        # An empty region (every cell stripped but the table element left) is
+        # just as much a missing required region as an absent table element.
+        if not cells or len(cells) % 2:
             raise FinvizParseError(
-                "snapshot region has malformed label/value pair structure "
+                "snapshot region has no valid label/value cell pairs "
                 f"({len(cells)} snapshot cells)",
                 context={"endpoint": "quote"},
             )
@@ -405,10 +414,11 @@ def _parse_header(document: Any) -> tuple[str | None, ...]:
 
 
 def _parse_description(document: Any) -> str | None:
+    """Return the bio text, ``""`` for a present-but-empty bio, else ``None``."""
     nodes = document.xpath(f".//div[{_CLASS.format('quote_profile-bio')}]")
     if not nodes:
         return None
-    return nodes[0].text_content().strip() or None
+    return nodes[0].text_content().strip()
 
 
 def _parse_ratings(

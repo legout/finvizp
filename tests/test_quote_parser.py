@@ -126,8 +126,14 @@ def test_snapshot_per_table_projection() -> None:
 
 def test_fixture_represents_all_sixteen_page_tables() -> None:
     # The verified stock page carries sixteen tables; the minimal structural
-    # fixture must represent all of them (six snapshot + ten auxiliary).
-    assert _page().count("<table") == 16
+    # fixture must represent all of them, with ads scrubbed (plan:221): the
+    # top ad wrapper survives as bare structure, no sponsor/ad payload.
+    for name in ("stock-current.html", "stock-reordered.html"):
+        html = _page(name)
+        assert html.count("<table") == 16, name
+        lowered = html.lower()
+        assert "sponsor" not in lowered, name
+        assert "ic_d_" not in lowered and "doubleclick" not in lowered, name
 
 
 def test_snapshot_projection_excludes_auxiliary_tables() -> None:
@@ -163,6 +169,22 @@ def test_malformed_snapshot_pair_structure_raises() -> None:
         _parse_html(html)
 
 
+def test_empty_snapshot_region_raises() -> None:
+    # A snapshot-table2 element that lost every label/value cell is still a
+    # missing required region: six populated regions are required, not just
+    # six matching <table> elements.
+    html = _page()
+    start = html.index('<table width="100%" cellpadding="3"')
+    end = html.index("</table>", start) + len("</table>")
+    html = (
+        html[:start] + '<table width="100%" cellpadding="3" cellspacing="0" border="0" '
+        'class="js-snapshot-table snapshot-table2 screener_snapshot-table-body"></table>'
+        + html[end:]
+    )
+    with pytest.raises(FinvizParseError):
+        _parse_html(html)
+
+
 # --- header: identity and classification ------------------------------------
 
 
@@ -184,6 +206,22 @@ def test_description_relation() -> None:
     rows = _rows(table)
     assert table is not None and table.num_rows == 1
     assert rows[0]["description"].startswith("Sample Technologies, Inc. engages")
+
+
+def test_blank_description_keeps_registered_empty_table() -> None:
+    # The bio container is present but has no text: a positively recognized
+    # empty payload, not a missing region. The registered empty Arrow table
+    # survives and the bundle stays COMPLETE, including in strict mode.
+    html = _page().replace(
+        "Sample Technologies, Inc. engages in the design and sale of imaginary "
+        "devices for testing purposes. It operates through the Testing segment.",
+        "",
+    )
+    bundle = _parse_html(html, strict_schema=True)
+    assert bundle.description is not None
+    assert bundle.description.num_rows == 0
+    assert bundle.description.schema.names == list(dataset_field_names("quote_description"))
+    assert bundle.status.name == "COMPLETE"
 
 
 # --- ratings ----------------------------------------------------------------
@@ -490,7 +528,7 @@ def test_each_tabular_relation_present_but_empty_keeps_registered_schema() -> No
         ('<table width="100%" class="js-table-ratings', empty_ratings),
         ('<table width="100%" cellpadding="1"', empty_news),
         ('<table cellpadding="0" cellspacing="0" width="100%"', empty_insider),
-        ('<table width="100%" cellpadding="0"', empty_signals),
+        ('class="fullview-links table-fixed"', empty_signals),
     ]
     for marker, replacement in cases:
         bundle = _parse_html(stripped(marker, replacement))

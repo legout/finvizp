@@ -1,0 +1,204 @@
+{
+  "datasets": [
+    {
+      "name": "symbol_universe",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "symbol_search",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "company", "type": "string", "unit": "text", "nullable": true },
+        { "name": "exchange", "type": "string", "unit": "text", "nullable": true },
+        { "name": "market_cap", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "market_cap_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "div_yield", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "div_yield_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "statements",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "statement_kind", "type": "string", "unit": "text", "nullable": false },
+        { "name": "periodicity", "type": "string", "unit": "text", "nullable": false },
+        { "name": "period_label", "type": "string", "unit": "text", "nullable": false },
+        { "name": "period_end_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true },
+        { "name": "period_length_days", "type": "int64", "unit": "count", "nullable": true },
+        { "name": "metric", "type": "string", "unit": "text", "nullable": false },
+        { "name": "value", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "value_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "currency", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_snapshot",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "company", "type": "string", "unit": "text", "nullable": true },
+        { "name": "exchange", "type": "string", "unit": "text", "nullable": true },
+        { "name": "sector", "type": "string", "unit": "text", "nullable": true },
+        { "name": "industry", "type": "string", "unit": "text", "nullable": true },
+        { "name": "country", "type": "string", "unit": "text", "nullable": true },
+        { "name": "index_membership", "type": "string", "unit": "text", "nullable": true },
+        { "name": "price", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "price_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "change", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "change_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "change_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "change_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "market_cap", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "market_cap_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "pe_ratio", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "pe_ratio_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "eps_ttm", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "eps_ttm_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "dividend_yield", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "dividend_yield_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "volume", "type": "int64", "unit": "count", "nullable": true, "raw": true },
+        { "name": "volume_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "average_volume", "type": "int64", "unit": "count", "nullable": true, "raw": true },
+        { "name": "average_volume_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "shares_outstanding", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "shares_outstanding_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "float_shares", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "float_shares_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "beta", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "beta_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "sma20_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "sma20_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "sma50_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "sma50_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "sma200_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "sma200_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "week52_high", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "week52_high_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "week52_low", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "week52_low_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "ex_dividend_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "ex_dividend_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "earnings_date", "type": "string", "unit": "text", "nullable": true },
+        { "name": "employees", "type": "int64", "unit": "count", "nullable": true, "raw": true },
+        { "name": "employees_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "ipo_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "ipo_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_description",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "description", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_ratings",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "published_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": true, "temporal": true, "raw": true },
+        { "name": "published_at_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "published_at_status", "type": "string", "unit": "text", "nullable": true },
+        { "name": "status", "type": "string", "unit": "text", "nullable": true },
+        { "name": "rating", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "rating_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "analyst", "type": "string", "unit": "text", "nullable": true },
+        { "name": "price_target", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "price_target_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_news",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "published_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": true, "temporal": true, "raw": true },
+        { "name": "published_at_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "published_at_status", "type": "string", "unit": "text", "nullable": true },
+        { "name": "title", "type": "string", "unit": "text", "nullable": false },
+        { "name": "url", "type": "string", "unit": "text", "nullable": false },
+        { "name": "publisher", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_insider",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "owner", "type": "string", "unit": "text", "nullable": true },
+        { "name": "relationship", "type": "string", "unit": "text", "nullable": true },
+        { "name": "transaction_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true },
+        { "name": "transaction_type", "type": "string", "unit": "text", "nullable": true },
+        { "name": "cost", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "cost_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "shares", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "shares_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "value", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "value_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "shares_total", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "shares_total_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "sec_form_url", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_peers",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "peer", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "rank", "type": "int64", "unit": "count", "nullable": true },
+        { "name": "market_cap", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "market_cap_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_etf_holders",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "etf", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "rank", "type": "int64", "unit": "count", "nullable": true },
+        { "name": "weight_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
+        { "name": "weight_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "quote_signals",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "signal", "type": "string", "unit": "text", "nullable": false },
+        { "name": "url", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    }
+  ]
+}

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
 from fastreq.backends.curl_cffi import CurlCffiBackend
@@ -24,6 +24,7 @@ from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig, _is_valid_proxy
 from fastreq.utils.rate_limiter import AsyncRateLimiter, RateLimitConfig
 
 from finvizp.errors import (
+    _SENSITIVE_KEY,
     REDACTED,
     FinvizBlockedError,
     FinvizEntitlementError,
@@ -33,6 +34,8 @@ from finvizp.errors import (
     FinvizQueryError,
     FinvizRateLimitError,
     FinvizTransportError,
+    _redact_text,
+    redact_value,
 )
 from finvizp.models import Artifact
 from finvizp.results import AccessTier
@@ -47,6 +50,10 @@ _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _UNPINNED = object()  # sentinel: no pool proxy acquired yet
 _ROUTE_PREFIX = "finviz-route-v1"
 _ELITE_PATH = re.compile(r"(?:^|/)(?:login\.aspx|elite\.aspx)$")
+# Bounded client-side redirect loop; curl auto-follow is disabled so every
+# hop is origin-checked before credentials are ever re-sent.
+_MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 _DEFAULT_HEADERS = {
     "Accept": (
@@ -116,9 +123,16 @@ _SAFE_HEADER = re.compile(r"^(?:set-)?cookie\d*$|^(?:proxy-)?authorization$", re
 
 
 def _safe_headers(headers: Mapping[str, str]) -> MappingProxyType[str, str]:
-    return MappingProxyType(
-        {key: (REDACTED if _SAFE_HEADER.match(key) else value) for key, value in headers.items()}
-    )
+    """Header sanitizer: credential-bearing labels lose their value entirely;
+    every retained value is scrubbed for embedded secrets (query tokens,
+    proxy URLs) while protocol metadata such as content-type survives."""
+    safe: dict[str, str] = {}
+    for key, value in headers.items():
+        if _SAFE_HEADER.match(key) or _SENSITIVE_KEY.search(key.replace("-", "_")):
+            safe[key] = REDACTED
+        else:
+            safe[key] = _redact_text(value)
+    return MappingProxyType(safe)
 
 
 def _is_elite_location(final_url: str) -> bool:
@@ -185,7 +199,9 @@ class ClientResponse:
 
     def __post_init__(self) -> None:
         if not isinstance(self.query, MappingProxyType):
-            object.__setattr__(self, "query", MappingProxyType(dict(self.query)))
+            # Request provenance is public metadata: sensitive params (tokens,
+            # secrets, credentials) are redacted; ordinary keys pass through.
+            object.__setattr__(self, "query", MappingProxyType(redact_value(dict(self.query))))
         object.__setattr__(self, "headers", _safe_headers(self.headers))
 
 
@@ -327,12 +343,15 @@ class FinvizClient:
         self._retry_backoff = max(0.0, float(retry_backoff))
 
         # Proxy precedence: explicit > FINVIZP_PROXY > fastreq env pool > direct.
-        # Every proxy URL is validated before any pool is constructed, so an
-        # invalid entry fails fast here instead of surfacing fastreq log output.
+        # Type and URL are validated before any pool is constructed, so invalid
+        # input fails fast here instead of surfacing fastreq log output.
         self._force_direct = False
         self._explicit_proxy: str | None = None
         if proxy is False or proxy == "":
             self._force_direct = True
+        elif proxy is True or proxies is True or not isinstance(proxies, (list, tuple, type(None))):
+            msg = "proxy must be a URL/False/None and proxies a list of URLs/False/None"
+            raise FinvizQueryError(msg)
         elif isinstance(proxy, str):
             if not _is_valid_proxy(proxy):
                 msg = f"invalid proxy URL: {proxy!r}"
@@ -424,6 +443,9 @@ class FinvizClient:
         if proxy is False or proxy == "":
             return None
         if isinstance(proxy, str):
+            if not _is_valid_proxy(proxy):
+                msg = f"invalid proxy URL: {proxy!r}"
+                raise FinvizQueryError(msg)
             return proxy
         msg = "proxy must be a URL, False, or None"
         raise FinvizQueryError(msg)
@@ -511,22 +533,44 @@ class FinvizClient:
                 if self._limiter is not None:
                     await self._limiter.acquire()
                 async with self._semaphore:
-                    response = await self._backend.request(
-                        RequestConfig(
-                            url=url,
-                            params=query,
-                            headers=self._headers(),
-                            cookies=dict(self._auth_cookies),
-                            timeout=self._timeout,
-                            proxy=selected_proxy,
+                    # Auto-follow is off: every Location is validated against
+                    # the canonical origin BEFORE the next request is issued,
+                    # so caller cookies can never reach another host.
+                    hop_url = url
+                    redirects = 0
+                    while True:
+                        response = await self._backend.request(
+                            RequestConfig(
+                                url=hop_url,
+                                params=query if hop_url == url else None,
+                                headers=self._headers(),
+                                cookies=dict(self._auth_cookies),
+                                timeout=self._timeout,
+                                proxy=selected_proxy,
+                                follow_redirects=False,
+                            )
                         )
-                    )
-                    # The backend caches proxy-scoped sessions, and curl_cffi
-                    # sessions persist server Set-Cookie state across calls.
-                    # Caller authentication is per-request and never retained:
-                    # strip everything the server may have planted before the
-                    # session is reused for the next request.
-                    self._purge_backend_cookies(selected_proxy)
+                        # The backend caches proxy-scoped sessions, and
+                        # curl_cffi sessions persist server Set-Cookie state
+                        # across calls. Caller authentication is per-request
+                        # and never retained: strip everything the server may
+                        # have planted before the session is reused.
+                        self._purge_backend_cookies(selected_proxy)
+                        if response.status_code not in _REDIRECT_STATUSES:
+                            break
+                        location = response.headers.get("location")
+                        if not location:
+                            break  # classified as a non-200 provider status
+                        next_url = urljoin(hop_url, location)
+                        if not _is_finviz_location(next_url):
+                            raise FinvizTransportError(
+                                "cross-origin redirect", context={"endpoint": path}
+                            )
+                        if redirects >= _MAX_REDIRECTS:
+                            msg = f"too many redirects for {path!r}"
+                            raise FinvizTransportError(msg)
+                        hop_url = next_url
+                        redirects += 1
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

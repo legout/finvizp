@@ -17,6 +17,7 @@ from fastreq.exceptions import BackendError
 
 from finvizp.client import ClientEvent, ClientResponse, FinvizClient
 from finvizp.errors import (
+    REDACTED,
     FinvizBlockedError,
     FinvizEntitlementError,
     FinvizNotFoundError,
@@ -897,3 +898,171 @@ async def test_real_backend_does_not_persist_server_cookies() -> None:
     assert first.data == "clean"
     assert second.data == "clean"  # no server Set-Cookie replayed on request 2
     assert probe == [None, None]
+
+
+# --- round-4 remediation: redirect safety, deep header/query redaction, -------
+
+
+class _RedirectProbeHandler(BaseHTTPRequestHandler):
+    """302s to a second server, recording whether cookies crossed origins."""
+
+    def do_GET(self) -> None:
+        self.server.finviz_hits.append(self.headers.get("Cookie"))
+        self.send_response(302)
+        self.send_header("Location", self.server.redirect_target + "/landing")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+class _LandingHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.server.external_hits.append(self.headers.get("Cookie"))
+        body = b"external landing page"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+class _LocalRedirectBackend(CurlCffiBackend):
+    """Real curl_cffi transport; finviz origin rewritten to a local server."""
+
+    def __init__(self, target: str) -> None:
+        super().__init__()
+        self._target = target
+
+    async def request(self, config: Any, stream_callback: Any = None) -> Any:
+        finviz_url = config.url
+        config.url = finviz_url.replace("https://finviz.com", self._target, 1)
+        response = await super().request(config, stream_callback)
+        if response.url.startswith(self._target):
+            response.url = finviz_url  # restore Finviz origin for classification
+        return response
+
+
+async def test_credential_bearing_redirects_stay_canonical_before_leaving(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Cookies must never reach a cross-origin redirect destination."""
+    finviz = ThreadingHTTPServer(("127.0.0.1", 0), _RedirectProbeHandler)
+    finviz.finviz_hits = []  # type: ignore[attr-defined]
+    external = ThreadingHTTPServer(("127.0.0.1", 0), _LandingHandler)
+    external.external_hits = []  # type: ignore[attr-defined]
+    threading.Thread(target=finviz.serve_forever, daemon=True).start()
+    threading.Thread(target=external.serve_forever, daemon=True).start()
+    try:
+        backend = _LocalRedirectBackend(f"http://127.0.0.1:{finviz.server_address[1]}")
+        finviz.redirect_target = f"http://127.0.0.1:{external.server_address[1]}"  # type: ignore[attr-defined]
+        client = FinvizClient(
+            transport=backend, proxy=False, auth_cookies={"sid": "redirect-secret"}
+        )
+        with pytest.raises(FinvizTransportError):
+            await client.fetch("/quote.ashx")
+        captured = capsys.readouterr()
+    finally:
+        finviz.shutdown()
+        finviz.server_close()
+        external.shutdown()
+        external.server_close()
+    assert captured.out == "" and captured.err == ""
+    assert external.external_hits == []  # the external server saw NO request at all
+    # caller cookies were sent to the (rewritten) canonical origin only
+    assert finviz.finviz_hits == ["sid=redirect-secret"]
+
+
+async def test_safe_headers_cover_central_sensitive_labels_and_scrub_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake = FakeTransport(
+        _resp(
+            headers={
+                "Content-Type": "text/html",
+                "Content-Length": "42",
+                "Set-Cookie": "sid=cookie-secret",
+                "Set-Cookie2": "sid2=cookie2-secret",
+                "Authorization": "Bearer bearer-secret",
+                "Proxy-Authorization": "Basic c2VjcmV0",
+                "X-Auth-Token": "xauth-secret",
+                "X-Api-Key": "xapikey-secret",
+                "X-Secret": "xsecret-secret",
+                "Location": f"{BASE}/quote.ashx?token=query-secret",
+                "Referer": f"{BASE}/screener.ashx?v=111&ticker=AAPL",
+            }
+        )
+    )
+    response = await _client(fake).fetch("/quote.ashx")
+    headers = response.headers
+    assert headers["content-type"] == "text/html"
+    assert headers["content-length"] == "42"
+    assert headers["referer"] == f"{BASE}/screener.ashx?v=111&ticker=AAPL"
+    assert headers["location"] == f"{BASE}/quote.ashx?token={REDACTED}"
+    assert headers["x-auth-token"] == REDACTED
+    assert headers["x-api-key"] == REDACTED
+    assert headers["x-secret"] == REDACTED
+    rendered = repr(headers)
+    for secret in (
+        "cookie-secret",
+        "cookie2-secret",
+        "bearer-secret",
+        "c2VjcmV0",
+        "xauth-secret",
+        "xapikey-secret",
+        "xsecret-secret",
+        "query-secret",
+    ):
+        assert secret not in rendered
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+async def test_params_provenance_redacts_sensitive_values_keeps_ordinary_keys() -> None:
+    fake = FakeTransport(_resp(200, b'{"ok": true}', "application/json"))
+    client = _client(fake)
+    resp = await client.fetch(
+        "/api/suggestions", params={"t": "AAPL", "q": "AAP", "token": "query-secret"}
+    )
+    assert resp.query["t"] == "AAPL"
+    assert resp.query["q"] == "AAP"
+    assert resp.query["token"] == REDACTED
+    assert "query-secret" not in repr(resp)
+
+
+async def test_sensitive_params_never_reach_event_or_error_renderings() -> None:
+    events: list[ClientEvent] = []
+    fake = FakeTransport(BackendError("boom"), BackendError("boom"), BackendError("boom"))
+    client = _client(fake, retry_attempts=2, retry_backoff=0.0, on_event=events.append)
+    with pytest.raises(FinvizTransportError):
+        await client.fetch("/quote.ashx", params={"token": "query-secret"})
+    rendered = repr(events) + str(events[-1])
+    assert "query-secret" not in rendered
+
+
+@pytest.mark.parametrize("bad", [{"proxy": True}, {"proxies": True}])
+async def test_boolean_proxy_values_are_rejected_without_transport(bad: dict[str, Any]) -> None:
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError):
+        FinvizClient(transport=fake, **bad)
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize("bad", [{"proxies": "http://not-a-list:1"}, {"proxies": 7}])
+async def test_non_list_pool_values_are_rejected(bad: dict[str, Any]) -> None:
+    with pytest.raises(FinvizQueryError):
+        FinvizClient(transport=FakeTransport(), **bad)
+
+
+async def test_per_call_proxy_must_be_url_false_or_none() -> None:
+    fake = FakeTransport()
+    client = _client(fake)
+    with pytest.raises(FinvizQueryError):
+        await client.fetch("/quote.ashx", proxy="invalid-proxy")
+    with pytest.raises(FinvizQueryError):
+        await client.fetch("/quote.ashx", proxy=123)  # type: ignore[arg-type]
+    assert fake.calls == []  # invalid input never reaches the transport

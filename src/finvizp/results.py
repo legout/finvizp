@@ -139,6 +139,13 @@ class FetchResult(Generic[T]):
     data: T
     metadata: ResultMetadata
 
+    def __post_init__(self) -> None:
+        # Freeze builtin containers (dict/list/set) so caller-owned payloads
+        # cannot mutate the envelope through the source reference; Arrow tables,
+        # bundles, and other typed payloads pass through untouched.
+        if isinstance(self.data, (Mapping, list, tuple, set, frozenset)):
+            object.__setattr__(self, "data", _freeze(self.data))
+
     @property
     def table(self) -> Any:
         """Return ``.data`` when it is an Arrow table; raise a typed error otherwise."""

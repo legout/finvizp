@@ -22,35 +22,36 @@ _SENSITIVE_KEY = re.compile(
 )
 _BODY_KEY = re.compile(r"(?i)(?:^|[_-])(?:body|response_body|content|html|payload)(?:$|[_-])")
 
-# URL credential forms: scheme://user:pass@... and query secrets ?a=...&token=...
+# URL credential forms: scheme://user:pass@...
 _URL_CREDENTIALS = re.compile(r"(?i)\b(https?|socks[45])://([^/\s:@]+):([^@\s/]+)@")
-# Any query key containing a credential word is treated as a secret (over-redaction is safe).
-_QUERY_SECRET = re.compile(
-    r"(?i)((?:^|[?&\s])[a-z0-9_.-]*(?:token|secret|password|passwd|pwd|api[-_]?key|apikey|key"
-    r"|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*=)"
-    r"([^&\s'\"]+)"
+# Label-driven secret markers: a "label:" or "label=" whose name contains a
+# credential/body/proxy word. Value is consumed in full (quoted or bare) —
+# covers Authorization/X-Api-Key/X-Auth-Token/Set-Cookie headers with scheme
+# words ("Bearer x", "Basic x"), response_body=..., HTTP_PROXY=...,
+# proxy-url: ..., access_token=... in query strings, etc.
+_SECRET_LABEL = re.compile(
+    r"(?i)((?:^|[\s,;(\"'=]|[?&])[a-z0-9_.-]*(?:"
+    r"authorization|auth[-_]?token|api[-_]?key|apikey|access[-_]?token|credential"
+    r"|cookie|session|password|passwd|pwd|secret|token"
+    r"|body|payload|content|html"
+    r")[a-z0-9_.-]*\s*[:=]\s*)"
+    r"(?:(?:bearer|basic|digest|token)\s+)?(?:\"[^\"]*\"|'[^']*'|[^\s&;,\"']+)"
 )
-# Header-style credential values: consume the ENTIRE value (any scheme word
-# included) — "Authorization: Bearer ***", "Proxy-Authorization: Basic ***",
-# "Set-Cookie: sid=...", arbitrary "x=Authorization: ..." labels. The boundary
-# includes "=" so labelled headers embedded in key=value context are caught.
-_HEADER_SECRET = re.compile(
-    r"(?i)((?:^|[\s,;\"'=])(?:set[-_]cookie|proxy[-_]authorization|authorization|auth|cookies?)\s*[:=]\s*)"
-    r"(?:(?:bearer|basic|digest|token)\s+)?[^\s,;'\"=][^\s,;'\"]*"
-)
-# Proxy URL in prose or assignment: "via proxy http://...", "proxy=http://...",
-# "proxy URL: http://...". The whole URL (host included) is route-sensitive
-# and consumed in full.
+# Proxy URLs are route-sensitive: consume the whole URL (host included) when
+# the surrounding text names it as a proxy/route ("via proxy http://...",
+# "proxy URL: http://...", "proxy-url: socks5://...", "HTTP_PROXY=...").
 _PROXY_URL = re.compile(
-    r"(?i)((?:^|[\s,;(])(?:proxy(?:_[a-z0-9]+)?|route)(?:\s+[a-z0-9_-]{1,10})?\s*[:=]?\s*)"
+    r"(?i)((?:^|[\s,;(])[a-z0-9_.-]*(?:proxy|proxies|route)[a-z0-9_.-]*\s*"
+    r"(?:\s+[a-z0-9_.-]{1,10})?\s*[:=]?\s*)"
     r"((?:https?|socks[45])://[^\s'\"<>]+)"
 )
-# Quoted or bare key=value secrets: token="x", access_token=x, cookies=x.
-_QUERY_SECRET = re.compile(
-    r"(?i)((?:^|[?&\s\"'=,;])[a-z0-9_.-]*(?:token|secret|password|passwd|pwd|api[-_]?key"
-    r"|apikey|key|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*\s*=\s*)"
-    r"(?:\"[^\"]*\"|'[^']*'|[^\s&'\"]+)"
-)
+
+
+def _redact_text(text: str) -> str:
+    """Redact all credential/proxy/body markers inside one string."""
+    text = _URL_CREDENTIALS.sub(lambda m: f"{m.group(1)}://[REDACTED]@", text)
+    text = _SECRET_LABEL.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
+    return _PROXY_URL.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,14 +109,7 @@ def redact_value(value: Any) -> Any:
     if isinstance(value, (set, frozenset)):
         return frozenset(redact_value(item) for item in value)
     if isinstance(value, str):
-        value = _URL_CREDENTIALS.sub(
-            lambda m: f"{m.group(1)}://[REDACTED]@",
-            value,
-        )
-        value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
-        value = _HEADER_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
-        value = _PROXY_URL.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
-        return value
+        return _redact_text(value)
     return value
 
 

@@ -259,6 +259,21 @@ def test_fetchresult_is_frozen_and_generic() -> None:
         result.data = pa.table({"symbol": []})  # type: ignore[misc]
 
 
+def test_fetchresult_freezes_builtin_containers() -> None:
+    """Round 7: builtin dict/list/set payloads must be frozen and alias-free."""
+    source = {"nested": {"rows": [1, 2]}, "tags": {"a"}}
+    result = FetchResult(data=source, metadata=_meta())
+    assert isinstance(result.data, Mapping)
+    with pytest.raises(TypeError):
+        result.data["extra"] = 1  # type: ignore[index]
+    with pytest.raises(TypeError):
+        result.data["nested"]["extra"] = 1  # type: ignore[index]
+    source["nested"]["rows"].append(3)
+    source["tags"].add("b")
+    assert result.data["nested"]["rows"] == (1, 2)
+    assert result.data["tags"] == frozenset({"a"})
+
+
 def test_table_accessor_validates_runtime_kind() -> None:
     table = pa.table({"symbol": ["AAPL"]})
     result = FetchResult(data=table, metadata=_meta())

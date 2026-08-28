@@ -275,3 +275,28 @@ def test_warning_and_unit_error_records_are_frozen() -> None:
         warning.code = "other"  # type: ignore[misc]
     with pytest.raises(dataclasses.FrozenInstanceError):
         unit_error.raw = "9.9"  # type: ignore[misc]
+
+
+def test_error_message_redacts_labelled_credential_and_body_secrets() -> None:
+    """Round 7: any ``<label>``-style secret marker must not leak its value."""
+    for text in (
+        f"X-Api-Key: {SECRET} rejected",
+        f"X-Auth-Token: {SECRET} rejected",
+        f"response_body={SECRET} parse halted",
+        f"HTTP_PROXY=http://gate.example:{SECRET} env",
+        f"proxy-url: http://route.example.invalid/{SECRET}",
+    ):
+        error = FinvizError(text)
+        assert SECRET not in str(error)
+        assert SECRET not in error.args[0]
+        assert "[REDACTED]" in str(error)
+
+
+def test_warning_and_unit_error_redact_labelled_secrets() -> None:
+    warning = FetchWarning(code="leak", message=f"X-Api-Key: {SECRET}")
+    unit_error = UnitError(code="unit", message="bad", raw=f"response_body={SECRET}")
+    assert SECRET not in warning.message
+    assert SECRET not in (unit_error.raw or "")
+    error = FinvizQueryError("bad", context={"note": f"api-key: {SECRET}"})
+    assert SECRET not in error.context["note"]
+    assert SECRET not in str(error)

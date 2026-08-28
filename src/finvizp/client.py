@@ -10,11 +10,10 @@ integration, so the import below is TYPE_CHECKING-only to avoid a cycle.
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Coroutine, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from time import monotonic
@@ -43,7 +42,7 @@ from finvizp.errors import (
     redact_value,
 )
 from finvizp.models import Artifact
-from finvizp.results import AccessTier
+from finvizp.results import AccessTier, FetchResult, ResultMetadata, ResultStatus
 
 if TYPE_CHECKING:
     from finvizp.cache import ResultCache
@@ -86,6 +85,47 @@ _NEVER_RETRY: tuple[type[FinvizError], ...] = (
 # Transient failures stale-if-error may paper over (opt-in only); typed
 # verdicts — query, parse, entitlement, challenge, not-found — are excluded.
 FINVIZ_TRANSPORT_ERRORS: tuple[type[FinvizError], ...] = (FinvizTransportError,)
+
+
+@dataclass(frozen=True, slots=True)
+class _CacheFacets:
+    """Route + key facets bound to one reviewed endpoint operation."""
+
+    path: str
+    query: dict[str, Any]
+    proxy: str | bool | None
+    representation: str
+    parser_version: str
+    schema_version: int
+
+
+def _default_parse(response: ClientResponse) -> FetchResult[Any]:
+    """Identity parse for structured endpoints with no endpoint-specific parser.
+
+    Wraps the classified JSON payload in the immutable result contract. Raw
+    HTML/XML pages refuse to parse here: only a reviewed endpoint parser can
+    turn provider pages into cacheable structured results.
+    """
+    if response.content_kind in ("html", "xml"):
+        # No raw authenticated-body cache: HTML/XML payloads are provider
+        # pages, not parsed results. Endpoint operations must supply a parser
+        # that produces structured results before anything is stored.
+        raise FinvizParseError(
+            f"refusing to parse raw {response.content_kind} body for {response.endpoint!r}"
+        )
+    return FetchResult(
+        response.data,
+        ResultMetadata(
+            endpoint=response.endpoint,
+            status=ResultStatus.COMPLETE,
+            access_tier=response.access_tier,
+            fetched_at=response.fetched_at,
+            query=dict(response.query),
+            attempts=response.attempts,
+            response_hash=response.response_hash,
+            route_fingerprint=response.route_fingerprint,
+        ),
+    )
 
 
 def _parse_retry_after(value: str | float | None) -> float | None:
@@ -496,7 +536,13 @@ class FinvizClient:
             effective_cache = cache
         self._cache: ResultCache | None = effective_cache
         self._stale_if_error = bool(stale_if_error)
-        self._inflight: dict[str, asyncio.Task[ClientResponse]] = {}
+        self._inflight: dict[str, asyncio.Task[FetchResult[Any]]] = {}
+        # Opaque, non-secret per-auth-state scope: cookie VALUES are hashed
+        # with the browser identity into a fingerprint, so distinct sessions
+        # never share cache entries while nothing secret enters any key.
+        scope = "\x1f".join([f"{k}={self._auth_cookies[k]}" for k in sorted(self._auth_cookies)])
+        digest = hashlib.sha256(f"{browser_profile}\x1f{scope}".encode()).hexdigest()
+        self._auth_scope = "public" if not self._auth_cookies else f"auth:{digest}"
 
     # --- lifecycle ---------------------------------------------------------
 
@@ -595,7 +641,11 @@ class FinvizClient:
         proxy: str | bool | None = None,
         cache: bool = True,
         refresh: bool = False,
-    ) -> ClientResponse:
+        representation: str = "default",
+        parser_version: str = "1",
+        schema_version: int = 1,
+        parse: Callable[[ClientResponse], FetchResult[Any]] | None = None,
+    ) -> FetchResult[Any]:
         """Cache + single-flight wrapper around ``_fetch``.
 
         Internal seam for reviewed endpoint operations; there is no public
@@ -603,38 +653,50 @@ class FinvizClient:
         with ``cache_ttl``. ``cache=False`` bypasses the cache entirely;
         ``refresh=True`` fetches a fresh copy and replaces any cached entry.
         Identical concurrent misses share one underlying request.
+
+        Only parsed immutable ``FetchResult`` values are cached: ``parse``
+        turns the classified transport envelope into the endpoint's result
+        before anything is stored, and raw HTML/XML pages refuse to parse.
         """
+        if parse is None:
+            parse = _default_parse
         effective_query = dict(params or {})
         store = self._cache
         if not cache or self._cache_ttl is None or store is None:
-            return await self._fetch(path, params=effective_query, proxy=proxy)
-        key = self._cache_key(path, effective_query, proxy)
+            return parse(await self._fetch(path, params=effective_query, proxy=proxy))
+        facets = _CacheFacets(
+            path=path,
+            query=effective_query,
+            proxy=proxy,
+            representation=representation,
+            parser_version=parser_version,
+            schema_version=schema_version,
+        )
+        key = self._cache_key(facets)
         if refresh:
-            response = await self._fetch(path, params=effective_query, proxy=proxy)
-            self._store(path, effective_query, proxy, response)
-            return response
+            result = parse(await self._fetch(path, params=effective_query, proxy=proxy))
+            self._store(facets, key, result)
+            return result
         entry = store.get(key)
         if entry is not None and monotonic() < entry.expires_at:
             return self._serve(entry, cache_hit=True, stale=False)
-        return await self._single_flight(key, path, effective_query, proxy)
+        return await self._single_flight(facets, key, parse)
 
     async def _single_flight(
-        self, key: str, path: str, query: dict[str, Any], proxy: str | bool | None
-    ) -> ClientResponse:
+        self, facets: _CacheFacets, key: str, parse: Callable[[ClientResponse], FetchResult[Any]]
+    ) -> FetchResult[Any]:
         """Coalesce identical concurrent misses onto one underlying request."""
         existing = self._inflight.get(key)
         if existing is not None:
-            response = await asyncio.shield(existing)
+            result = await asyncio.shield(existing)
             # Losers report the winner's entry as a cache hit.
-            return self._serve_joiner(response)
-        task: asyncio.Task[ClientResponse] = asyncio.ensure_future(
-            self._miss(key, path, query, proxy)
-        )
+            return self._serve_joiner(result)
+        task: asyncio.Task[FetchResult[Any]] = asyncio.ensure_future(self._miss(facets, key, parse))
 
         # The mapping is released by the shared task's own done callback, not
         # by the leader's await: if the creator is cancelled, later identical
         # callers must still be able to join the already-running flight.
-        def _release(f: asyncio.Task[ClientResponse]) -> None:
+        def _release(f: asyncio.Task[FetchResult[Any]]) -> None:
             if self._inflight.get(key) is task:
                 del self._inflight[key]
 
@@ -643,93 +705,94 @@ class FinvizClient:
         return await asyncio.shield(task)
 
     async def _miss(
-        self, key: str, path: str, query: dict[str, Any], proxy: str | bool | None
-    ) -> ClientResponse:
-        """One cache miss: fetch, store on success, stale-if-error on failure."""
+        self,
+        facets: _CacheFacets,
+        key: str,
+        parse: Callable[[ClientResponse], FetchResult[Any]],
+    ) -> FetchResult[Any]:
+        """One cache miss: fetch, parse, store on success, stale-if-error on failure."""
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled
         try:
-            response = await self._fetch(path, params=query, proxy=proxy)
+            result = parse(await self._fetch(facets.path, params=facets.query, proxy=facets.proxy))
         except FinvizError as exc:
             if self._stale_if_error and isinstance(exc, FINVIZ_TRANSPORT_ERRORS):
                 entry = cache.get(key)
                 if entry is not None:
                     return self._serve(entry, cache_hit=True, stale=True)
             raise
-        self._store(path, query, proxy, response)
-        return response
+        self._store(facets, key, result)
+        return result
 
-    def _cache_key(self, path: str, query: Mapping[str, Any], proxy: str | bool | None) -> str:
+    def _cache_key(self, facets: _CacheFacets) -> str:
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled
         return cache.make_key(
-            endpoint=path,
-            query=query,
+            endpoint=facets.path,
+            query=facets.query,
             access_tier=AccessTier.AUTHENTICATED if self._auth_cookies else AccessTier.PUBLIC,
-            route_fingerprint=self._route_fingerprint(self._normalize_per_call_proxy(proxy)),
+            auth_scope=self._auth_scope,
+            route_fingerprint=self._route_fingerprint(self._normalize_per_call_proxy(facets.proxy)),
             browser_profile=self.browser_profile,
+            representation=facets.representation,
+            parser_version=facets.parser_version,
+            schema_version=facets.schema_version,
         )
 
-    def _store(
-        self,
-        path: str,
-        query: Mapping[str, Any],
-        proxy: str | bool | None,
-        response: ClientResponse,
-    ) -> None:
+    def _store(self, facets: _CacheFacets, key: str, result: FetchResult[Any]) -> None:
         now = monotonic()
         from finvizp.cache import CacheEntry
 
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled
-        if response.content_kind in ("html", "xml"):
-            # No raw authenticated-body cache: HTML/XML payloads are provider
-            # pages, not parsed results. Endpoint operations must parse into
-            # structured payloads before anything is stored.
-            raise FinvizParseError(
-                f"refusing to cache raw {response.content_kind} body for {path!r}"
-            )
         cache.set(
-            self._cache_key(path, query, proxy),
+            key,
             CacheEntry(
-                response=self._isolated(response),
+                result=self._isolated(result),
                 expires_at=now + (self._cache_ttl or 0.0),
                 stored_at=now,
-                approx_bytes=max(1, len(_payload_bytes(response.data))),
+                approx_bytes=max(1, len(_payload_bytes(result.data))),
             ),
         )
 
     @staticmethod
-    def _isolated(response: ClientResponse) -> ClientResponse:
-        """Snapshot the envelope so no caller mutation can reach the cache."""
-        return replace(response, data=copy.deepcopy(response.data))
-
-    @classmethod
-    def _serve(cls, entry: Any, *, cache_hit: bool, stale: bool) -> ClientResponse:
-        """Return a cached envelope with this serve's provenance facts."""
-        response: ClientResponse = entry.response
-        age = (datetime.now(UTC) - response.fetched_at).total_seconds()
+    def _isolated(result: FetchResult[Any]) -> FetchResult[Any]:
+        """Snapshot the parsed result so no caller mutation can reach the cache."""
         return replace(
-            cls._isolated(response),
-            served_at=datetime.now(UTC),
-            cache_hit=cache_hit,
-            stale=stale,
-            cache_age=age,
+            result,
+            metadata=replace(result.metadata, cache_hit=False, stale=False, cache_age=None),
         )
 
     @staticmethod
-    def _serve_joiner(response: ClientResponse) -> ClientResponse:
+    def _serve(entry: Any, *, cache_hit: bool, stale: bool) -> FetchResult[Any]:
+        """Return a cached parsed result with this serve's provenance facts."""
+        result: FetchResult[Any] = entry.result
+        age = (datetime.now(UTC) - result.metadata.fetched_at).total_seconds()
+        return replace(
+            result,
+            metadata=replace(
+                result.metadata,
+                served_at=datetime.now(UTC),
+                cache_hit=cache_hit,
+                stale=stale,
+                cache_age=age,
+            ),
+        )
+
+    @staticmethod
+    def _serve_joiner(result: FetchResult[Any]) -> FetchResult[Any]:
         """Provenance for a caller that joined an in-flight miss.
 
         The joined payload is the leader's, so its freshness facts carry over:
-        a stale-fallback leader yields stale/aged joiner envelopes too.
+        a stale-fallback leader yields stale/aged joiner results too.
         """
         return replace(
-            FinvizClient._isolated(response),
-            served_at=datetime.now(UTC),
-            cache_hit=True,
-            stale=response.stale,
-            cache_age=response.cache_age,
+            result,
+            metadata=replace(
+                result.metadata,
+                served_at=datetime.now(UTC),
+                cache_hit=True,
+            ),
         )
 
     def invalidate(
@@ -738,6 +801,9 @@ class FinvizClient:
         *,
         params: Mapping[str, Any] | None = None,
         proxy: str | bool | None = None,
+        representation: str = "default",
+        parser_version: str = "1",
+        schema_version: int = 1,
     ) -> bool:
         """Drop one cached route entry; ``True`` when an entry was held.
 
@@ -747,7 +813,18 @@ class FinvizClient:
         store = self._cache
         if store is None:
             return False
-        return store.delete(self._cache_key(path, dict(params or {}), proxy))
+        return store.delete(
+            self._cache_key(
+                _CacheFacets(
+                    path=path,
+                    query=dict(params or {}),
+                    proxy=proxy,
+                    representation=representation,
+                    parser_version=parser_version,
+                    schema_version=schema_version,
+                )
+            )
+        )
 
     def clear_cache(self) -> int:
         """Drop every cached entry; returns how many were held."""
@@ -762,18 +839,38 @@ class FinvizClient:
         *,
         query: Mapping[str, Any] | None = None,
         proxy: str | bool | None = None,
-    ) -> Callable[[], Any]:
-        """Bind one reviewed endpoint operation to its route inputs.
+        cache: bool = True,
+        refresh: bool = False,
+        representation: str = "default",
+        parser_version: str = "1",
+        schema_version: int = 1,
+        parse: Callable[[ClientResponse], FetchResult[Any]] | None = None,
+    ) -> Callable[[], Coroutine[Any, Any, FetchResult[Any]]]:
+        """Bind one reviewed endpoint operation to its route and cache inputs.
 
         Returns a zero-argument coroutine function; endpoint modules expose
         named operations built on this seam instead of a generic request
-        method. Caching applies only at these reviewed operations, and raw
-        HTML/XML bodies are never stored (``_store`` refuses them).
+        method. ``parse`` turns the classified transport envelope into the
+        endpoint's immutable ``FetchResult`` — only that parsed value is ever
+        cached, and raw HTML/XML pages refuse to parse (``_default_parse``).
+        Per-call ``cache=False``/``refresh=True`` and the representation/
+        parser/schema key facets are bound here so endpoint modules can expose
+        the required controls without a generic-request hatch.
         """
         params = dict(query or {})
 
-        async def op() -> ClientResponse:
-            return await self._cached_fetch(path, params=params, proxy=proxy)
+        async def op() -> FetchResult[Any]:
+            return await self._cached_fetch(
+                path,
+                params=params,
+                proxy=proxy,
+                cache=cache,
+                refresh=refresh,
+                representation=representation,
+                parser_version=parser_version,
+                schema_version=schema_version,
+                parse=parse,
+            )
 
         return op
 

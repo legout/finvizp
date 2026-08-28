@@ -4,21 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Coroutine
 from typing import Any
 
 import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
 from fastreq.exceptions import BackendError
 
-from finvizp.cache import ResultCache
-from finvizp.client import FinvizClient
+from finvizp.cache import CacheEntry, ResultCache
+from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
     FinvizEntitlementError,
     FinvizNotFoundError,
     FinvizParseError,
-    FinvizQueryError,
     FinvizTransportError,
 )
+from finvizp.results import FetchResult, ResultMetadata, ResultStatus
 
 BASE = "https://finviz.com"
 
@@ -83,6 +84,50 @@ def _client(fake: CountingTransport, **kwargs: Any) -> FinvizClient:
     return FinvizClient(transport=fake, retry_attempts=0, retry_backoff=0.0, **kwargs)
 
 
+def _parsed_quote(response: ClientResponse) -> FetchResult[dict[str, Any]]:
+    """Example reviewed endpoint parser: raw envelope in, immutable result out."""
+    return FetchResult(
+        {"symbols": ["AAPL"], "source_hash": response.response_hash},
+        ResultMetadata(
+            endpoint=response.endpoint,
+            status=ResultStatus.COMPLETE,
+            access_tier=response.access_tier,
+            fetched_at=response.fetched_at,
+            query=dict(response.query),
+            attempts=response.attempts,
+            response_hash=response.response_hash,
+            route_fingerprint=response.route_fingerprint,
+        ),
+    )
+
+
+class RecordingAdapter:
+    """Documented seam that records every stored cache entry."""
+
+    def __init__(self) -> None:
+        self.inner = ResultCache()
+        self.entries: list[Any] = []
+
+    def get(self, key: str) -> Any:
+        return self.inner.get(key)
+
+    def set(self, key: str, entry: Any) -> None:
+        self.entries.append(entry)
+        self.inner.set(key, entry)
+
+    def delete(self, key: str) -> bool:
+        return self.inner.delete(key)
+
+    def clear(self) -> int:
+        return self.inner.clear()
+
+    def stats(self) -> Any:
+        return self.inner.stats()
+
+    def make_key(self, **facets: Any) -> str:
+        return self.inner.make_key(**facets)
+
+
 # --- TTL / controls -----------------------------------------------------------
 
 
@@ -92,12 +137,14 @@ async def test_cache_hit_preserves_facts_and_updates_provenance() -> None:
     first = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
     second = await client._endpoint_op("/quote.ashx", query={"t": "AAPL"})()
     assert fake.calls == 1  # one underlying request
-    assert first.response_hash == second.response_hash
-    assert second.fetched_at == first.fetched_at  # original fetch time survives
-    assert second.attempts == first.attempts
-    assert second.served_at is not None and second.served_at >= second.fetched_at
-    assert second.cache_hit is True and second.stale is False
-    assert first.cache_hit is False
+    assert isinstance(first, FetchResult) and isinstance(second, FetchResult)
+    assert second.metadata.response_hash == first.metadata.response_hash
+    assert second.metadata.fetched_at == first.metadata.fetched_at  # original fetch time survives
+    assert second.metadata.attempts == first.metadata.attempts
+    meta = second.metadata
+    assert meta.served_at is not None and meta.served_at >= meta.fetched_at
+    assert meta.cache_hit is True and meta.stale is False
+    assert first.metadata.cache_hit is False
     # Different query is a different key.
     await client._endpoint_op("/quote.ashx", query={"t": "MSFT"})()
     assert fake.calls == 2
@@ -111,7 +158,7 @@ async def test_expired_ttl_refetches() -> None:
     await client._endpoint_op("/quote.ashx")()
     assert fake.calls == 2
     second_hit = await client._endpoint_op("/quote.ashx")()  # re-cached after refetch
-    assert second_hit.cache_hit is True
+    assert second_hit.metadata.cache_hit is True
 
 
 async def test_default_has_no_ttl_and_cache_false_disables() -> None:
@@ -134,7 +181,7 @@ async def test_refresh_bypasses_and_replaces_entry() -> None:
     assert fake.calls == 2
     hit = await client._endpoint_op("/quote.ashx")()
     assert fake.calls == 2  # refresh replaced the entry
-    assert hit.cache_hit is True
+    assert hit.metadata.cache_hit is True
 
 
 async def test_invalidate_and_clear() -> None:
@@ -184,6 +231,25 @@ async def test_cache_keys_isolate_access_tier_route_and_profile() -> None:
     assert fake.calls == 4  # different browser identity -> different key
 
 
+async def test_shared_cache_isolates_distinct_authenticated_scopes() -> None:
+    """Two authenticated clients with different cookies must never share entries."""
+    shared: ResultCache = ResultCache()
+    fake1 = CountingTransport()
+    fake2 = CountingTransport()
+    fake3 = CountingTransport()
+    first = _client(fake1, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
+    second = _client(fake2, auth_cookies={"sid": "bbb"}, cache=shared, cache_ttl=60.0)
+    await first._endpoint_op("/api/quote")()
+    await second._endpoint_op("/api/quote")()
+    assert fake1.calls == 1 and fake2.calls == 1  # distinct scopes: no sharing
+    assert shared.stats()["entries"] == 2
+    await first._endpoint_op("/api/quote")()  # same scope may share
+    assert fake1.calls == 1
+    same_scope = _client(fake3, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
+    await same_scope._endpoint_op("/api/quote")()
+    assert fake3.calls == 0  # identical auth state shares the entry
+
+
 # --- stale-if-error -----------------------------------------------------------
 
 
@@ -204,8 +270,9 @@ async def test_explicit_stale_if_error_serves_stale_on_transport_failure() -> No
     await asyncio.sleep(0.08)
     stale = await client._endpoint_op("/quote.ashx")()  # transport failure -> stale fallback
     assert fake.calls == 2  # the failure was still a real underlying attempt
-    assert stale.stale is True and stale.cache_hit is True
-    assert stale.served_at is not None and stale.fetched_at < stale.served_at
+    assert stale.metadata.stale is True and stale.metadata.cache_hit is True
+    assert stale.metadata.served_at is not None
+    assert stale.metadata.fetched_at < stale.metadata.served_at
 
 
 @pytest.mark.parametrize(
@@ -238,9 +305,9 @@ async def test_concurrent_identical_misses_collapse_to_one_request() -> None:
         *(client._endpoint_op("/quote.ashx", query={"t": "AAPL"})() for _ in range(8))
     )
     assert slow.calls == 1  # one underlying call, eight waiters
-    hashes = {r.response_hash for r in results}
+    hashes = {r.metadata.response_hash for r in results}
     assert len(hashes) == 1
-    assert sum(1 for r in results if r.cache_hit) >= 1  # losers see the winner's entry
+    assert sum(1 for r in results if r.metadata.cache_hit) >= 1  # losers see the winner's entry
 
 
 async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> None:
@@ -250,13 +317,14 @@ async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> 
     loser = asyncio.create_task(client._endpoint_op("/quote.ashx")())
     await asyncio.sleep(0.01)
     loser.cancel()
-    assert (await winner).status_code == 200  # shared operation completed
+    completed = await winner
+    assert completed.metadata.cache_hit is False  # shared operation completed
     with pytest.raises(asyncio.CancelledError):
         await loser
     # The cache still holds a valid entry afterwards.
     again = await client._endpoint_op("/quote.ashx")()
     assert slow.calls == 1
-    assert again.cache_hit is True
+    assert again.metadata.cache_hit is True
 
 
 async def test_singleflight_released_after_failure_so_retry_can_succeed() -> None:
@@ -266,7 +334,7 @@ async def test_singleflight_released_after_failure_so_retry_can_succeed() -> Non
         await client._endpoint_op("/quote.ashx")()
     ok = await client._endpoint_op("/quote.ashx")()  # must not be poisoned by the failed flight
     assert flaky.calls == 2
-    assert ok.cache_hit is False
+    assert ok.metadata.cache_hit is False
 
 
 # --- review regressions ---------------------------------------------------------
@@ -330,11 +398,13 @@ async def test_cached_json_payload_is_immutable_across_hits() -> None:
     )
     client = _client(fake, cache_ttl=60.0)
     first = await client._endpoint_op("/api/quote")()
-    first.data["price"] = 999  # type: ignore[index]
-    first.data["tags"].append("mutated")  # type: ignore[index]
+    with pytest.raises(TypeError):
+        first.data["price"] = 999  # type: ignore[index]
+    with pytest.raises((TypeError, AttributeError)):
+        first.data["tags"].append("mutated")  # type: ignore[index,union-attr]
     second = await client._endpoint_op("/api/quote")()
     assert fake.calls == 1
-    assert second.data == {"price": 100, "tags": ["a"]}
+    assert dict(second.data) == {"price": 100, "tags": ("a",)}  # frozen payload
 
 
 async def test_injected_caller_cache_adapter_is_sufficient() -> None:
@@ -367,26 +437,27 @@ async def test_injected_caller_cache_adapter_is_sufficient() -> None:
     first = await client._endpoint_op("/quote.ashx")()
     second = await client._endpoint_op("/quote.ashx")()
     assert fake.calls == 1
-    assert second.cache_hit is True
-    assert first.response_hash == second.response_hash
+    assert second.metadata.cache_hit is True
+    assert first.metadata.response_hash == second.metadata.response_hash
 
 
 async def test_provenance_reports_cache_age_on_hit_and_stale() -> None:
     fake = CountingTransport(_resp(), _resp(), BackendError("boom"))
     client = _client(fake, cache_ttl=0.05, stale_if_error=True)
     fresh = await client._endpoint_op("/quote.ashx")()
-    assert fresh.cache_hit is False
-    assert fresh.cache_age is None  # a miss has no cache age
+    assert fresh.metadata.cache_hit is False
+    assert fresh.metadata.cache_age is None  # a miss has no cache age
     await asyncio.sleep(0.08)  # first entry is now stale
     hit = await client._endpoint_op("/quote.ashx")()  # miss -> underlying refetch
-    assert fake.calls == 2 and hit.cache_hit is False
+    assert fake.calls == 2 and hit.metadata.cache_hit is False
     aged = await client._endpoint_op("/quote.ashx")()  # fresh hit on the second entry
-    assert aged.cache_hit is True
-    assert aged.cache_age is not None and 0.0 <= aged.cache_age < 0.05
+    assert aged.metadata.cache_hit is True
+    assert aged.metadata.cache_age is not None
+    assert 0.0 <= aged.metadata.cache_age < 0.05
     await asyncio.sleep(0.08)  # second entry is now stale too
     stale = await client._endpoint_op("/quote.ashx")()  # transport failure -> stale fallback
-    assert stale.stale is True and stale.cache_hit is True
-    assert stale.cache_age is not None and stale.cache_age >= 0.08
+    assert stale.metadata.stale is True and stale.metadata.cache_hit is True
+    assert stale.metadata.cache_age is not None and stale.metadata.cache_age >= 0.08
 
 
 # --- second review round regressions ------------------------------------------
@@ -403,41 +474,14 @@ async def test_no_public_arbitrary_request_method_exists() -> None:
 
 
 async def test_cache_adapter_never_receives_raw_authenticated_body() -> None:
-    """Only parsed, structured endpoint payloads may enter the cache."""
-
-    class RecordingAdapter:
-        """Documented seam that records every stored payload."""
-
-        def __init__(self) -> None:
-            self.inner = ResultCache()
-            self.stored: list[Any] = []
-
-        def get(self, key: str) -> Any:
-            return self.inner.get(key)
-
-        def set(self, key: str, entry: Any) -> None:
-            self.stored.append(entry.response.data)
-            self.inner.set(key, entry)
-
-        def delete(self, key: str) -> bool:
-            return self.inner.delete(key)
-
-        def clear(self) -> int:
-            return self.inner.clear()
-
-        def stats(self) -> Any:
-            return self.inner.stats()
-
-        def make_key(self, **facets: Any) -> str:
-            return self.inner.make_key(**facets)
-
+    """Only parsed, structured endpoint results may enter the cache."""
     adapter = RecordingAdapter()
-    fake = CountingTransport(_resp(body=b"<html>SESSION-PAGE</html>"))
+    fake = CountingTransport(_resp(body=b"<html>SESSION-PAGE</html>", content_type="text/html"))
     client = _client(fake, auth_cookies={"sid": "abc"}, cache=adapter, cache_ttl=60.0)
-    op = client._endpoint_op("/quote.ashx", query={"t": "AAPL"})  # type: ignore[attr-defined]
-    with pytest.raises((FinvizParseError, FinvizQueryError)):
+    op = client._endpoint_op("/quote.ashx", query={"t": "AAPL"})
+    with pytest.raises(FinvizParseError):
         await op()
-    assert adapter.stored == []  # raw HTML body never entered the cache
+    assert adapter.entries == []  # raw HTML body never entered the cache
 
     # A parsed structured endpoint result is the only cacheable payload shape.
     json_body = json.dumps({"quote": {"t": "AAPL", "price": 100}}).encode()
@@ -446,11 +490,13 @@ async def test_cache_adapter_never_receives_raw_authenticated_body() -> None:
     )
     adapter2 = RecordingAdapter()
     client2 = _client(fake2, auth_cookies={"sid": "abc"}, cache=adapter2, cache_ttl=60.0)
-    op2 = client2._endpoint_op("/api/quote", query={"t": "AAPL"})  # type: ignore[attr-defined]
+    op2 = client2._endpoint_op("/api/quote", query={"t": "AAPL"})
     result = await op2()
     assert fake2.calls == 1
-    assert result.data == {"quote": {"t": "AAPL", "price": 100}}
-    assert adapter2.stored and adapter2.stored[0] == result.data
+    assert dict(result.data) == {"quote": {"t": "AAPL", "price": 100}}
+    assert adapter2.entries and isinstance(adapter2.entries[0], CacheEntry)
+    assert isinstance(adapter2.entries[0].result, FetchResult)
+    assert adapter2.entries[0].result.data == result.data
 
 
 async def test_stale_joiner_preserves_stale_and_age_provenance() -> None:
@@ -467,39 +513,116 @@ async def test_stale_joiner_preserves_stale_and_age_provenance() -> None:
         BackendError("boom"),
     )
     client = _client(transport, cache_ttl=0.05, stale_if_error=True)
-    await client._endpoint_op("/api/quote", query={"t": "AAPL"})()  # type: ignore[attr-defined]
+    await client._endpoint_op("/api/quote", query={"t": "AAPL"})()
     await asyncio.sleep(0.08)  # entry is now stale
 
-    def _op() -> Any:
-        return client._endpoint_op("/api/quote", query={"t": "AAPL"})()  # type: ignore[attr-defined]
+    def _op() -> Coroutine[Any, Any, FetchResult[Any]]:
+        return client._endpoint_op("/api/quote", query={"t": "AAPL"})()
 
     leader = asyncio.ensure_future(_op())
     joiner = asyncio.ensure_future(_op())
     leader_result = await leader
     joiner_result = await joiner
     assert transport.calls == 2  # stale fallback was one real underlying attempt
-    assert leader_result.stale is True and leader_result.cache_hit is True
-    assert leader_result.cache_age is not None and leader_result.cache_age >= 0.08
+    assert leader_result.metadata.stale is True and leader_result.metadata.cache_hit is True
+    assert leader_result.metadata.cache_age is not None
+    assert leader_result.metadata.cache_age >= 0.08
     # Same payload, same provenance facts; only served_at differs.
-    assert joiner_result.stale is True
-    assert joiner_result.cache_hit is True
-    assert joiner_result.cache_age is not None
-    assert abs(joiner_result.cache_age - leader_result.cache_age) < 1.0
-    assert joiner_result.fetched_at == leader_result.fetched_at
+    assert joiner_result.metadata.stale is True
+    assert joiner_result.metadata.cache_hit is True
+    assert joiner_result.metadata.cache_age is not None
+    assert abs(joiner_result.metadata.cache_age - leader_result.metadata.cache_age) < 1.0
+    assert joiner_result.metadata.fetched_at == leader_result.metadata.fetched_at
 
 
 async def test_invalidate_matches_per_call_proxy_route_keys() -> None:
     fake = CountingTransport()
     client = _client(fake, cache_ttl=60.0)
-    await client._endpoint_op(  # type: ignore[attr-defined]
+    await client._endpoint_op(
         "/api/quote", query={"t": "AAPL"}, proxy="http://proxy.example:8080"
     )()
     assert fake.calls == 1
     # Default-route invalidation misses; route-matched invalidation hits.
-    assert client.invalidate("/api/quote", params={"t": "AAPL"}) is False  # type: ignore[attr-defined]
+    assert client.invalidate("/api/quote", params={"t": "AAPL"}) is False
     assert client._cache is not None and client._cache.stats()["entries"] == 1
-    assert (  # type: ignore[attr-defined]
+    assert (
         client.invalidate("/api/quote", params={"t": "AAPL"}, proxy="http://proxy.example:8080")
         is True
     )
     assert client._cache is not None and client._cache.stats()["entries"] == 0
+
+
+# --- third review round regressions --------------------------------------------
+
+
+async def test_cache_stores_parsed_fetchresult_never_raw_envelope() -> None:
+    """Cache entries and returned values are immutable FetchResults, not envelopes."""
+    adapter = RecordingAdapter()
+    fake = CountingTransport()
+    client = _client(fake, cache=adapter, cache_ttl=60.0)
+    op = client._endpoint_op("/api/quote", query={"t": "AAPL"})
+    result = await op()
+    second = await op()
+    assert fake.calls == 1
+    assert isinstance(result, FetchResult) and isinstance(second, FetchResult)
+    assert not isinstance(result.data, ClientResponse)
+    assert len(adapter.entries) == 1
+    entry = adapter.entries[0]
+    assert isinstance(entry, CacheEntry) and isinstance(entry.result, FetchResult)
+    assert not isinstance(entry.result.data, ClientResponse)
+    assert dict(entry.result.data) == {"quote": {"t": "AAPL", "price": 100}}
+
+
+async def test_parsed_html_endpoint_result_is_cacheable() -> None:
+    """A reviewed HTML parser produces the FetchResult; the raw page never does."""
+    adapter = RecordingAdapter()
+    fake = CountingTransport(
+        _resp(
+            body=b"<html><body>QUOTE-PAGE</body></html>",
+            content_type="text/html",
+            url=f"{BASE}/quote.ashx",
+        )
+    )
+    client = _client(fake, cache=adapter, cache_ttl=60.0)
+    op = client._endpoint_op("/quote.ashx", query={"t": "AAPL"}, parse=_parsed_quote)
+    first = await op()
+    second = await op()
+    assert fake.calls == 1  # second call was a cache hit on the parsed result
+    assert isinstance(first, FetchResult) and isinstance(second, FetchResult)
+    assert dict(second.data) == {
+        "symbols": ("AAPL",),
+        "source_hash": first.metadata.response_hash,
+    }
+    assert second.metadata.cache_hit is True
+    assert adapter.entries and "QUOTE-PAGE" not in str(adapter.entries[0].result.data)
+
+
+async def test_endpoint_op_controls_disable_and_refresh() -> None:
+    """Per-call cache=False and refresh=True are bound on the endpoint seam."""
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0)
+    nocache = client._endpoint_op("/api/quote", cache=False)
+    await nocache()
+    await nocache()
+    assert fake.calls == 2  # bypassed the store entirely
+    assert client.invalidate("/api/quote") is False  # nothing was stored
+    await client._endpoint_op("/api/quote", refresh=True)()
+    assert fake.calls == 3  # refresh fetched a fresh copy...
+    hit = await client._endpoint_op("/api/quote")()
+    assert fake.calls == 3  # ...and replaced the cached entry
+    assert hit.metadata.cache_hit is True
+
+
+async def test_keys_thread_representation_parser_and_schema_versions() -> None:
+    """Distinct representation/parser/schema facets never share endpoint entries."""
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0)
+    await client._endpoint_op("/api/quote", representation="default")()
+    await client._endpoint_op("/api/quote", representation="structured")()
+    assert fake.calls == 2  # representation differs -> no sharing
+    await client._endpoint_op("/api/quote", parser_version="2")()
+    assert fake.calls == 3  # parser revision differs -> no sharing
+    await client._endpoint_op("/api/quote", schema_version=2)()
+    assert fake.calls == 4  # schema revision differs -> no sharing
+    await client._endpoint_op("/api/quote")()  # identical facets share
+    assert fake.calls == 4

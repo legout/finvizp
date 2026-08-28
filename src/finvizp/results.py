@@ -70,6 +70,7 @@ class ResultMetadata:
     attempts: int = 1
     cache_hit: bool = False
     stale: bool = False
+    cache_age: float | None = None
     response_hash: str | None = None
     route_fingerprint: str | None = None
     parser_version: str | None = None

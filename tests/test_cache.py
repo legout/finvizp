@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
-from types import MappingProxyType
+from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
 from finvizp.cache import CacheEntry, ResultCache
+from finvizp.results import AccessTier, FetchResult, ResultMetadata, ResultStatus
+
+
+def _result(data: Any = "payload") -> FetchResult[Any]:
+    return FetchResult(
+        data,
+        ResultMetadata(
+            endpoint="/quote.ashx",
+            status=ResultStatus.COMPLETE,
+            access_tier=AccessTier.PUBLIC,
+            fetched_at=datetime.now(UTC),
+        ),
+    )
 
 
 def _entry(
@@ -16,28 +30,8 @@ def _entry(
     stored_at: float = 0.0,
     approx_bytes: int = 1024,
 ) -> CacheEntry:
-    from datetime import UTC, datetime
-
-    from finvizp.client import ClientResponse
-    from finvizp.results import AccessTier
-
-    response = ClientResponse(
-        endpoint="/quote.ashx",
-        url="https://finviz.com/quote.ashx",
-        query=MappingProxyType({"t": "AAPL"}),
-        status_code=200,
-        headers={"content-type": "text/html"},
-        data=data,
-        content_kind="html",
-        response_hash="0" * 64,
-        fetched_at=datetime.now(UTC),
-        access_tier=AccessTier.PUBLIC,
-        browser_profile="chrome",
-        route_fingerprint="finviz-route-v1:direct",
-        attempts=1,
-    )
     return CacheEntry(
-        response=response,
+        result=_result(data),
         expires_at=expires_at if expires_at is not None else float("inf"),
         stored_at=stored_at,
         approx_bytes=approx_bytes,
@@ -52,6 +46,7 @@ def _key(cache: ResultCache, **overrides: object) -> str:
         "endpoint": "/quote.ashx",
         "query": {"t": "AAPL"},
         "access_tier": "PUBLIC",
+        "auth_scope": "public",
         "route_fingerprint": "finviz-route-v1:direct",
         "browser_profile": "chrome",
     }
@@ -102,14 +97,26 @@ def test_key_changes_with_every_isolation_facet() -> None:
     assert _key(cache, endpoint="/api/suggestions") != base
     assert _key(cache, query={"t": "MSFT"}) != base
     assert _key(cache, access_tier="AUTHENTICATED") != base
+    assert _key(cache, auth_scope="auth:abc") != base
     assert _key(cache, route_fingerprint="finviz-route-v1:pool-2") != base
     assert _key(cache, browser_profile="chrome131") != base
     assert _key(cache, representation="structured") != base
+    assert _key(cache, parser_version="2") != base
+    assert _key(cache, schema_version=2) != base
 
 
 def test_key_is_query_order_insensitive() -> None:
     cache = ResultCache()
     assert _key(cache, query={"t": "AAPL", "p": "d"}) == _key(cache, query={"p": "d", "t": "AAPL"})
+
+
+def test_key_ignores_secret_auth_cookies() -> None:
+    """The auth scope is an opaque fingerprint; cookie values never enter the key."""
+    import hashlib
+
+    cache = ResultCache()
+    key = _key(cache, auth_scope="auth:" + hashlib.sha256(b"secret-cookie").hexdigest())
+    assert "secret-cookie" not in key
 
 
 # --- TTL ----------------------------------------------------------------------

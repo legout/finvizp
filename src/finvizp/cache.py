@@ -1,8 +1,8 @@
 """Parsed-result cache: caller-cache seam, bounded LRU eviction, TTL, safe stats.
 
-Caches immutable classified ``ClientResponse`` values only — never raw
-authenticated bodies. Expiry decisions use monotonic time; wall-clock facts
-stay on the cached envelope.
+Caches immutable parsed ``FetchResult`` values only — never raw authenticated
+bodies or transport envelopes. Expiry decisions use monotonic time; wall-clock
+facts stay on the cached result's metadata.
 """
 
 from __future__ import annotations
@@ -13,15 +13,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from time import monotonic
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from finvizp.client import ClientResponse
+if TYPE_CHECKING:
+    from finvizp.results import FetchResult
 
 __all__ = ["CacheEntry", "ResultCache"]
-
-# Bumped when the meaning of a cached envelope changes; part of the key.
-_PARSER_VERSION = "1"
-_SCHEMA_VERSION = "1"
 
 
 def _canonical(value: Any) -> str:
@@ -30,16 +27,16 @@ def _canonical(value: Any) -> str:
 
 @dataclass(frozen=True, slots=True)
 class CacheEntry:
-    """One cached classified response with expiry and byte accounting."""
+    """One cached parsed result with expiry and byte accounting."""
 
-    response: ClientResponse
+    result: FetchResult[Any]
     expires_at: float
     stored_at: float
     approx_bytes: int
 
 
 class ResultCache:
-    """Approximate byte-bounded LRU cache of immutable classified responses.
+    """Approximate byte-bounded LRU cache of immutable parsed results.
 
     One client runs in one event loop and every mutating method is
     synchronous, so no lock is needed.
@@ -70,21 +67,29 @@ class ResultCache:
         access_tier: str,
         route_fingerprint: str,
         browser_profile: str,
+        auth_scope: str = "public",
         representation: str = "default",
+        parser_version: str = "1",
+        schema_version: int = 1,
     ) -> str:
-        """Deterministic key isolating endpoint/query, auth scope, route, and identity."""
+        """Deterministic key isolating endpoint/query, auth scope, route, and identity.
+
+        Facets are joined and hashed: raw values (including any auth-scope
+        input) never appear in the returned key.
+        """
         parts = (
-            _PARSER_VERSION,
-            _SCHEMA_VERSION,
             endpoint,
             _canonical(dict(query)),
             str(access_tier),
+            auth_scope,
             route_fingerprint,
             browser_profile,
             representation,
+            str(parser_version),
+            str(schema_version),
         )
         digest = hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
-        return f"finviz-cache-v1:{digest}"
+        return f"finviz-cache-v2:{digest}"
 
     def get(self, key: str) -> CacheEntry | None:
         """Counted read: fresh entries are hits with refreshed LRU recency.

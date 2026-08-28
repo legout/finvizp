@@ -54,6 +54,7 @@ class QuoteBundle:
     snapshot_tables: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     status: ResultStatus = ResultStatus.EMPTY
     access_tier: AccessTier = AccessTier.UNKNOWN
+    fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, ResultStatus):

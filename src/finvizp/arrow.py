@@ -60,15 +60,30 @@ def build_table(
     ``strict_schema=True``). Known missing sentinels become Arrow null, never
     NaN, in strict mode too — ordinary missing data is not drift. Missing
     required keys always raise. Time-only displays anchor to ``response_date``
-    (defaulting to ``fetched_at``'s US-Eastern date) in ``America/New_York``.
+    in ``America/New_York``; ``response_date`` is the provider response's own
+    date and must be supplied explicitly (``"fetched_at"`` opts into using the
+    provenance timestamp's US-Eastern date). DST fold/gap local times have no
+    unambiguous UTC instant and are kept as raw + ``ambiguous`` status.
     """
     dataset = schemas.dataset(dataset_name)
     if fetched_at.tzinfo is None:
         msg = "fetched_at must be timezone-aware"
         raise FinvizDataError(msg)
-    anchor_date = (
-        response_date if response_date is not None else fetched_at.astimezone(_EASTERN).date()
-    )
+    if response_date is None:
+        # fetched_at is request provenance, not the provider's response date;
+        # guessing it can attach time-only events to the wrong day.
+        msg = (
+            "response_date is required for time-only anchoring; pass the "
+            "provider response date or response_date='fetched_at' to opt in"
+        )
+        raise FinvizDataError(msg)
+    if isinstance(response_date, str):
+        if response_date != "fetched_at":
+            msg = f"unknown response_date sentinel {response_date!r}"
+            raise FinvizDataError(msg)
+        anchor_date = fetched_at.astimezone(_EASTERN).date()
+    else:
+        anchor_date = response_date
     fmap = dataset.field_map
     warnings: list[FetchWarning] = []
 
@@ -98,8 +113,12 @@ def build_table(
                     raise FinvizDataError(msg)
                 extra.append((str(key), "" if value is None else str(value)))
                 continue
-            if key == "fetched_at":
-                continue  # provenance column is filled from the shared timestamp
+            if key == "fetched_at" or (key == "extra_fields" and fmap.get(key)):
+                msg = (
+                    f"field {key!r} on dataset {dataset_name!r} is derived "
+                    "(provenance/drift) and cannot be set in source rows"
+                )
+                raise FinvizDataError(msg)
             if (key.endswith("_raw") or key.endswith("_status")) and fmap.get(key):
                 msg = (
                     f"field {key!r} on dataset {dataset_name!r} is derived from its base "
@@ -178,7 +197,7 @@ def _convert(
         return None, None
     cleaned = _COMMA.sub("", text)
     try:
-        return _typed(field, cleaned, anchor_date)
+        converted, parse_status = _typed(field, cleaned, anchor_date)
     except (ValueError, TypeError) as exc:
         message = f"cannot convert {text!r} to unit {field.unit!r} on field {field.name!r}: {exc}"
         if strict_schema:
@@ -192,29 +211,45 @@ def _convert(
             FetchWarning(code="conversion_failed", message=message, endpoint=dataset_name)
         )
         return None, None
+    if parse_status == "ambiguous":
+        # DST fold/gap: no unambiguous UTC instant exists. Keep the raw
+        # display; strict mode treats the uncertainty as an error.
+        message = (
+            f"ambiguous local time {text!r} on field {field.name!r} "
+            "(DST transition); no unambiguous UTC instant"
+        )
+        if strict_schema:
+            msg = f"{message} (strict_schema=True)"
+            raise FinvizDataError(msg)
+        warnings.append(FetchWarning(code="ambiguous_time", message=message, endpoint=dataset_name))
+        return None, "ambiguous"
+    return converted, parse_status
 
 
-def _parse_eastern(naive: dt.datetime, exact_status: str = "exact") -> tuple[dt.datetime, str]:
+def _parse_eastern(
+    naive: dt.datetime, exact_status: str = "exact"
+) -> tuple[dt.datetime | None, str]:
     """Localize a naive US-Eastern datetime; detect DST ambiguity.
 
-    Ambiguous fold times (fall-back) keep the earlier (first) occurrence;
-    nonexistent gap times (spring-forward) keep the pre-transition offset,
-    marked ``ambiguous`` instead of pretending a UTC instant exists.
-    ``exact_status`` names the parse (``exact`` for full datetimes, ``anchored``
-    for time-only displays whose date came from the response).
+    Returns the UTC instant plus a parse status. Ambiguous fold times
+    (fall-back) and nonexistent gap times (spring-forward) have no single
+    unambiguous UTC instant: the typed value is ``None`` with status
+    ``"ambiguous"``, keeping the raw display for lossless recovery.
+    ``exact_status`` names the parse (``exact`` for full datetimes,
+    ``anchored`` for time-only displays whose date came from the response).
     """
     offset = _EASTERN.utcoffset(naive.replace(tzinfo=_EASTERN, fold=0))
     offset_late = _EASTERN.utcoffset(naive.replace(tzinfo=_EASTERN, fold=1))
     if offset is None or offset_late is None:  # pragma: no cover - ZoneInfo always defines
         msg = f"cannot resolve US Eastern offset for {naive!r}"
         raise ValueError(msg)
-    aware = naive.replace(tzinfo=dt.timezone(offset))
     if offset != offset_late:
         # PEP 495: differing fold-0/fold-1 offsets mean this local time occurs
-        # twice (fall-back) or not at all (spring gap). Keep the first
-        # occurrence's offset and mark it; UTC conversion is not unambiguous.
-        return aware, "ambiguous"
-    return aware, exact_status
+        # twice (fall-back) or not at all (spring gap); no single UTC instant
+        # is unambiguous, so callers keep the raw display instead of inventing
+        # an instant.
+        return None, "ambiguous"
+    return naive.replace(tzinfo=_EASTERN).astimezone(dt.UTC), exact_status
 
 
 def _typed(field: schemas.Field, text: str, anchor_date: dt.date) -> tuple[Any, str | None]:
@@ -239,18 +274,20 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date) -> tuple[Any, 
         return dt.date.fromisoformat(text), None
     if field.unit == "timestamp":
         # Event displays: full datetimes are exact; time-only displays anchor to
-        # the response date in America/New_York and convert to unambiguous UTC.
-        if _TIME_ONLY.match(text):
-            fmt = "%H:%M:%S" if text.count(":") == 2 else "%H:%M"
-            naive = dt.datetime.strptime(text, fmt).replace(
-                year=anchor_date.year, month=anchor_date.month, day=anchor_date.day
-            )
-            local, status = _parse_eastern(naive, "anchored")
-            return local.astimezone(dt.UTC), status
-        if _DATETIME.match(text):
-            naive = dt.datetime.fromisoformat(text.replace("T", " "))
-            local, status = _parse_eastern(naive)
-            return local.astimezone(dt.UTC), status
+        # the response date in America/New_York and convert to UTC only when
+        # unambiguous. Fold/gap local times stay untyped (None + status).
+        if _TIME_ONLY.match(text) or _DATETIME.match(text):
+            if _TIME_ONLY.match(text):
+                fmt = "%H:%M:%S" if text.count(":") == 2 else "%H:%M"
+                naive = dt.datetime.strptime(text, fmt).replace(
+                    year=anchor_date.year, month=anchor_date.month, day=anchor_date.day
+                )
+                status_label = "anchored"
+            else:
+                naive = dt.datetime.fromisoformat(text.replace("T", " "))
+                status_label = "exact"
+            utc, status = _parse_eastern(naive, status_label)
+            return utc, status
         msg = f"unrecognized timestamp display {text!r}"
         raise ValueError(msg)
     return text, None

@@ -14,7 +14,12 @@ from finvizp.errors import FetchWarning, FinvizDataError
 NOW = dt.datetime(2026, 8, 27, 14, 30, tzinfo=dt.UTC)
 
 
+RESPONSE_DATE = dt.date(2026, 8, 27)
+
+
 def _build(dataset: str, rows: list[dict[str, object]], **kwargs: object) -> pa.Table:
+    if "response_date" not in kwargs:
+        kwargs["response_date"] = RESPONSE_DATE
     return fa.build_table(dataset, rows, fetched_at=NOW, **kwargs)  # type: ignore[arg-type]
 
 
@@ -283,27 +288,98 @@ def test_time_only_parse_status_and_raw() -> None:
 
 
 def test_time_only_dst_spring_gap_is_ambiguous() -> None:
-    """A nonexistent local time (spring-forward gap) is marked, not silently UTC."""
+    """A nonexistent local time (spring-forward gap) has no UTC instant: null + status."""
     table = _build(
         "quote_news",
         [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "02:30"}],
         response_date=dt.date(2026, 3, 8),  # US spring-forward day
     )
     row = _rows(table)[0]
+    assert row["published_at"] is None
     assert row["published_at_status"] == "ambiguous"
     assert row["published_at_raw"] == "02:30"
 
 
-def test_time_only_dst_fall_back_is_ambiguous_and_keeps_first_occurrence() -> None:
-    """A wall time occurring twice (fall-back) keeps the earlier instant, marked."""
+def test_time_only_dst_fall_back_is_ambiguous() -> None:
+    """A wall time occurring twice (fall-back) has no single UTC instant: null + status."""
     table = _build(
         "quote_news",
         [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "01:30"}],
         response_date=dt.date(2026, 11, 1),  # US fall-back day
     )
     row = _rows(table)[0]
+    assert row["published_at"] is None
     assert row["published_at_status"] == "ambiguous"
-    assert row["published_at"] == dt.datetime(2026, 11, 1, 5, 30, tzinfo=dt.UTC)  # first EDT
+    assert row["published_at_raw"] == "01:30"
+
+
+def test_explicit_datetime_dst_ambiguity_stays_null() -> None:
+    """Explicit date-times share the fold/gap path and are likewise not invented."""
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "2026-11-01 01:30:00"}],
+    )
+    row = _rows(table)[0]
+    assert row["published_at"] is None
+    assert row["published_at_status"] == "ambiguous"
+
+
+def test_time_only_requires_response_date() -> None:
+    """No silent fetch-provenance anchoring: absent response_date is a typed error."""
+    late_fetch = dt.datetime(2026, 8, 28, 3, tzinfo=dt.UTC)  # Eastern date 2026-08-27
+    with pytest.raises(FinvizDataError):
+        fa.build_table(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+            fetched_at=late_fetch,
+        )
+    explicit = fa.build_table(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+        fetched_at=late_fetch,
+        response_date=dt.date(2026, 8, 20),
+    )
+    published = _rows(explicit)[0]["published_at"]
+    assert published == dt.datetime(2026, 8, 20, 14, 0, tzinfo=dt.UTC)
+
+
+def test_derived_fetched_at_and_extra_fields_rejected() -> None:
+    """Builder-derived columns cannot be supplied as input; typed error, not PyArrow."""
+    with pytest.raises(FinvizDataError):
+        _build("symbol_search", [{"symbol": "AAPL", "fetched_at": "spoof"}])
+    with pytest.raises(FinvizDataError):
+        _build("symbol_search", [{"symbol": "AAPL", "extra_fields": {"x": "y"}}])
+
+
+def test_strict_schema_rejects_ambiguous_local_time() -> None:
+    """Strict mode promotes DST ambiguity to a typed error instead of null."""
+    with pytest.raises(FinvizDataError):
+        _build(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "01:30"}],
+            response_date=dt.date(2026, 11, 1),
+            strict_schema=True,
+        )
+
+
+def test_response_date_fetched_at_sentinel_opts_into_provenance_anchor() -> None:
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+        response_date="fetched_at",
+    )
+    row = _rows(table)[0]
+    assert row["published_at"] == dt.datetime(2026, 8, 27, 14, 0, tzinfo=dt.UTC)  # 10:00 EDT
+    assert row["published_at_status"] == "anchored"
+
+
+def test_unknown_response_date_sentinel_rejected() -> None:
+    with pytest.raises(FinvizDataError):
+        _build(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+            response_date="yesterday",
+        )
 
 
 def test_explicit_raw_companion_key_rejected() -> None:

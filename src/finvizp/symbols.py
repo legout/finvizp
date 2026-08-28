@@ -149,6 +149,9 @@ async def symbols_async(
             representation="universe",
             parser_version=_PARSER_VERSION,
             schema_version=_SCHEMA_VERSION,
+            # One-request contract: a redirect — even same-origin — is
+            # transport drift, never a followed second request.
+            follow_redirects=False,
             parse=_parse_manifest,
         )
         return await op()

@@ -7,6 +7,7 @@ network/entity/DTD-safe.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
@@ -21,7 +22,10 @@ __all__ = ["parse_sitemap", "parse_suggestions"]
 _SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 _STOCK_PATH = "/stock"
 _CANONICAL_HOST = "finviz.com"
-_SYMBOL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-")
+# Raw source-value gate: unpadded ASCII alnum/dash only, before any
+# uppercasing. Rejects percent-decodable shapes, +/-/whitespace padding, and
+# non-ASCII homoglyphs that str.upper() would fold into ASCII lookalikes.
+_VALID_SOURCE_SYMBOL = re.compile(r"[A-Za-z0-9-]+\Z")
 _RESERVED_SUGGESTION_FIELDS = frozenset(
     {"symbol", "extra_fields", "fetched_at", "market_cap_raw", "div_yield_raw"}
 )
@@ -42,8 +46,8 @@ def _canonical_symbol(loc: str) -> str | None:
     symbol; the ``ty=oc`` variant resolves to the same symbol and dedupes —
     it is never optionability evidence. Anything else (foreign hosts, other
     schemes/ports/userinfo, near-match paths, fragments, unknown or duplicate
-    query fields, other ``ty`` variants, malformed URL components) is not a
-    symbol.
+    query fields, other ``ty`` variants, malformed URL components, or a
+    malformed (non-``[A-Za-z0-9-]+``) source symbol) is not a symbol.
     """
     try:
         parts = urlsplit(loc)
@@ -76,10 +80,10 @@ def _canonical_symbol(loc: str) -> str | None:
     ty_values = fields.get("ty", [])
     if ty_values not in ([], ["oc"]):
         return None
-    symbol = t_values[0].strip().upper()
-    if not symbol or any(ch not in _SYMBOL_CHARS for ch in symbol):
+    raw = t_values[0]
+    if not _VALID_SOURCE_SYMBOL.fullmatch(raw):
         return None
-    return symbol
+    return raw.upper()
 
 
 def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
@@ -88,8 +92,9 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
     Deterministic first-manifest order, ``ty=oc`` duplicates removed, no
     optionability inference. Unexpected URL shapes are skipped with
     ``unexpected_url`` warnings; a recognized empty manifest is empty, not
-    drift. Malformed/unsafe XML or a non-urlset root raises
-    :class:`FinvizParseError`.
+    drift. XML comments and processing instructions are ignored; unknown
+    element children (at any level) are structure drift. Malformed/unsafe
+    XML or a non-urlset root raises :class:`FinvizParseError`.
     """
     try:
         root = etree.fromstring(xml_text.encode("utf-8"), _XML_PARSER)
@@ -108,12 +113,22 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
     symbols: list[str] = []
     seen: set[str] = set()
     warnings: list[FetchWarning] = []
-    for url in root:
+
+    def _elements(node: Any) -> list[Any]:
+        # Comments and processing instructions are never sitemap content; only
+        # real element children are validated.
+        return [child for child in node if isinstance(child.tag, str)]
+
+    for url in _elements(root):
         if url.tag != _SITEMAP_NS + "url":
             msg = f"unexpected sitemap child {url.tag!r}"
             raise FinvizParseError(msg)
-        locs = [child for child in url if child.tag == _SITEMAP_NS + "loc"]
-        if len(locs) != 1:
+        children = _elements(url)
+        locs = [child for child in children if child.tag == _SITEMAP_NS + "loc"]
+        if len(locs) != 1 or len(children) != 1:
+            # Exactly one namespaced loc and nothing else: unknown nested
+            # elements (lastmod, priority, foreign-namespace tags, ...) are
+            # structure drift, never ordinary data.
             msg = "sitemap URL entry must contain exactly one loc"
             raise FinvizParseError(msg)
         text = (locs[0].text or "").strip()
@@ -134,11 +149,14 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
 
     Accepts the already-decoded JSON value (the classified client envelope
     hands parsed JSON to parsers) or the raw text. Preserves provider ranking
-    verbatim and maps ``ticker`` to the canonical ``symbol`` field. Any other
-    source field passes through untouched so the Arrow builder can preserve it
-    in ``extra_fields`` with an ``unknown_field`` warning. Recognized empty
-    (``[]``) is empty, not drift; any other shape deviation (including JSON
-    ``null``) raises :class:`FinvizParseError`.
+    verbatim and maps ``ticker`` to the canonical ``symbol`` field. A ticker
+    must be an unpadded ASCII ``[A-Za-z0-9-]+`` source value, and company and
+    exchange must be present strings — anything else is provider drift, never
+    null-coerced. Any other source field passes through untouched so the
+    Arrow builder can preserve it in ``extra_fields`` with an
+    ``unknown_field`` warning. Recognized empty (``[]``) is empty, not drift;
+    any other shape deviation (including JSON ``null``) raises
+    :class:`FinvizParseError`.
     """
     if isinstance(payload, str):
         try:
@@ -155,15 +173,20 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
             msg = f"suggestion {position} must be a JSON object, got {type(record).__name__}"
             raise FinvizParseError(msg)
         ticker = record.get("ticker")
-        if not isinstance(ticker, str) or not ticker.strip():
-            msg = f"suggestion {position} is missing a ticker"
+        if not isinstance(ticker, str) or not _VALID_SOURCE_SYMBOL.fullmatch(ticker):
+            msg = f"suggestion {position} has a malformed ticker {ticker!r}"
             raise FinvizParseError(msg)
         company = record.get("company")
         exchange = record.get("exchange")
+        # Missing or non-string company/exchange is provider drift: never
+        # silently converted to null.
+        if not isinstance(company, str) or not isinstance(exchange, str):
+            msg = f"suggestion {position} is missing company or exchange"
+            raise FinvizParseError(msg)
         row: dict[str, Any] = {
-            "symbol": ticker.strip().upper(),
-            "company": company if isinstance(company, str) else None,
-            "exchange": exchange if isinstance(exchange, str) else None,
+            "symbol": ticker.upper(),
+            "company": company,
+            "exchange": exchange,
         }
         # Additive provider fields pass through verbatim: the Arrow builder
         # preserves them in ``extra_fields`` and warns ``unknown_field``.

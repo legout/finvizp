@@ -6,6 +6,7 @@ Fixtures are minimal scrubbed structures; no live XML/JSON is copied.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -166,6 +167,32 @@ def test_non_urlset_root_is_parse_drift() -> None:
 # --- suggestions JSON parsing ---------------------------------------------------
 
 
+def test_xml_comments_and_processing_instructions_are_ignored() -> None:
+    # Comments and PIs are never sitemap content: between entries and inside
+    # a url they must be ignored, not raise structure drift.
+    rows, warnings = symbols_parser.parse_sitemap(
+        '<?xml version="1.0"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<!-- manifest comment -->"
+        "<?xml-stylesheet type='text/xsl' href='sitemap.xsl'?>"
+        "<url><!-- selected --><loc>https://finviz.com/stock?t=AAPL</loc></url>"
+        "</urlset>"
+    )
+    assert rows == ["AAPL"]
+    assert warnings == []
+
+
+def test_unknown_nested_element_inside_url_is_structure_drift() -> None:
+    # Unknown element children must never be accepted as ordinary data; the
+    # sitemap model has no optional elements beyond loc here.
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_sitemap(
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
+            "<lastmod>2026-08-28</lastmod></url></urlset>"
+        )
+
+
 def test_parse_suggestions_preserves_provider_ranking() -> None:
     rows = symbols_parser.parse_suggestions(_suggestions())
     assert [(r["symbol"], r["company"], r["exchange"]) for r in rows] == [
@@ -227,3 +254,67 @@ def test_parse_suggestions_non_list_is_parse_drift() -> None:
 def test_parse_suggestions_malformed_json_is_parse_drift() -> None:
     with pytest.raises(FinvizParseError):
         symbols_parser.parse_suggestions("[{")
+
+
+# --- source-symbol validation ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "loc", ["https://finviz.com/stock?t=%C5%BF", "https://finviz.com/stock?t=AAPL+"]
+)
+def test_percent_encoded_and_padded_source_values_are_unexpected_urls(loc: str) -> None:
+    # Validation happens on the raw source value BEFORE normalization:
+    # %C5%BF must not decode/collapse to "S" and "AAPL+" must not trim to
+    # "AAPL" — both shapes are unexpected URLs, skipped with a warning.
+    rows, warnings = symbols_parser.parse_sitemap(
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+    )
+    assert rows == []
+    assert [w.code for w in warnings] == ["unexpected_url"]
+
+
+@pytest.mark.parametrize(
+    "loc", ["https://finviz.com/stock?t= brk-b ", "https://finviz.com/stock?t=+AAPL+"]
+)
+def test_whitespace_padded_source_values_are_unexpected_urls(loc: str) -> None:
+    # Whitespace padding is not a valid unpadded source value either.
+    rows, warnings = symbols_parser.parse_sitemap(
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+    )
+    assert rows == []
+    assert [w.code for w in warnings] == ["unexpected_url"]
+
+
+@pytest.mark.parametrize(
+    "loc", ["https://finviz.com/stock?t=BRK-B", "https://finviz.com/stock?t=na"]
+)
+def test_valid_dash_forms_and_lowercase_na_are_preserved(loc: str) -> None:
+    # The unpadded [A-Za-z0-9-]+ gate keeps every valid form; casing still
+    # normalizes afterwards (na -> NA), dashes survive verbatim.
+    rows, warnings = symbols_parser.parse_sitemap(
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+    )
+    assert len(rows) == 1
+    assert warnings == []
+
+
+def test_suggestion_malformed_ticker_raises_parse_drift() -> None:
+    # A malformed provider ticker ("BAD!", "%") must be typed drift, never a
+    # normalized row in a COMPLETE result.
+    for ticker in ("BAD!", "%"):
+        record = json.dumps({"ticker": ticker, "company": "c", "exchange": "e"})
+        with pytest.raises(FinvizParseError):
+            symbols_parser.parse_suggestions(record)
+
+
+def test_suggestion_missing_or_malformed_company_exchange_is_parse_drift() -> None:
+    # Missing keys and malformed types are provider drift: they must never be
+    # silently converted to null in a returned row.
+    for record in (
+        {"ticker": "AAPL", "exchange": "NASDAQ"},  # company missing
+        {"ticker": "AAPL", "company": "Apple", "exchange": None},  # exchange null
+        {"ticker": "AAPL", "company": 42, "exchange": "NASDAQ"},  # company non-string
+        {"ticker": "AAPL", "company": {"n": "Apple"}, "exchange": "NASDAQ"},  # dict company
+    ):
+        with pytest.raises(FinvizParseError):
+            symbols_parser.parse_suggestions([record])

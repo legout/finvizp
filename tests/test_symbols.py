@@ -18,7 +18,7 @@ from fastreq.backends.base import Backend, NormalizedResponse
 
 from finvizp import symbols as symbols_api
 from finvizp.client import FinvizClient
-from finvizp.errors import FinvizParseError, FinvizQueryError
+from finvizp.errors import FinvizParseError, FinvizQueryError, FinvizTransportError
 from finvizp.results import ResultStatus
 
 BASE = "https://finviz.com"
@@ -412,3 +412,62 @@ async def test_search_malformed_json_drift_raises_typed_parse_error() -> None:
     fake = RecordingTransport(_resp(b"{oops", "application/json", f"{BASE}/api/suggestions"))
     with pytest.raises(FinvizParseError):
         await symbols_api.search_symbols_async("AAP", client=FinvizClient(transport=fake))
+
+
+# --- post-review remediation regressions -----------------------------------------
+
+
+async def test_manifest_same_origin_redirect_is_not_followed() -> None:
+    """One request, even when /sitemap.xml answers with a same-origin redirect.
+
+    The symbols contract is one request per call. A 301 to another finviz.com
+    URL (e.g. a stock page) must surface as transport drift, never be followed
+    as a second request.
+    """
+    fake = RecordingTransport(
+        NormalizedResponse.from_backend(
+            status_code=301,
+            headers={"Content-Type": "text/xml", "Location": f"{BASE}/quote.ashx?t=AAPL"},
+            content=b"",
+            url=f"{BASE}/sitemap.xml",
+            is_json=False,
+        ),
+    )
+    with pytest.raises(FinvizTransportError):
+        await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert len(fake.urls) == 1  # the stock URL was never requested
+
+
+async def test_search_malformed_ticker_never_reaches_a_complete_result() -> None:
+    payload = json.dumps([{"ticker": "BAD!", "company": "C", "exchange": "NYSE"}])
+    fake = RecordingTransport(
+        _resp(payload.encode(), "application/json", f"{BASE}/api/suggestions")
+    )
+    with pytest.raises(FinvizParseError):
+        await symbols_api.search_symbols_async("bad", client=FinvizClient(transport=fake))
+    assert fake.urls == [f"{BASE}/api/suggestions"]
+
+
+async def test_search_missing_company_is_parse_drift_not_null() -> None:
+    payload = json.dumps([{"ticker": "AAPL", "exchange": "NASDAQ"}])
+    fake = RecordingTransport(
+        _resp(payload.encode(), "application/json", f"{BASE}/api/suggestions")
+    )
+    with pytest.raises(FinvizParseError):
+        await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
+
+
+async def test_manifest_encoded_and_padded_tickers_warn_not_normalize() -> None:
+    """``t=%C5%BF`` and ``t=AAPL+`` are unexpected URLs, never symbols S/AAPL."""
+    xml = (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=%C5%BF</loc></url>"
+        "<url><loc>https://finviz.com/stock?t=AAPL+</loc></url>"
+        "</urlset>"
+    )
+    fake = RecordingTransport(_resp(xml.encode(), "text/xml", f"{BASE}/sitemap.xml"))
+    # A manifest with only unexpected URLs is parse drift end to end (existing
+    # no-canonical-URLs rule); the malformed sources never normalize.
+    with pytest.raises(FinvizParseError):
+        await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert fake.urls == [f"{BASE}/sitemap.xml"]  # one request, nothing followed

@@ -97,6 +97,10 @@ class _CacheFacets:
     representation: str
     parser_version: str
     schema_version: int
+    # Endpoint-scoped transport control (default preserves client behavior);
+    # it alters which response a route yields, so ops that change it (the
+    # one-request manifest) are also distinguished by their representation.
+    follow_redirects: bool = True
 
 
 def _facets_parse(
@@ -661,6 +665,7 @@ class FinvizClient:
         representation: str = "default",
         parser_version: str = "1",
         schema_version: int = 1,
+        follow_redirects: bool = True,
         parse: Callable[[ClientResponse], FetchResult[Any]],
     ) -> FetchResult[Any]:
         """Cache + single-flight wrapper around ``_fetch``.
@@ -671,9 +676,12 @@ class FinvizClient:
         ``refresh=True`` fetches a fresh copy and replaces any cached entry.
         Identical concurrent misses share one underlying request.
 
-        ``parse`` is required: only reviewed endpoint parsers produce the
-        normalized immutable ``FetchResult`` values that may ever be stored.
-        Parser/schema facet facts are stamped into every result's metadata.
+        ``follow_redirects=False`` enforces a one-request transport contract:
+        a redirect response surfaces as transport drift instead of being
+        followed. ``parse`` is required: only reviewed endpoint parsers
+        produce the normalized immutable ``FetchResult`` values that may ever
+        be stored. Parser/schema facet facts are stamped into every result's
+        metadata.
         """
         effective_query = dict(params or {})
         store = self._cache
@@ -681,7 +689,11 @@ class FinvizClient:
         # the route identity for keys/transport is resolved exactly once.
         parse = _facets_parse(parse, parser_version, schema_version)
         if not cache or self._cache_ttl is None or store is None:
-            return parse(await self._fetch(path, params=effective_query, proxy=proxy))
+            return parse(
+                await self._fetch(
+                    path, params=effective_query, proxy=proxy, follow_redirects=follow_redirects
+                )
+            )
         # The auth-aware resolver is shared with the transport, so keys and
         # requests can never disagree about the route (review round 6).
         route = await self._acquire_proxy(self._normalize_per_call_proxy(proxy))
@@ -697,10 +709,18 @@ class FinvizClient:
             representation=representation,
             parser_version=parser_version,
             schema_version=schema_version,
+            follow_redirects=follow_redirects,
         )
         key = self._cache_key(facets)
         if refresh:
-            result = parse(await self._fetch(path, params=effective_query, proxy=proxy))
+            result = parse(
+                await self._fetch(
+                    facets.path,
+                    params=facets.query,
+                    proxy=facets.proxy,
+                    follow_redirects=facets.follow_redirects,
+                )
+            )
             self._store(facets, key, result)
             return result
         entry = store.get(key)
@@ -758,7 +778,14 @@ class FinvizClient:
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled
         try:
-            result = parse(await self._fetch(facets.path, params=facets.query, proxy=facets.proxy))
+            result = parse(
+                await self._fetch(
+                    facets.path,
+                    params=facets.query,
+                    proxy=facets.proxy,
+                    follow_redirects=facets.follow_redirects,
+                )
+            )
         except FinvizError as exc:
             if self._stale_if_error and isinstance(exc, FINVIZ_TRANSPORT_ERRORS):
                 entry = cache.get(key)
@@ -887,6 +914,7 @@ class FinvizClient:
         representation: str = "default",
         parser_version: str = "1",
         schema_version: int = 1,
+        follow_redirects: bool = True,
         parse: Callable[[ClientResponse], FetchResult[Any]],
     ) -> Callable[[], Coroutine[Any, Any, FetchResult[Any]]]:
         """Bind one reviewed endpoint operation to its route and cache inputs.
@@ -896,9 +924,10 @@ class FinvizClient:
         method. ``parse`` is required — the reviewed endpoint parser that
         turns the classified transport envelope into the endpoint's immutable
         ``FetchResult``; only that parsed value is ever cached. Per-call
-        ``cache=False``/``refresh=True`` and the representation/parser/schema
-        key facets are bound here so endpoint modules can expose the required
-        controls without a generic-request hatch.
+        ``cache=False``/``refresh=True``, the strict ``follow_redirects=False``
+        one-request contract, and the representation/parser/schema key facets
+        are bound here so endpoint modules can expose the required controls
+        without a generic-request hatch.
         """
         params = dict(query or {})
 
@@ -912,6 +941,7 @@ class FinvizClient:
                 representation=representation,
                 parser_version=parser_version,
                 schema_version=schema_version,
+                follow_redirects=follow_redirects,
                 parse=parse,
             )
 
@@ -923,6 +953,7 @@ class FinvizClient:
         *,
         params: Mapping[str, Any] | None = None,
         proxy: str | bool | None = None,
+        follow_redirects: bool = True,
     ) -> ClientResponse:
         """Fetch one explicit same-origin route and return its classified envelope.
 
@@ -930,6 +961,9 @@ class FinvizClient:
         public arbitrary-request API. ``proxy`` is a per-call override: a URL
         takes precedence over the client proxy (including forced-direct),
         ``False`` forces direct, ``None`` keeps client config.
+        ``follow_redirects=False`` enforces a one-request contract: any
+        redirect response surfaces as transport drift instead of being
+        followed, regardless of the client's global safety checking.
         """
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             msg = f"route must be a relative {self.base_url} path, got {path!r}"
@@ -969,6 +1003,9 @@ class FinvizClient:
                     # Auto-follow is off: every Location is validated against
                     # the canonical origin BEFORE the next request is issued,
                     # so caller cookies can never reach another host.
+                    # Endpoint ops may tighten this to a strict one-request
+                    # contract: then any redirect is transport drift, never a
+                    # second request.
                     hop_url = url
                     redirects = 0
                     while True:
@@ -991,6 +1028,14 @@ class FinvizClient:
                         self._purge_backend_cookies(selected_proxy)
                         if response.status_code not in _REDIRECT_STATUSES:
                             break
+                        if not follow_redirects:
+                            # One-request contract (e.g. the symbols manifest):
+                            # even a same-origin Location is never a second
+                            # request; it surfaces as transport drift.
+                            raise FinvizTransportError(
+                                "unexpected redirect (no-follow route)",
+                                context={"endpoint": path},
+                            )
                         location = response.headers.get("location")
                         if not location:
                             break  # classified as a non-200 provider status

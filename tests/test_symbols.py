@@ -175,6 +175,19 @@ async def test_symbols_empty_manifest_is_recognized_empty() -> None:
     assert result.table.num_rows == 0
 
 
+async def test_symbols_all_unexpected_urls_are_parse_drift() -> None:
+    fake = RecordingTransport(
+        _resp(
+            b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            b"<url><loc>https://finviz.com/screener.ashx?v=1</loc></url></urlset>",
+            "text/xml",
+            f"{BASE}/sitemap.xml",
+        )
+    )
+    with pytest.raises(FinvizParseError):
+        await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+
+
 async def test_symbols_sync_delegates_through_run_sync() -> None:
     fake = _manifest_transport()
 
@@ -339,6 +352,27 @@ async def test_search_additive_fields_reach_extra_fields_with_warning() -> None:
     result = await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
     row = result.table.to_pylist()[0]
     assert row["extra_fields"] == [("provider_added", "v")]
+    assert any(w.code == "unknown_field" for w in result.metadata.warnings)
+
+
+async def test_search_symbol_collision_preserves_ticker_key_with_drift_evidence() -> None:
+    payload = json.dumps(
+        [
+            {
+                "ticker": "AAPL",
+                "company": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "symbol": "EVIL",
+            }
+        ]
+    )
+    fake = RecordingTransport(
+        _resp(payload.encode(), "application/json", f"{BASE}/api/suggestions")
+    )
+    result = await symbols_api.search_symbols_async("apple", client=FinvizClient(transport=fake))
+    row = result.table.to_pylist()[0]
+    assert row["symbol"] == "AAPL"
+    assert row["extra_fields"] == [("provider_symbol", "EVIL")]
     assert any(w.code == "unknown_field" for w in result.metadata.warnings)
 
 

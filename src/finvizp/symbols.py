@@ -23,7 +23,7 @@ from finvizp._parsers import symbols as symbols_parser
 from finvizp._sync import run_sync
 from finvizp.arrow import build_table
 from finvizp.client import FinvizClient
-from finvizp.errors import FinvizQueryError
+from finvizp.errors import FinvizParseError, FinvizQueryError
 from finvizp.results import AccessTier, FetchResult, ResultMetadata, ResultStatus
 
 __all__ = ["search_symbols", "search_symbols_async", "symbols", "symbols_async"]
@@ -90,6 +90,9 @@ async def _client_or_transient(client: FinvizClient | None) -> AsyncIterator[Fin
 
 def _parse_manifest(response: Any) -> FetchResult[Any]:
     rows, warnings = symbols_parser.parse_sitemap(response.data)
+    if not rows and warnings:
+        msg = "sitemap contained no canonical stock URLs"
+        raise FinvizParseError(msg)
     table = build_table(
         "symbol_universe",
         ({"symbol": symbol} for symbol in rows),

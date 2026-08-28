@@ -22,6 +22,9 @@ _SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 _STOCK_PATH = "/stock"
 _CANONICAL_HOST = "finviz.com"
 _SYMBOL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-")
+_RESERVED_SUGGESTION_FIELDS = frozenset(
+    {"symbol", "extra_fields", "fetched_at", "market_cap_raw", "div_yield_raw"}
+)
 _XML_PARSER = etree.XMLParser(
     resolve_entities=False,
     no_network=True,
@@ -51,6 +54,7 @@ def _canonical_symbol(loc: str) -> str | None:
         parts.scheme != "https"
         or parts.hostname != _CANONICAL_HOST
         or port is not None
+        or parts.netloc.endswith(":")
         or parts.username is not None
         or parts.password is not None
         or parts.path != _STOCK_PATH
@@ -104,14 +108,20 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
     symbols: list[str] = []
     seen: set[str] = set()
     warnings: list[FetchWarning] = []
-    for loc in (elem.text or "" for elem in root.iter(_SITEMAP_NS + "loc")):
-        text = loc.strip()
+    for url in root:
+        if url.tag != _SITEMAP_NS + "url":
+            msg = f"unexpected sitemap child {url.tag!r}"
+            raise FinvizParseError(msg)
+        locs = [child for child in url if child.tag == _SITEMAP_NS + "loc"]
+        if len(locs) != 1:
+            msg = "sitemap URL entry must contain exactly one loc"
+            raise FinvizParseError(msg)
+        text = (locs[0].text or "").strip()
         symbol = _canonical_symbol(text)
         if symbol is None:
-            if text:
-                warnings.append(
-                    FetchWarning(code="unexpected_url", message="unexpected sitemap URL shape")
-                )
+            warnings.append(
+                FetchWarning(code="unexpected_url", message="unexpected sitemap URL shape")
+            )
             continue
         if symbol not in seen:
             seen.add(symbol)
@@ -157,10 +167,14 @@ def parse_suggestions(payload: Any) -> list[dict[str, Any]]:
         }
         # Additive provider fields pass through verbatim: the Arrow builder
         # preserves them in ``extra_fields`` and warns ``unknown_field``.
-        row.update(
-            (key, value)
-            for key, value in record.items()
-            if key not in ("ticker", "company", "exchange")
-        )
+        for key, value in record.items():
+            if key in ("ticker", "company", "exchange"):
+                continue
+            source_key = str(key)
+            if source_key in _RESERVED_SUGGESTION_FIELDS:
+                source_key = f"provider_{source_key}"
+            while source_key in row:
+                source_key = f"provider_{source_key}"
+            row[source_key] = value
         rows.append(row)
     return rows

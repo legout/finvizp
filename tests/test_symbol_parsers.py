@@ -116,11 +116,24 @@ def test_non_namespaced_urlset_with_payload_is_parse_drift() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "xml",
+    [
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><loc>https://finviz.com/stock?t=AAPL</loc></urlset>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><unexpected/></urlset>',
+    ],
+)
+def test_namespaced_sitemap_structure_drift_is_not_data_or_empty(xml: str) -> None:
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_sitemap(xml)
+
+
 def test_malformed_and_out_of_range_ports_are_skipped_not_raised() -> None:
     # Broken URL components must be unexpected-URL warnings, never raw ValueError.
     for loc in (
         "https://finviz.com:invalid/stock?t=AAPL",
         "https://finviz.com:99999/stock?t=AAPL",
+        "https://finviz.com:/stock?t=AAPL",
         "https://[::1/stock?t=AAPL",
     ):
         rows, warnings = symbols_parser.parse_sitemap(
@@ -173,6 +186,20 @@ def test_parse_suggestions_preserves_additive_fields() -> None:
             "company": "Apple Inc.",
             "exchange": "NASDAQ",
             "provider_added": "v",
+        }
+    ]
+
+
+def test_parse_suggestions_preserves_ticker_key_on_provider_symbol_collision() -> None:
+    rows = symbols_parser.parse_suggestions(
+        '[{"ticker": "AAPL", "company": "Apple Inc.", "exchange": "NASDAQ", "symbol": "EVIL"}]'
+    )
+    assert rows == [
+        {
+            "symbol": "AAPL",
+            "company": "Apple Inc.",
+            "exchange": "NASDAQ",
+            "provider_symbol": "EVIL",
         }
     ]
 

@@ -13,7 +13,7 @@ import datetime as dt
 import math
 import re
 from collections.abc import Callable, Iterable, Mapping
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -42,6 +42,8 @@ _SUFFIX_SCALE = {
     "M": Decimal("1e6"),
     "K": Decimal("1e3"),
 }
+# Exact integer exponents for the count unit (no Decimal, no rounding).
+_SUFFIX_EXPONENT = {"T": 12, "B": 9, "M": 6, "K": 3}
 _EASTERN = ZoneInfo("America/New_York")
 
 
@@ -315,28 +317,34 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tupl
     # Numeric cleaning applies only to numeric units; text keeps its display.
     cleaned = _COMMA.sub("", text)
     if field.unit == "count":
-        # True counts stay int64, parsed exactly in Decimal space — never
-        # through binary float, which silently corrupts beyond 2**53.
-        # localcontext isolates scaling from the ambient Decimal context, whose
-        # precision would otherwise round mantissas like 1.23456789M into
-        # plausible-but-wrong counts.
-        with localcontext() as ctx:
-            ctx.prec = 40
-            if not _COMPACT.match(cleaned):
-                msg = f"invalid count display {text!r}"
-                raise ValueError(msg)
-            number = Decimal(_COMPACT_SUFFIX.sub("", cleaned))
-            suffix = _COMPACT_SUFFIX.search(cleaned)
-            if suffix is not None:
-                number *= _SUFFIX_SCALE[suffix.group(1).upper()]
-            if number != number.to_integral_value():
+        # True counts stay int64, parsed with exact integer arithmetic — no
+        # Decimal context (fixed or ambient) and no binary float, so no
+        # precision boundary can ever round a valid display into a wrong
+        # count.
+        if not _COMPACT.match(cleaned):
+            msg = f"invalid count display {text!r}"
+            raise ValueError(msg)
+        mantissa = _COMPACT_SUFFIX.sub("", cleaned)
+        exp = 0
+        if "." in mantissa:
+            whole, frac = mantissa.split(".", 1)
+            mantissa = whole + frac
+            exp = -len(frac)
+        coefficient = int(mantissa)
+        if suffix := _COMPACT_SUFFIX.search(cleaned):
+            exp += _SUFFIX_EXPONENT[suffix.group(1).upper()]
+        if exp < 0:
+            divisor = 10**-exp
+            if coefficient % divisor:
                 msg = f"non-integral count {text!r}"
                 raise ValueError(msg)
-            value = int(number)
-        if not -(2**63) <= value < 2**63:
+            coefficient //= divisor
+        else:
+            coefficient *= 10**exp
+        if not -(2**63) <= coefficient < 2**63:
             msg = f"count {text!r} outside signed int64 range"
             raise ValueError(msg)
-        return value, None
+        return coefficient, None
     if field.unit == "compact":
         if not _COMPACT.match(cleaned):
             return _finite(float(cleaned), text), None

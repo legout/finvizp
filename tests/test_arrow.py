@@ -568,6 +568,31 @@ def test_count_scaling_is_independent_of_decimal_context() -> None:
         assert _rows(table)[0]["volume"] == 2**63 - 1
 
 
+def test_count_long_mantissa_is_never_rounded() -> None:
+    """Run-61 item: no fixed Decimal precision may round a long mantissa."""
+    # 41 significant digits + K: true value 1000 + 1e-37, non-integral —
+    # a fixed-precision context rounds it to exactly 1000 (silent corruption).
+    display = "1." + "0" * 39 + "1K"
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "volume": display}],
+        on_warning=records.append,
+    )
+    row = _rows(table)[0]
+    assert row["volume"] is None
+    assert row["volume_raw"] == display
+    assert any(w.code == "conversion_failed" for w in records)
+    with pytest.raises(FinvizDataError):
+        _build("quote_snapshot", [{"symbol": "AAPL", "volume": display}], strict_schema=True)
+    # integral control: same-length mantissa whose value IS exactly integral
+    exact_display = "1." + "0" * 39 + "M"
+    table = _build("quote_snapshot", [{"symbol": "AAPL", "volume": exact_display}])
+    row = _rows(table)[0]
+    assert row["volume"] == 1_000_000
+    assert row["volume_raw"] == exact_display
+
+
 def test_fetched_at_non_aware_tzinfo_rejected() -> None:
     """Run-56 item 3: tzinfo whose utcoffset() is None is not timezone-aware."""
 

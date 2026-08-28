@@ -21,6 +21,8 @@ companions, and additive ``extra_fields`` drift. The parser therefore:
 - maps verified provider labels to ``quote_snapshot`` registry fields and
   passes every unmapped label through as its own row key (builder routes it
   to ``extra_fields`` with an ``unknown_field`` warning);
+- enforces the verified six-region snapshot contract: fewer regions, or a
+  region with malformed label/value cell pairs, raises ``FinvizParseError``;
 - normalizes provider temporal displays into builder-compatible shapes:
   full datetimes become ISO ``YYYY-MM-DD HH:MM`` US-Eastern strings, news
   time-only displays keep ``HH:MM`` so the builder anchors them to the
@@ -174,61 +176,93 @@ def parse_quote_page(
             on_warning=on_warning,
         )
 
+    def presence(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        # ``None`` means the region structure itself is absent (missing
+        # optional region); ``[]`` means the structure is present but empty —
+        # the no-results state is positively recognized, so the registered
+        # empty Arrow table is preserved.
+        return [] if rows is None else rows
+
     snapshot = build("quote_snapshot", [row])
     description_text = _parse_description(document)
+    ratings_rows = _parse_ratings(document, symbol, warn)
+    news_rows = _parse_news(document, symbol, response_date)
+    insider_rows = _parse_insider(document, symbol, warn)
+    peers_entries = _parse_ticker_links(document, "Peers")
+    etf_entries = _parse_ticker_links(document, "Held by")
+    signals_rows = _parse_signals(document, symbol)
+
+    def rows_or_empty(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        # ``None`` means the region structure itself is absent (missing
+        # optional region); ``[]`` means the structure is present but empty —
+        # the no-results state is positively recognized, so the registered
+        # empty Arrow table is preserved.
+        return [] if rows is None else rows
+
     description = build(
         "quote_description",
-        [{"symbol": symbol, "description": description_text}]
-        if description_text is not None
-        else [],
+        rows_or_empty(
+            [{"symbol": symbol, "description": description_text}]
+            if description_text is not None
+            else None
+        ),
     )
-    ratings = build("quote_ratings", _parse_ratings(document, symbol, warn))
-    news = build("quote_news", _parse_news(document, symbol, response_date))
-    insider = build("quote_insider", _parse_insider(document, symbol, warn))
+    ratings = build("quote_ratings", rows_or_empty(ratings_rows))
+    news = build("quote_news", rows_or_empty(news_rows))
+    insider = build("quote_insider", rows_or_empty(insider_rows))
     # market_cap needs its raw display; the builder mirrors the base input, so
     # pass the display itself and let compact conversion derive the number.
     peers = build(
         "quote_peers",
-        [
-            {
-                "symbol": symbol,
-                "peer": peer,
-                "rank": position + 1,
-                "market_cap": raw,
-            }
-            for position, (peer, _value, raw) in enumerate(_parse_ticker_links(document, "Peers"))
-        ],
+        rows_or_empty(
+            None
+            if peers_entries is None
+            else [
+                {
+                    "symbol": symbol,
+                    "peer": peer,
+                    "rank": position + 1,
+                    "market_cap": raw,
+                }
+                for position, (peer, _value, raw) in enumerate(peers_entries)
+            ],
+        ),
     )
-    etf_entries = _parse_ticker_links(document, "Held by")
     etf_holders = build(
         "quote_etf_holders",
-        [
-            {
-                "symbol": symbol,
-                "etf": etf,
-                "rank": position + 1,
-                # AUM-style values are fund sizes, not holding weights: keep
-                # them out of weight_percent; the raw display lands in
-                # extra_fields via the unknown 'data_boxover_value' key.
-                "weight_percent": None,
-            }
-            for position, (etf, _size, _raw) in enumerate(etf_entries)
-        ],
+        rows_or_empty(
+            None
+            if etf_entries is None
+            else [
+                {
+                    "symbol": symbol,
+                    "etf": etf,
+                    "rank": position + 1,
+                    # AUM-style values are fund sizes, not holding weights: keep
+                    # them out of weight_percent; the raw display lands in
+                    # extra_fields via the unknown 'data_boxover_value' key.
+                    "weight_percent": None,
+                }
+                for position, (etf, _size, _raw) in enumerate(etf_entries)
+            ],
+        ),
     )
-    signals = build("quote_signals", _parse_signals(document, symbol))
+    signals = build("quote_signals", rows_or_empty(signals_rows))
     artifacts = _parse_charts(document, symbol, fetched_at)
 
-    relations = {
-        "snapshot": snapshot,
-        "description": description,
-        "ratings": ratings,
-        "news": news,
-        "insider": insider,
-        "peers": peers,
-        "etf_holders": etf_holders,
-        "signals": signals,
+    # Presence, not row count, decides a missing region: a present-but-empty
+    # relation is a positively recognized no-results state (its Arrow table
+    # exists with the registered schema), so only structure absence is drift.
+    present = {
+        "description": description_text is not None,
+        "ratings": ratings_rows is not None,
+        "news": news_rows is not None,
+        "insider": insider_rows is not None,
+        "peers": peers_entries is not None,
+        "etf_holders": etf_entries is not None,
+        "signals": signals_rows is not None,
     }
-    missing = [name for name in _OPTIONAL_REGIONS if relations[name].num_rows == 0]
+    missing = [name for name in _OPTIONAL_REGIONS if not present[name]]
     if strict_schema and missing:
         raise FinvizParseError(
             f"missing optional region(s) {', '.join(missing)} (strict_schema=True)",
@@ -247,13 +281,15 @@ def parse_quote_page(
         symbol=symbol,
         fetched_at=fetched_at,
         snapshot=snapshot,
-        description=description if description.num_rows else None,
-        ratings=ratings if ratings.num_rows else None,
-        news=news if news.num_rows else None,
-        insider=insider if insider.num_rows else None,
-        peers=peers if peers.num_rows else None,
-        etf_holders=etf_holders if etf_holders.num_rows else None,
-        signals=signals if signals.num_rows else None,
+        # Present-but-empty regions keep their registered empty Arrow table
+        # on the bundle; only structure absence yields None.
+        description=description if present["description"] else None,
+        ratings=ratings if present["ratings"] else None,
+        news=news if present["news"] else None,
+        insider=insider if present["insider"] else None,
+        peers=peers if present["peers"] else None,
+        etf_holders=etf_holders if present["etf_holders"] else None,
+        signals=signals if present["signals"] else None,
         artifacts=artifacts,
         snapshot_tables=_per_table_projections(per_table),
         status=status,
@@ -282,11 +318,28 @@ def _merge_snapshot_tables(
     document: Any,
     warn: Callable[[str, str], None],
 ) -> list[list[tuple[str, str]]]:
-    """Merge every ``snapshot-table2`` region, preserving per-table grouping."""
+    """Merge the verified six ``snapshot-table2`` regions, per-table grouped.
+
+    Fewer regions (a required region vanished) or malformed pair structure
+    (odd snapshot cell count inside a region) is required-structure drift
+    and raises ``FinvizParseError`` — never a silent COMPLETE parse.
+    """
     per_table: list[list[tuple[str, str]]] = []
     seen: set[str] = set()
-    for table in document.xpath(f".//table[{_CLASS.format('snapshot-table2')}]"):
+    tables = document.xpath(f".//table[{_CLASS.format('snapshot-table2')}]")
+    if len(tables) != 6:
+        raise FinvizParseError(
+            f"expected 6 snapshot-table2 regions on stock page, found {len(tables)}",
+            context={"endpoint": "quote"},
+        )
+    for table in tables:
         cells = table.xpath(f".//td[{_CLASS.format('snapshot-td2')}]")
+        if len(cells) % 2:
+            raise FinvizParseError(
+                "snapshot region has malformed label/value pair structure "
+                f"({len(cells)} snapshot cells)",
+                context={"endpoint": "quote"},
+            )
         pairs: list[tuple[str, str]] = []
         for position in range(0, len(cells) - 1, 2):
             label = cells[position].text_content().strip()
@@ -362,10 +415,10 @@ def _parse_ratings(
     document: Any,
     symbol: str,
     warn: Callable[[str, str], None],
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | None:
     tables = document.xpath(f".//table[{_CLASS.format('js-table-ratings')}]")
     if not tables:
-        return []
+        return None
     rows: list[dict[str, Any]] = []
     for tr in tables[0].xpath(".//tr"):
         cells = tr.xpath("./td")
@@ -399,10 +452,10 @@ def _parse_news(
     document: Any,
     symbol: str,
     response_date: dt.date | None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | None:
     tables = document.xpath(".//table[@id='news-table']")
     if not tables:
-        return []
+        return None
     rows: list[dict[str, Any]] = []
     for tr in tables[0].xpath(".//tr"):
         cells = tr.xpath("./td")
@@ -467,7 +520,7 @@ def _parse_insider(
     document: Any,
     symbol: str,
     warn: Callable[[str, str], None],
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | None:
     target = None
     for table in document.xpath(f".//table[{_CLASS.format('body-table')}]"):
         heads = [th.text_content().strip() for th in table.xpath(".//th")]
@@ -475,7 +528,7 @@ def _parse_insider(
             target = table
             break
     if target is None:
-        return []
+        return None
     heads = [th.text_content().strip() for th in target.xpath(".//th")]
     column = {name: position for position, name in enumerate(heads)}
 
@@ -524,7 +577,7 @@ def _parse_insider(
 def _parse_ticker_links(
     document: Any,
     link_text: str,
-) -> list[tuple[str, str | None, str | None]]:
+) -> list[tuple[str, str | None, str | None]] | None:
     """Peers / ETF-holder spans introduced by a link labelled ``link_text``."""
     for anchor in document.xpath(f".//a[{_CLASS.format('tab-link')}]"):
         if anchor.text_content().strip() != link_text:
@@ -541,10 +594,14 @@ def _parse_ticker_links(
             numeric = None if not value_text or value_text.startswith("AUM") else value_text
             entries.append((ticker, numeric, value_text))
         return entries
-    return []
+    return None
 
 
-def _parse_signals(document: Any, symbol: str) -> list[dict[str, Any]]:
+def _parse_signals(document: Any, symbol: str) -> list[dict[str, Any]] | None:
+    # The correlation-links container is the region structure; it stays on the
+    # page even when a ticker currently has no screener signal links.
+    if not document.xpath(f".//td[{_CLASS.format('js-quote-correlation-links-container')}]"):
+        return None
     return [
         {
             "symbol": symbol,

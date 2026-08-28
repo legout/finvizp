@@ -37,6 +37,12 @@ def _parse(name: str = "stock-current.html", **kwargs: object) -> QuoteBundle:
     return quote_parser.parse_quote_page(_page(name), **kwargs)  # type: ignore[arg-type]
 
 
+def _parse_html(html: str, **kwargs: object) -> QuoteBundle:
+    kwargs.setdefault("fetched_at", FETCHED_AT)
+    kwargs.setdefault("response_date", RESPONSE_DATE)
+    return quote_parser.parse_quote_page(html, **kwargs)  # type: ignore[arg-type]
+
+
 def _rows(table: pa.Table | None) -> list[dict[str, object]]:
     assert table is not None
     return table.to_pylist()
@@ -118,6 +124,45 @@ def test_snapshot_per_table_projection() -> None:
     assert any("Volume" in s for s in labels)
 
 
+def test_fixture_represents_all_sixteen_page_tables() -> None:
+    # The verified stock page carries sixteen tables; the minimal structural
+    # fixture must represent all of them (six snapshot + ten auxiliary).
+    assert _page().count("<table") == 16
+
+
+def test_snapshot_projection_excludes_auxiliary_tables() -> None:
+    # Auxiliary page furniture must not leak into the snapshot projections:
+    # still exactly the six snapshot regions, labels untouched.
+    labels = [
+        label
+        for table in _parse().snapshot_tables.values()
+        for label in table.column("label").to_pylist()
+    ]
+    assert len(labels) == 19
+    assert "Insider Trading" not in labels and "Date" not in labels
+
+
+def test_exactly_six_snapshot_regions_required() -> None:
+    # The verified page carries six snapshot-table2 regions; removing one is
+    # required-structure drift and must raise, not silently parse as COMPLETE.
+    html = _page().replace("snapshot-table2", "gone-table", 1)
+    with pytest.raises(FinvizParseError):
+        _parse_html(html)
+
+
+def test_malformed_snapshot_pair_structure_raises() -> None:
+    # An odd cell count inside a snapshot region is malformed label/value
+    # pair structure: fail typed instead of pairing across the boundary.
+    html = _page().replace(
+        '<div class="snapshot-td-label">Beta</div></td>',
+        '<div class="snapshot-td-label">Beta</div></td>'
+        '<td class="snapshot-td2"><div class="snapshot-td-content">orphan</div></td>',
+        1,
+    )
+    with pytest.raises(FinvizParseError):
+        _parse_html(html)
+
+
 # --- header: identity and classification ------------------------------------
 
 
@@ -152,9 +197,8 @@ def test_ratings_relation() -> None:
     assert first["symbol"] == "AAPL"
     assert first["status"] == "Upgrade"
     assert first["analyst"] == "Redburn"
-    # Registry types rating as a numeric score (rating_raw keeps the text).
-    assert first["rating"] is None
-    assert first["rating_raw"] == "Neutral → Buy"
+    # Registry keeps the rating change as its text display (no numeric scale).
+    assert first["rating"] == "Neutral → Buy"
     assert first["price_target"] == 230.0
     # Temporal: Aug-17-26 is a complete date display -> exact midnight Eastern.
     assert first["published_at"] == dt.datetime(2026, 8, 17, 4, 0, tzinfo=dt.UTC)
@@ -217,9 +261,12 @@ def test_insider_relation() -> None:
 
 
 def test_insider_header_driven_column_order() -> None:
-    # The parser maps columns by header text, not position.
+    # The reordered fixture physically permutes insider header columns (with
+    # their cells); the parser must map by header text, not position.
     rows = _rows(_parse("stock-reordered.html").insider)
     assert rows[0]["cost"] == 310.95
+    assert rows[0]["owner"] == "Doe Jane"
+    assert rows[0]["transaction_date"] == dt.date(2026, 8, 25)
     assert rows[1]["transaction_type"] == "Buy"
 
 
@@ -333,6 +380,17 @@ def test_complete_page_is_complete_status() -> None:
     assert _parse().status.name == "COMPLETE"
 
 
+def test_complete_page_has_no_conversion_warnings_and_strict_passes() -> None:
+    # The verified fixture is standard content, not drift: a structurally
+    # complete page must parse warning-free (no conversion_failed) and pass
+    # strict_schema.
+    warnings: list[FetchWarning] = []
+    _parse(on_warning=warnings.append)
+    assert not [w for w in warnings if w.code == "conversion_failed"]
+    strict = _parse(strict_schema=True)
+    assert strict.status.name == "COMPLETE"
+
+
 # --- additive snapshot labels -> extra_fields + warning ------------------------
 
 
@@ -374,14 +432,101 @@ def test_missing_optional_regions_yield_none_and_empty_schema_helpers() -> None:
         quote_parser.parse_quote_page(html, fetched_at=FETCHED_AT, response_date=RESPONSE_DATE)
 
 
-def test_empty_relation_table_has_registered_schema() -> None:
-    # A present-but-empty region (e.g. no news rows) still yields the
-    # registered empty Arrow schema, not None.
-    html = _page().replace('<tr><td width="130" align="right">Today 05:25AM</td>', "", 1)
-    bundle = quote_parser.parse_quote_page(html, fetched_at=FETCHED_AT, response_date=RESPONSE_DATE)
+def test_all_news_rows_removed_keeps_empty_registered_table() -> None:
+    # Present structure with zero rows: the no-results state is positively
+    # recognized, so the relation keeps its registered empty Arrow table and
+    # the bundle stays COMPLETE (structure presence, not row count, decides).
+    html = _page()
+    start = html.index('<table width="100%" cellpadding="1"')
+    end = html.index("</table>", start) + len("</table>")
+    html = (
+        html[:start]
+        + (
+            '<table width="100%" cellpadding="1" cellspacing="0" border="0" '
+            'id="news-table" class="fullview-news-outer news-table" data-ticker="AAPL"></table>'
+        )
+        + html[end:]
+    )
+    bundle = _parse_html(html)
     assert bundle.news is not None
-    assert bundle.news.num_rows == 3
+    assert bundle.news.num_rows == 0
     assert bundle.news.schema.names == list(dataset_field_names("quote_news"))
+    assert bundle.status.name == "COMPLETE"
+
+
+def test_each_tabular_relation_present_but_empty_keeps_registered_schema() -> None:
+    # Every tabular relation: structure present, all rows removed -> empty
+    # registered table, never None.
+    def stripped(marker: str, replacement: str) -> str:
+        html = _page()
+        start = html.index(marker)
+        end = html.index("</table>", start) + len("</table>")
+        return html[:start] + replacement + html[end:]
+
+    empty_news = (
+        '<table width="100%" cellpadding="1" cellspacing="0" border="0" '
+        'id="news-table" class="fullview-news-outer news-table" data-ticker="AAPL"></table>'
+    )
+    empty_ratings = (
+        '<table width="100%" class="js-table-ratings styled-table-new" '
+        'cellpadding="0" cellspacing="0" border="0"><thead><tr>'
+        "<th>Date</th><th>Action</th><th>Analyst</th><th>Rating Change</th>"
+        "<th>Price Target Change</th></tr></thead></table>"
+    )
+    empty_insider = (
+        '<table cellpadding="0" cellspacing="0" width="100%" '
+        'class="body-table styled-table-new"><thead><tr><th>Insider Trading</th>'
+        "<th>Relationship</th><th>Date</th><th>Transaction</th><th>Cost</th>"
+        "<th>#Shares</th><th>Value ($)</th><th>#Shares Total</th>"
+        "<th>SEC Form 4</th></tr></thead></table>"
+    )
+    empty_signals = (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'class="fullview-links table-fixed"><tbody><tr>'
+        '<td class="js-quote-correlation-links-container">'
+        '<div class="flex"><div class="flex-1"></div></div></td></tr></tbody></table>'
+    )
+    cases = [
+        ('<table width="100%" class="js-table-ratings', empty_ratings),
+        ('<table width="100%" cellpadding="1"', empty_news),
+        ('<table cellpadding="0" cellspacing="0" width="100%"', empty_insider),
+        ('<table width="100%" cellpadding="0"', empty_signals),
+    ]
+    for marker, replacement in cases:
+        bundle = _parse_html(stripped(marker, replacement))
+        name = {
+            empty_ratings: "ratings",
+            empty_news: "news",
+            empty_insider: "insider",
+            empty_signals: "signals",
+        }[replacement]
+        table = getattr(bundle, name)
+        assert table is not None, name
+        assert table.num_rows == 0, name
+        assert table.schema.names == list(dataset_field_names(f"quote_{name}")), name
+
+
+def test_peers_and_etf_holders_present_but_empty_keep_registered_schema() -> None:
+    # Removing the ticker spans (but not the introducing Peers / Held by
+    # links) is a present-but-empty structure, not a missing region.
+    html = _page().replace(" data-boxover-ticker=", " data-gone-ticker=")
+    bundle = _parse_html(html)
+    for name in ("peers", "etf_holders"):
+        table = getattr(bundle, name)
+        assert table is not None, name
+        assert table.num_rows == 0, name
+        assert table.schema.names == list(dataset_field_names(f"quote_{name}")), name
+
+
+def test_absent_structure_still_means_missing_region() -> None:
+    # Contrast case: removing the structure itself (not its rows) is a
+    # missing optional region -> warning + None + PARTIAL.
+    html = _page().replace("js-table-ratings", "gone-ratings")
+    warnings: list[FetchWarning] = []
+    bundle = _parse_html(html, on_warning=warnings.append)
+    assert bundle.ratings is None
+    assert any(w.code == "missing_region" for w in warnings)
+    assert bundle.status.name == "PARTIAL"
 
 
 def test_empty_schema_shapes_for_every_relation() -> None:

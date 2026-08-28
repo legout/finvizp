@@ -122,7 +122,23 @@ def _news() -> str:
     )
 
 
-def _insider() -> str:
+def _insider(reordered: bool = False) -> str:
+    heads = [
+        "Insider Trading",
+        "Relationship",
+        "Date",
+        "Transaction",
+        "Cost",
+        "#Shares",
+        "Value ($)",
+        "#Shares Total",
+        "SEC Form 4",
+    ]
+    order = list(range(len(heads)))
+    if reordered:
+        # Physically permute two header columns; cells follow their headers.
+        order[4], order[5] = 5, 4
+
     def row(
         owner: str,
         rel: str,
@@ -135,14 +151,18 @@ def _insider() -> str:
         sec: str,
         filed: str,
     ) -> str:
-        return (
-            f'<tr class="fv-insider-row"><td><a href="insidertrading?oc=1">{owner}</a></td>'
-            f"<td>{rel}</td><td>{date}</td>"
-            f'<td class="transaction"><span>{trans}</span></td>'
-            f'<td class="value">{cost}</td><td class="value">{shares}</td>'
-            f'<td class="value">{value}</td><td class="value">{total}</td>'
-            f'<td><a href="{sec}" target="_blank">{filed}</a></td></tr>'
-        )
+        cells = [
+            f'<td><a href="insidertrading?oc=1">{owner}</a></td>',
+            f"<td>{rel}</td>",
+            f"<td>{date}</td>",
+            f'<td class="transaction"><span>{trans}</span></td>',
+            f'<td class="value">{cost}</td>',
+            f'<td class="value">{shares}</td>',
+            f'<td class="value">{value}</td>',
+            f'<td class="value">{total}</td>',
+            f'<td><a href="{sec}" target="_blank">{filed}</a></td>',
+        ]
+        return '<tr class="fv-insider-row">' + "".join(cells[i] for i in order) + "</tr>"
 
     body = row(
         "Doe Jane",
@@ -169,10 +189,9 @@ def _insider() -> str:
     )
     return (
         '<table cellpadding="0" cellspacing="0" width="100%" '
-        'class="body-table styled-table-new"><thead><tr><th>Insider Trading</th>'
-        "<th>Relationship</th><th>Date</th><th>Transaction</th><th>Cost</th>"
-        "<th>#Shares</th><th>Value ($)</th><th>#Shares Total</th>"
-        f"<th>SEC Form 4</th></tr></thead>{body}</table>"
+        'class="body-table styled-table-new"><thead><tr>'
+        + "".join(f"<th>{heads[i]}</th>" for i in order)
+        + f"</tr></thead>{body}</table>"
     )
 
 
@@ -250,11 +269,34 @@ def _header() -> str:
     )
 
 
-def _page(tables: list[str]) -> str:
+def _auxiliary_tables() -> list[str]:
+    """Six inert furniture tables that complete the verified sixteen.
+
+    The live stock page carries sixteen tables total; these represent the
+    title strip, overview/roadmap ticker links, quote links, footer, and
+    sponsor slots. They carry no parser markers, so none may leak into any
+    parsed relation.
+    """
+    return [
+        '<table class="fullview-title"><tr><td>AAPL - Sample Technologies Inc</td></tr></table>',
+        '<table class="ticker-links"><tr><td>'
+        '<a href="screener.ashx?v=111&amp;f=cap_large">Large Caps</a>: Overview</td></tr></table>',
+        '<table class="ticker-links"><tr><td>'
+        '<a href="screener.ashx?v=111&amp;f=ta_perf_1w">'
+        "1-Week Performers</a>: Roadmap</td></tr></table>",
+        '<table class="quote-links"><tr><td>'
+        '<a href="http://www.google.com/search?q=AAPL">Google</a></td></tr></table>',
+        '<table class="footer-links"><tr><td>Data provided for testing purposes</td></tr></table>',
+        '<table class="sponsor-table"><tr><td>sponsor placeholder</td></tr></table>',
+    ]
+
+
+def _page(tables: list[str], reordered: bool = False) -> str:
     return (
         "<!DOCTYPE html><html><head><title>AAPL - Sample Technologies Inc Stock"
         " Price and Quote</title></head><body>"
         + _header()
+        + _auxiliary_tables()[0]
         + _signals()
         + '<div class="screener_snapshot-table-wrapper js-snapshot-table-wrapper">'
         + "".join(tables)
@@ -267,7 +309,11 @@ def _page(tables: list[str]) -> str:
         + '<td class="fullview-profile quote_profile"><div class="quote_profile-bio">'
         "Sample Technologies, Inc. engages in the design and sale of imaginary "
         "devices for testing purposes. It operates through the Testing segment."
-        "</div></td>" + _insider() + _chart_links() + "</body></html>"
+        "</div></td>"
+        + _insider(reordered)
+        + "".join(_auxiliary_tables()[1:])
+        + _chart_links()
+        + "</body></html>"
     )
 
 
@@ -275,7 +321,7 @@ def write_fixtures() -> tuple[Path, Path]:
     current = HERE / "stock-current.html"
     reordered = HERE / "stock-reordered.html"
     current.write_text(_page(current_tables()), "utf-8")
-    reordered.write_text(_page(reordered_tables()), "utf-8")
+    reordered.write_text(_page(reordered_tables(), reordered=True), "utf-8")
     return current, reordered
 
 

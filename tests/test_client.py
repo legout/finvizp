@@ -498,9 +498,150 @@ async def test_default_client_emits_no_output(capsys: pytest.CaptureFixture[str]
 
 def test_owned_transport_construction_is_silent(capsys: pytest.CaptureFixture[str]) -> None:
     FinvizClient()  # real curl transport construction; must not log anything
-    captured = capsys.readouterr()
+
+
+# --- review regressions -------------------------------------------------------
+
+
+async def test_base_url_override_is_rejected_before_transport() -> None:
+    """Non-Finviz origins are rejected so cookies can never leak cross-origin."""
+    fake = FakeTransport()
+    cookies = {"sid": "secret"}
+    with pytest.raises(FinvizQueryError):
+        await _client(fake, base_url="https://example.invalid", auth_cookies=cookies).fetch("/x")
+    assert fake.calls == []  # nothing, least of all cookies, reached a transport
+
+
+class TrackedFake(FakeTransport):
+    """Counts concurrent in-flight requests."""
+
+    def __init__(self, *scripted: Any) -> None:
+        super().__init__(*scripted)
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def request(self, config: Any, stream_callback: Any = None) -> NormalizedResponse:
+        self.calls.append(config)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        await asyncio.sleep(0.02)
+        self.in_flight -= 1
+        return _resp()
+
+
+async def test_concurrency_limit_is_client_wide() -> None:
+    fake = TrackedFake()
+    client = _client(fake, concurrency=1)
+    await asyncio.gather(*(client.fetch("/quote.ashx") for _ in range(4)))
+    assert fake.max_in_flight == 1
+
+
+class SwitchingPool:
+    """Hands out a different proxy on every acquire to expose route switching."""
+
+    def __init__(self, *proxies: str) -> None:
+        self.proxies = list(proxies)
+        self.acquires = 0
+
+    async def acquire(self) -> str:
+        proxy = self.proxies[min(self.acquires, len(self.proxies) - 1)]
+        self.acquires += 1
+        return proxy
+
+    async def mark_success(self, proxy: str) -> None:
+        pass
+
+
+async def test_429_retry_keeps_the_first_pool_route() -> None:
+    pool = SwitchingPool("http://pool-1:1", "http://pool-2:2")
+    fake = FakeTransport(_resp(429), _resp(200, b"ok"))
+    client = _client(fake, retry_attempts=1, retry_backoff=0.0)
+    client._pool = pool  # injected fake pool; production builds ProxyPool equivalently
+    await client.fetch("/quote.ashx")
+    assert [call.proxy for call in fake.calls] == ["http://pool-1:1", "http://pool-1:1"]
+    assert pool.acquires == 1
+
+
+async def test_authenticated_calls_pin_one_pool_route() -> None:
+    pool = SwitchingPool("http://pool-1:1", "http://pool-2:2")
+    fake = FakeTransport(_resp(), _resp())
+    client = _client(fake, auth_cookies={"sid": "abc"})
+    client._pool = pool
+    await client.fetch("/quote.ashx")
+    await client.fetch("/quote.ashx")
+    assert [call.proxy for call in fake.calls] == ["http://pool-1:1"] * 2
+    assert [call.cookies for call in fake.calls] == [{"sid": "abc"}] * 2
+    assert pool.acquires == 1
+
+
+async def test_retry_success_and_exhaustion_emit_no_records(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    touches: list[Any] = []
+
+    def _record(*args: Any, **kwargs: Any) -> Any:
+        touches.append(args)
+        return 0
+
+    import loguru
+
+    monkeypatch.setattr(loguru.logger, "add", _record)
+    monkeypatch.setattr(loguru.logger, "remove", _record)
+
+    ok = FakeTransport(BackendError("boom"), _resp(200, b"ok"))
+    resp = await _client(ok, retry_attempts=1, retry_backoff=0.0).fetch("/quote.ashx")
+    assert resp.attempts == 2
+
+    exhausted = FakeTransport(BackendError("boom"), BackendError("boom"))
+    with pytest.raises(FinvizTransportError):
+        await _client(exhausted, retry_attempts=1, retry_backoff=0.0).fetch("/quote.ashx")
+
+    assert touches == []  # no log handlers attached; global logging untouched
+    captured = capfd.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+async def test_200_not_found_body_raises_not_found() -> None:
+    body = b"<html><head><title>Oops! Page Not Found</title></head></html>"
+    fake = FakeTransport(_resp(200, body))
+    with pytest.raises(FinvizNotFoundError):
+        await _client(fake).fetch("/quote.ashx")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<html><body>AAPL quote page with real data</body></html>",
+        b"<html><body>search notes: the word was not found in the glossary</body></html>",
+    ],
+)
+async def test_not_found_body_signature_has_no_false_positives(body: bytes) -> None:
+    fake = FakeTransport(_resp(200, body))
+    resp = await _client(fake).fetch("/quote.ashx")
+    assert resp.status_code == 200
+
+
+async def test_failure_event_attempts_equal_actual_backend_calls() -> None:
+    events: list[ClientEvent] = []
+    fake = FakeTransport(BackendError("boom"), BackendError("boom"), BackendError("boom"))
+    with pytest.raises(FinvizTransportError):
+        await _client(fake, retry_attempts=2, retry_backoff=0.0, on_event=events.append).fetch(
+            "/quote.ashx"
+        )
+    assert len(fake.calls) == 3
+    assert events[-1].attempts == 3  # was 4 before the off-by-one fix
+
+
+async def test_success_attempts_equal_actual_backend_calls() -> None:
+    events: list[ClientEvent] = []
+    fake = FakeTransport(BackendError("boom"), _resp(200, b"ok"))
+    resp = await _client(fake, retry_attempts=2, retry_backoff=0.0, on_event=events.append).fetch(
+        "/quote.ashx"
+    )
+    assert len(fake.calls) == 2
+    assert resp.attempts == 2
+    assert events[-1].attempts == 2
 
 
 async def test_owned_transport_is_closed_with_client() -> None:

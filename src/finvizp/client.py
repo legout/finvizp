@@ -18,10 +18,9 @@ from typing import Any
 
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
 from fastreq.backends.curl_cffi import CurlCffiBackend
-from fastreq.exceptions import BackendError, RetryableResponse, RetryExhaustedError
+from fastreq.exceptions import BackendError, RetryableResponse
 from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig
 from fastreq.utils.rate_limiter import AsyncRateLimiter, RateLimitConfig
-from fastreq.utils.retry import RetryConfig, RetryStrategy
 
 from finvizp.errors import (
     FinvizBlockedError,
@@ -40,8 +39,9 @@ __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
 BASE_URL = "https://finviz.com"
 _DEFAULT_BROWSER_PROFILE = "chrome"
 
-# Transient statuses fastreq classifies as retryable; Retry-After honored.
+# Transient statuses classified as retryable; Retry-After honored.
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+_UNPINNED = object()  # sentinel: no pool proxy acquired yet
 _ROUTE_PREFIX = "finviz-route-v1"
 _ELITE_PATH = re.compile(r"(?:^|/)(?:login\.aspx|elite\.aspx)$")
 _ELITE_HOST = re.compile(r"(?i)(?:^|\.)elite\.finviz\.com$")
@@ -67,10 +67,12 @@ _NEVER_RETRY: tuple[type[FinvizError], ...] = (
 )
 
 
-def _parse_retry_after(value: str | None) -> float | None:
-    """Parse integer-seconds or HTTP-date Retry-After values."""
-    if not value:
+def _parse_retry_after(value: str | float | None) -> float | None:
+    """Parse numeric, integer-seconds, or HTTP-date Retry-After values."""
+    if value is None or value == "":
         return None
+    if isinstance(value, (int, float)):
+        return float(value)
     try:
         return float(value.strip())
     except ValueError:
@@ -123,13 +125,9 @@ def _is_timeout_error(exc: BaseException) -> bool:
     return "timeout" in text or "timed out" in text
 
 
-class _FinvizRetryStrategy(RetryStrategy):
-    """fastreq retry strategy that also never retries typed finvizp verdicts."""
-
-    def _classify(self, error: Exception) -> tuple[bool, float | None]:
-        if isinstance(error, _NEVER_RETRY):
-            return False, None
-        return super()._classify(error)
+_NOT_FOUND_TITLE = re.compile(
+    r"<title>[^<]*(?:page (?:was )?not found|404 error)[^<]*</title>", re.I
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +222,8 @@ class FinvizClient:
     Args:
         transport: pre-built fastreq ``Backend`` (hermetic tests); it is
             driven by this client but never replaced by it.
-        base_url: fixed route origin; only scheme-less ``/path`` routes.
+        base_url: must be the canonical ``https://finviz.com`` origin; caller
+            cookies are never sent anywhere else.
         proxy: explicit proxy URL; ``False``/``""`` forces direct.
         proxies: explicit pool list; ``False``/``[]`` disables all discovery.
         auth_cookies: caller-supplied session state, sent per request only;
@@ -255,7 +254,10 @@ class FinvizClient:
         retry_backoff: float = 1.0,
         on_event: Callable[[ClientEvent], Any] | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        if (normalized := base_url.rstrip("/")) != BASE_URL:
+            msg = f"base_url must be {BASE_URL}, got {base_url!r}"
+            raise FinvizQueryError(msg)
+        self.base_url = normalized
         self.browser_profile = browser_profile
         self._auth_cookies: Mapping[str, str] = (
             MappingProxyType(dict(auth_cookies)) if auth_cookies else MappingProxyType({})
@@ -288,6 +290,7 @@ class FinvizClient:
                 self._pool = ProxyPool.from_env() or None
                 if self._pool is not None and self._pool.count() == 0:
                     self._pool = None
+        self._pinned_proxy: Any = _UNPINNED
 
         self._backend: Backend = (
             transport
@@ -299,6 +302,7 @@ class FinvizClient:
             if rate_limit is not None
             else None
         )
+        self._semaphore = asyncio.Semaphore(max(1, int(concurrency)))
         self._entered = False
 
     # --- lifecycle ---------------------------------------------------------
@@ -329,14 +333,21 @@ class FinvizClient:
         proxy = self._explicit_proxy or ("pool" if self._pool is not None else None)
         return f"{_ROUTE_PREFIX}:{_proxy_seed(proxy)}"
 
-    async def _resolve_proxy(self) -> str | None:
+    async def _acquire_proxy(self) -> str | None:
+        """Select the route's proxy once; the result is pinned for this client.
+
+        Authenticated state (cookies) is bound to one exit route: once a proxy
+        is acquired it is reused verbatim for every later request, so a pool
+        can never rotate the identity mid-session or after a 429. Failures of
+        the selection itself surface as transport errors.
+        """
         if self._force_direct:
             return None
         if self._explicit_proxy is not None:
             return self._explicit_proxy
-        if self._pool is not None:
-            return await self._pool.acquire()
-        return None
+        if self._pinned_proxy is _UNPINNED:
+            self._pinned_proxy = await self._pool.acquire() if self._pool is not None else None
+        return self._pinned_proxy
 
     def _emit(self, event: ClientEvent) -> None:
         if self._on_event is not None:
@@ -355,66 +366,80 @@ class FinvizClient:
         url = f"{self.base_url}{path}"
         query = dict(params or {})
         await self._ensure_entered()
-        strategy = _FinvizRetryStrategy(
-            RetryConfig(
-                max_retries=self._retry_attempts,
-                backoff_multiplier=self._retry_backoff,
-                max_delay=60.0,
+        attempts = 0
+        last_error: Exception | None = None
+
+        # Client-local retry loop: silent by design (no log records), pins one
+        # route for every attempt, and never retries typed finvizp verdicts.
+        # ponytail: re-implements fastreq RetryStrategy's 20-line loop so its
+        # loguru logging stays off; revisit if retry policy grows policies.
+        while True:
+            attempts += 1
+            try:
+                proxy = await self._acquire_proxy()
+                if self._limiter is not None:
+                    await self._limiter.acquire()
+                async with self._semaphore:
+                    response = await self._backend.request(
+                        RequestConfig(
+                            url=url,
+                            params=query,
+                            headers=self._headers(),
+                            cookies=dict(self._auth_cookies),
+                            timeout=self._timeout,
+                            proxy=proxy,
+                        )
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                retryable = not isinstance(exc, _NEVER_RETRY) and isinstance(
+                    exc, (BackendError, RetryableResponse)
+                )
+                if not retryable or attempts > self._retry_attempts:
+                    break
+                delay = _parse_retry_after(getattr(exc, "retry_after", None))
+                if delay is None:
+                    delay = min(60.0, self._retry_backoff * (2 ** (attempts - 1)))
+                await asyncio.sleep(delay)
+            else:
+                if response.status_code in _RETRYABLE_STATUSES:
+                    last_error = RetryableResponse(
+                        f"retryable status {response.status_code} from {url}",
+                        status_code=response.status_code,
+                        retry_after=_parse_retry_after(response.headers.get("retry-after")),
+                        url=url,
+                    )
+                    if attempts > self._retry_attempts:
+                        break
+                    delay = _parse_retry_after(getattr(last_error, "retry_after", None))
+                    if delay is None:
+                        delay = min(60.0, self._retry_backoff * (2 ** (attempts - 1)))
+                    await asyncio.sleep(delay)
+                    continue
+                if proxy is not None and self._pool is not None:
+                    await self._pool.mark_success(proxy)
+                return self._finish(
+                    endpoint=path,
+                    url=url,
+                    query=query,
+                    response=response,
+                    attempts=attempts,
+                )
+
+        self._emit(
+            ClientEvent(
+                endpoint=path,
+                ok=False,
+                attempts=attempts,
+                route_fingerprint=self._route_fingerprint(),
             )
         )
-        attempts = 0
-
-        async def attempt() -> NormalizedResponse:
-            nonlocal attempts
-            attempts += 1
-            proxy = await self._resolve_proxy()
-            if self._limiter is not None:
-                await self._limiter.acquire()
-            async with asyncio.Semaphore(self._concurrency):
-                response = await self._backend.request(
-                    RequestConfig(
-                        url=url,
-                        params=query,
-                        headers=self._headers(),
-                        cookies=dict(self._auth_cookies),
-                        timeout=self._timeout,
-                        proxy=proxy,
-                    )
-                )
-            if response.status_code in _RETRYABLE_STATUSES:
-                raise RetryableResponse(
-                    f"retryable status {response.status_code} from {url}",
-                    status_code=response.status_code,
-                    retry_after=_parse_retry_after(response.headers.get("retry-after")),
-                    url=url,
-                )
-            if proxy is not None and self._pool is not None:
-                await self._pool.mark_success(proxy)
-            return response
-
-        try:
-            response = await strategy.execute(attempt)
-        except asyncio.CancelledError:
-            raise
-        except RetryExhaustedError as exc:
-            attempts += 1
-            self._emit(
-                ClientEvent(
-                    endpoint=path,
-                    ok=False,
-                    attempts=attempts,
-                    route_fingerprint=self._route_fingerprint(),
-                )
-            )
-            raise self._classify_failure(
-                exc.last_error if isinstance(exc.last_error, Exception) else exc
-            ) from exc
-        return self._finish(
-            endpoint=path,
-            url=url,
-            query=query,
-            response=response,
-            attempts=attempts,
+        raise self._classify_failure(
+            last_error
+            if isinstance(last_error, Exception)
+            else FinvizTransportError("fetch failed")
         )
 
     def _headers(self) -> dict[str, str]:
@@ -452,6 +477,12 @@ class FinvizClient:
             )
         elif status == 404:
             error = FinvizNotFoundError("resource not found (404)", context={"endpoint": endpoint})
+        elif status == 200 and _NOT_FOUND_TITLE.search(response.text):
+            # Finviz serves soft-404s as 200 pages titled "Page was not found".
+            error = FinvizNotFoundError(
+                "resource not found (200 not-found page)",
+                context={"endpoint": endpoint},
+            )
         elif status != 200:
             error = FinvizTransportError(
                 f"provider returned status {status}", context={"endpoint": endpoint}

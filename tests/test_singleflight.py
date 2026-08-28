@@ -81,6 +81,18 @@ class SlowTransport(CountingTransport):
         return await CountingTransport.request(self, config, stream_callback)
 
 
+class CapturingTransport(CountingTransport):
+    """Records each request's proxy to expose the route the transport used."""
+
+    def __init__(self, *scripted: Any) -> None:
+        super().__init__(*scripted)
+        self.proxies: list[str | None] = []
+
+    async def request(self, config: Any, stream_callback: Any = None) -> NormalizedResponse:
+        self.proxies.append(config.proxy)
+        return await CountingTransport.request(self, config, stream_callback)
+
+
 def _client(fake: CountingTransport, **kwargs: Any) -> FinvizClient:
     return FinvizClient(transport=fake, retry_attempts=0, retry_backoff=0.0, **kwargs)
 
@@ -720,6 +732,50 @@ async def test_parser_and_schema_facets_reach_result_metadata() -> None:
     assert fake.calls == 1
     assert miss.metadata.parser_version == "7" and miss.metadata.schema_version == 42
     assert hit.metadata.parser_version == "7" and hit.metadata.schema_version == 42
+
+
+async def test_proxy_false_routes_direct_through_the_cache() -> None:
+    """Cache-enabled proxy=False must reach the transport direct, like cache=False."""
+    fake = CapturingTransport()
+    client = _client(fake, proxy="http://configured.example:8080", cache_ttl=60.0)
+    direct = await client._endpoint_op("/api/quote", proxy=False, parse=_parsed_quote)()
+    assert fake.proxies == [None]  # the explicitly requested direct route
+    await client._endpoint_op("/api/quote", proxy=False, parse=_parsed_quote)()
+    assert fake.calls == 1 and fake.proxies == [None]  # hit keeps the same route
+    assert direct.metadata.cache_hit is False
+    refresh = await client._endpoint_op(
+        "/api/quote", proxy=False, refresh=True, parse=_parsed_quote
+    )()
+    assert fake.calls == 2 and fake.proxies == [None, None]  # refresh stays direct
+    assert refresh.metadata.cache_hit is False
+    # A direct-route entry never shares a key with the client-config route.
+    default_route = await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake.calls == 3 and fake.proxies[-1] == "http://configured.example:8080"
+    assert default_route.metadata.cache_hit is False
+    await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake.calls == 3  # and its own entry is reusable (no 4th call)
+    assert client.invalidate("/api/quote", proxy=False) is True
+
+
+async def test_cache_false_proxy_false_routes_direct() -> None:
+    """The uncached control: proxy=False bypasses the configured proxy."""
+    fake = CapturingTransport()
+    client = _client(fake, proxy="http://configured.example:8080")
+    await client._endpoint_op("/api/quote", proxy=False, cache=False, parse=_parsed_quote)()
+    assert fake.proxies == [None]
+
+
+async def test_cached_pool_proxy_false_matches_uncached_direct_route() -> None:
+    """Pool client: proxy=False through the cache uses direct, not the pool."""
+    fake = CapturingTransport()
+    client = _client(fake, proxies=["http://pool-a:1"], cache_ttl=60.0)
+    await client._endpoint_op("/api/quote", proxy=False, parse=_parsed_quote)()
+    assert fake.proxies == [None]  # explicit False wins over the pool
+    await client._endpoint_op("/api/quote", proxy=False, parse=_parsed_quote)()
+    assert fake.calls == 1  # and the direct-route entry is reused
+    pool_call = await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake.calls == 2 and fake.proxies[-1] == "http://pool-a:1"  # pool key distinct
+    assert pool_call.metadata.cache_hit is False
 
 
 async def test_cancelled_leader_orphan_failure_never_reaches_the_loop_handler() -> None:

@@ -3,8 +3,8 @@
 Owns one fastreq ``Backend`` (transport seam), explicit same-origin routes,
 proxy precedence, caller-supplied auth isolation, SHA-256 hashing, bounded
 retries, typed response classification, and the parsed-result cache /
-single-flight layer. ``cache.py`` owns the store; this module owns the fetch
-integration, so the import below is TYPE_CHECKING-only to avoid a cycle.
+single-flight layer. ``cache.py`` owns the bounded LRU store of parsed
+immutable results; this module owns the fetch integration.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from time import monotonic
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
@@ -27,6 +27,9 @@ from fastreq.exceptions import BackendError, RetryableResponse
 from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig
 from fastreq.utils.rate_limiter import AsyncRateLimiter, RateLimitConfig
 
+# cache.py stores parsed FetchResult values and no longer imports this
+# module, so the import is ordinary and cycle-free.
+from finvizp.cache import CacheEntry, ResultCache
 from finvizp.errors import (
     _SENSITIVE_KEY,
     REDACTED,
@@ -43,9 +46,6 @@ from finvizp.errors import (
 )
 from finvizp.models import Artifact
 from finvizp.results import AccessTier, FetchResult
-
-if TYPE_CHECKING:
-    from finvizp.cache import ResultCache
 
 __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
 
@@ -390,11 +390,12 @@ class FinvizClient:
         retry_attempts: bounded retries for transient transport/5xx/429 only.
         retry_backoff: base seconds for exponential backoff (capped at 60s).
         on_event: opt-in diagnostic callback receiving ``ClientEvent`` values.
-        cache_ttl: seconds a classified response stays fresh; ``None`` (the
+        cache_ttl: seconds a parsed result stays fresh; ``None`` (the
             default) disables caching entirely.
-        cache: bounded LRU store of classified responses; one per client is
-            created when caching is first used. Callers may inject any object
-            with ``get``/``set``/``delete``/``clear``/``stats``/``make_key``.
+        cache: bounded LRU store of parsed immutable ``FetchResult`` values;
+            one per client is created when caching is first used. Callers may
+            inject any object with ``get``/``set``/``delete``/``clear``/
+            ``stats``/``make_key``.
         cache_max_bytes: approximate byte budget for the built-in cache.
         cache_max_entries: entry cap for the built-in cache.
         stale_if_error: opt-in; serve an expired cached response when an
@@ -518,9 +519,6 @@ class FinvizClient:
         self._route_lock = asyncio.Lock()
         self._entered = False
         self._cache_ttl = None if cache_ttl is None else max(0.0, float(cache_ttl))
-        # Runtime lazy import: cache.py imports ClientResponse from this
-        # module, so a module-level import would be circular.
-        from finvizp.cache import ResultCache
 
         # ``cache=False`` is a hard kill switch; ``cache=None``/``True`` use
         # the built-in bounded LRU; a store instance is injected as-is.
@@ -693,7 +691,12 @@ class FinvizClient:
         facets = _CacheFacets(
             path=path,
             query=effective_query,
-            proxy=route,
+            # Per-call False/URL overrides ride raw: they are self-describing
+            # route inputs, so both the key and the transport see the caller's
+            # explicit route (False must never degrade to client config).
+            # None carries no per-call intent, so the resolved route
+            # (explicit/pinned/force-direct) stands in for both.
+            proxy=proxy if proxy is not None else route,
             representation=representation,
             parser_version=parser_version,
             schema_version=schema_version,
@@ -785,7 +788,6 @@ class FinvizClient:
 
     def _store(self, facets: _CacheFacets, key: str, result: FetchResult[Any]) -> None:
         now = monotonic()
-        from finvizp.cache import CacheEntry
 
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled

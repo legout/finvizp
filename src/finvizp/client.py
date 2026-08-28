@@ -180,6 +180,12 @@ def _payload_size(data: Any) -> int:
         return len(data)
     if isinstance(data, _ARROW_TABLE_TYPES):
         return int(data.nbytes)
+    if isinstance(data, Mapping):
+        # Nested containers (e.g. QuoteBundle.snapshot_tables): tables inside
+        # mappings must be charged by nbytes, not their str() rendering.
+        return sum(_payload_size(k) + _payload_size(v) for k, v in data.items())
+    if isinstance(data, (list, tuple, set, frozenset)):
+        return sum(_payload_size(item) for item in data)
     if is_dataclass(data) and not isinstance(data, type):
         # Compound bundles: sum typed fields (tables dominate payload size).
         return sum(_payload_size(getattr(data, f.name)) for f in fields(data))

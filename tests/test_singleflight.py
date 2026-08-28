@@ -441,6 +441,49 @@ def test_compound_bundle_tables_count_toward_payload_size() -> None:
     assert _payload_size(bundle) >= big.nbytes
 
 
+def test_mapping_nested_arrow_tables_count_toward_payload_size() -> None:
+    big = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    assert _payload_size({"summary": big}) >= big.nbytes
+
+
+def test_sequence_nested_arrow_tables_count_toward_payload_size() -> None:
+    big = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    assert _payload_size((big, big)) >= 2 * big.nbytes
+
+
+def test_snapshot_tables_mapping_counts_toward_payload_size() -> None:
+    big = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    bundle = QuoteBundle(
+        symbol="AAPL",
+        fetched_at=datetime.now(UTC),
+        snapshot_tables={"summary": big},
+    )
+    assert _payload_size(bundle) >= big.nbytes
+
+
+async def test_overbudget_nested_table_bundle_is_not_retained() -> None:
+    big = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    assert big.nbytes >= 10_000
+
+    def _bundle_parser(response: ClientResponse) -> FetchResult[Any]:
+        bundle = QuoteBundle(
+            symbol="AAPL",
+            fetched_at=datetime.now(UTC),
+            snapshot_tables={"summary": big},
+        )
+        return FetchResult(bundle, _meta(response))
+
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0, cache_max_bytes=8_000)
+    op = client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_bundle_parser)
+    await op()
+    assert client._cache is not None
+    stats = client._cache.stats()
+    assert stats["approx_bytes"] <= 8_000  # 10 KB nested table must not be resident
+    assert stats["entries"] == 0
+    assert fake.calls == 1
+
+
 async def test_overbudget_arrow_results_are_not_retained() -> None:
     table = pa.table({"x": pa.array(["y" * 1000] * 10)})
     assert table.nbytes >= 10_000

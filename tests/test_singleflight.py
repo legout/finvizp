@@ -778,6 +778,50 @@ async def test_cached_pool_proxy_false_matches_uncached_direct_route() -> None:
     assert pool_call.metadata.cache_hit is False
 
 
+async def test_pinned_auth_route_never_leaks_to_direct_route_clients() -> None:
+    """Two same-scope clients sharing a cache: the auth pin must gate keys AND transport.
+
+    Client A pins its authenticated route through a per-call proxy; its later
+    default calls must be keyed (and transported) on that pinned route, so a
+    direct-route client B can never receive A's proxied response as a hit.
+    """
+    shared: ResultCache = ResultCache()
+    fake_a = CapturingTransport()
+    fake_b = CapturingTransport()
+    client_a = _client(fake_a, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
+    client_b = _client(fake_b, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
+    await client_a._endpoint_op(
+        "/api/quote", proxy="http://proxy-a.example:8080", parse=_parsed_quote
+    )()
+    assert fake_a.proxies == ["http://proxy-a.example:8080"]
+    # A's default calls ride the pinned authenticated route (key and transport).
+    await client_a._endpoint_op("/api/quote", parse=_parsed_quote)()
+    await client_a._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_parsed_quote)()
+    assert fake_a.proxies[-1] == "http://proxy-a.example:8080"
+    # B's direct default call must make a real direct transport, never hit
+    # A's pinned-route entry through a direct-route key.
+    result_b = await client_b._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake_b.calls == 1 and fake_b.proxies == [None]
+    assert result_b.metadata.cache_hit is False
+
+
+async def test_auth_pin_collapses_default_calls_to_one_route_entry() -> None:
+    """After the pin, default calls and invalidation address the pinned route."""
+    shared: ResultCache = ResultCache()
+    fake = CapturingTransport()
+    client = _client(fake, auth_cookies={"sid": "aaa"}, cache=shared, cache_ttl=60.0)
+    await client._endpoint_op(
+        "/api/quote", proxy="http://proxy-a.example:8080", parse=_parsed_quote
+    )()
+    await client._endpoint_op("/api/quote", parse=_parsed_quote)()  # rides the pin: same entry
+    assert fake.calls == 1
+    assert shared.stats()["entries"] == 1  # one route, one entry — never a phantom direct key
+    assert client.invalidate("/api/quote") is True  # default facets resolve to the pinned route
+    assert client.invalidate("/api/quote") is False  # nothing left at that route
+    await client._endpoint_op("/api/quote", parse=_parsed_quote)()
+    assert fake.calls == 2  # the pinned-route entry was really dropped
+
+
 async def test_cancelled_leader_orphan_failure_never_reaches_the_loop_handler() -> None:
     """A cancelled creator + failing flight must not warn the loop, but joiners
     still receive the error."""

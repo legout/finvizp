@@ -569,11 +569,17 @@ class FinvizClient:
 
     def _route_fingerprint(self, proxy: str | object | None = _UNPINNED) -> str:
         if proxy is _UNPINNED:
-            proxy = self._explicit_proxy
-            if proxy is None and self._pinned_proxy is not _UNPINNED:
-                proxy = self._pinned_proxy
-            elif proxy is None and self._pool is not None:
-                proxy = "pool"
+            # The authenticated route pin wins over every configured default:
+            # once auth state exists it is bound to one exit route, so key
+            # identities must name that route, never the pre-pin default.
+            if self._auth_cookies and self._auth_route is not _UNPINNED:
+                proxy = self._auth_route
+            else:
+                proxy = self._explicit_proxy
+                if proxy is None and self._pinned_proxy is not _UNPINNED:
+                    proxy = self._pinned_proxy
+                elif proxy is None and self._pool is not None:
+                    proxy = "pool"
         return f"{_ROUTE_PREFIX}:{_proxy_seed(proxy if isinstance(proxy, str) else None)}"
 
     @staticmethod
@@ -590,40 +596,15 @@ class FinvizClient:
         msg = "proxy must be a URL, False, or None"
         raise FinvizQueryError(msg)
 
-    async def _acquire_route(self, override: str | object | None = _UNPINNED) -> str | None:
-        """Resolve the route's proxy without (re)acquiring from the pool.
-
-        Cache-key identity must match what the transport will actually use:
-        an explicit or pinned route is resolved verbatim, and only a
-        still-unpinned pool route falls back to one pool acquisition — the
-        selection itself pins it, so later keys and transports agree. Failures
-        of the selection surface as transport errors.
-        """
-        async with self._route_lock:
-            if override is not _UNPINNED:
-                selected = override
-            elif self._force_direct:
-                selected = None
-            elif self._explicit_proxy is not None:
-                selected = self._explicit_proxy
-            else:
-                if self._pinned_proxy is _UNPINNED:
-                    self._pinned_proxy = (
-                        await self._pool.acquire() if self._pool is not None else None
-                    )
-                selected = self._pinned_proxy
-            if selected is not None and not isinstance(selected, str):
-                msg = "invalid proxy URL"
-                raise FinvizQueryError(msg)  # e.g. a per-call int that typed validation missed
-            return selected
-
     async def _acquire_proxy(self, override: str | object | None = _UNPINNED) -> str | None:
         """Select the route's proxy once; the result is pinned for this client.
 
         Authenticated state (cookies) is bound to one exit route: once a proxy
         is acquired it is reused verbatim for every later request, so a pool
         can never rotate the identity mid-session or after a 429. Failures of
-        the selection itself surface as transport errors.
+        the selection itself surface as transport errors. The cache path calls
+        this same method, so keys, transport, and invalidation all resolve one
+        auth-aware route.
         """
         async with self._route_lock:
             if override is not _UNPINNED:
@@ -687,7 +668,9 @@ class FinvizClient:
         parse = _facets_parse(parse, parser_version, schema_version)
         if not cache or self._cache_ttl is None or store is None:
             return parse(await self._fetch(path, params=effective_query, proxy=proxy))
-        route = await self._acquire_route(self._normalize_per_call_proxy(proxy))
+        # The auth-aware resolver is shared with the transport, so keys and
+        # requests can never disagree about the route (review round 6).
+        route = await self._acquire_proxy(self._normalize_per_call_proxy(proxy))
         facets = _CacheFacets(
             path=path,
             query=effective_query,

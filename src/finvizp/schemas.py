@@ -134,11 +134,25 @@ def _parse_field(dataset_name: str, payload: dict[str, Any]) -> Field:
         )
         raise FinvizDataError(msg)
     if not isinstance(nullable, bool):
-        msg = f"dataset {dataset_name!r} field {fname!r} nullable must be a bool"
+        msg = (
+            f"dataset {dataset_name!r} field {fname!r} 'nullable' must be a bool, got {nullable!r}"
+        )
         raise FinvizDataError(msg)
-    key = bool(payload.get("key", False))
-    temporal = bool(payload.get("temporal", False))
-    raw = bool(payload.get("raw", False))
+    hints = {
+        "key": payload.get("key", False),
+        "temporal": payload.get("temporal", False),
+        "raw": payload.get("raw", False),
+    }
+    for hint_name, hint_value in hints.items():
+        if not isinstance(hint_value, bool):
+            msg = (
+                f"dataset {dataset_name!r} field {fname!r} {hint_name!r} must be a bool, "
+                f"got {hint_value!r}"
+            )
+            raise FinvizDataError(msg)
+    key = hints["key"]
+    temporal = hints["temporal"]
+    raw = hints["raw"]
     if temporal != (unit in {"date", "timestamp"}):
         msg = (
             f"dataset {dataset_name!r} field {fname!r}: temporal hint must "

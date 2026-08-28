@@ -275,3 +275,32 @@ def test_registry_payload_rejects_missing_common_fields() -> None:
 def test_parse_dataset_preserves_field_order() -> None:
     ds = schemas.parse_dataset(_payload())
     assert list(ds.field_names) == ["symbol", "extra_fields", "fetched_at"]
+
+
+@pytest.mark.parametrize("hint", ["key", "temporal", "nullable"])
+def test_registry_payload_rejects_non_boolean_hints(hint: str) -> None:
+    """Hint flags are JSON booleans; string \"false\" must not coerce to True."""
+    fields = [dict(f) for f in _payload()["fields"]]  # type: ignore[arg-type]
+    for field in fields:
+        field[hint] = "false"  # type: ignore[literal-required]
+    with pytest.raises(FinvizDataError, match=f"{hint!r} must be a bool"):
+        schemas.parse_dataset(_payload(fields=fields))
+
+
+def test_registry_payload_rejects_falsy_non_boolean_hint() -> None:
+    """``0`` coerces to False today; temporal=0 on a timestamp must still reject."""
+    fields = _payload()["fields"]  # type: ignore[list-item]
+    fields = [dict(f) for f in fields]  # type: ignore[arg-type]
+    fields[-1]["temporal"] = 0  # type: ignore[index, literal-required]
+    with pytest.raises(FinvizDataError, match="'temporal' must be a bool"):
+        schemas.parse_dataset(_payload(fields=fields))
+
+
+def test_registry_payload_rejects_non_boolean_raw_hint() -> None:
+    fields = [
+        *_payload()["fields"],  # type: ignore[list-item]
+        {"name": "price", "type": "float64", "unit": "number", "nullable": True, "raw": "false"},
+        {"name": "price_raw", "type": "string", "unit": "raw", "nullable": True},
+    ]
+    with pytest.raises(FinvizDataError, match="'raw' must be a bool"):
+        schemas.parse_dataset(_payload(fields=fields))

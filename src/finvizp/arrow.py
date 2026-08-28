@@ -128,6 +128,12 @@ def build_table(
             converted, parse_status = _convert(
                 field, value, dataset_name, anchor_date, warnings, strict_schema
             )
+            if converted is None and not field.nullable:
+                msg = (
+                    f"field {key!r} on dataset {dataset_name!r} is non-nullable but "
+                    f"row {position} normalized to null (missing, null, or sentinel)"
+                )
+                raise FinvizDataError(msg)
             columns[key].append(converted)
             if parse_status is not None:
                 status_of[key] = parse_status
@@ -195,9 +201,8 @@ def _convert(
         )
         # Ordinary missing data is not drift: null even under strict_schema.
         return None, None
-    cleaned = _COMMA.sub("", text)
     try:
-        converted, parse_status = _typed(field, cleaned, anchor_date)
+        converted, parse_status = _typed(field, text, anchor_date)
     except (ValueError, TypeError) as exc:
         message = f"cannot convert {text!r} to unit {field.unit!r} on field {field.name!r}: {exc}"
         if strict_schema:
@@ -253,20 +258,34 @@ def _parse_eastern(
 
 
 def _typed(field: schemas.Field, text: str, anchor_date: dt.date) -> tuple[Any, str | None]:
+    if field.unit == "text":
+        return text, None
+    # Numeric cleaning applies only to numeric units; text keeps its display.
+    cleaned = _COMMA.sub("", text)
     if field.unit == "count":
-        return int(text), None
+        # True counts stay int64: plain or compact displays, base units only.
+        if _COMPACT.match(cleaned):
+            suffix = _COMPACT_SUFFIX.search(cleaned)
+            if suffix is not None:
+                scale = _SUFFIX_SCALE[suffix.group(1).upper()]
+                cleaned = str(float(_COMPACT_SUFFIX.sub("", cleaned)) * scale)
+        value = float(cleaned)
+        if not value.is_integer():
+            msg = f"non-integral count {text!r}"
+            raise ValueError(msg)
+        return int(value), None
     if field.unit == "compact":
-        if not _COMPACT.match(text):
-            return float(text), None
-        suffix = _COMPACT_SUFFIX.search(text)
+        if not _COMPACT.match(cleaned):
+            return float(cleaned), None
+        suffix = _COMPACT_SUFFIX.search(cleaned)
         if suffix is None:
-            return float(text), None
+            return float(cleaned), None
         scale = _SUFFIX_SCALE[suffix.group(1).upper()]
-        return float(_COMPACT_SUFFIX.sub("", text)) * scale, None
+        return float(_COMPACT_SUFFIX.sub("", cleaned)) * scale, None
     if field.unit == "percent":
-        return float(_PERCENT.sub("", text)) / 100.0, None
+        return float(_PERCENT.sub("", cleaned)) / 100.0, None
     if field.unit == "number":
-        return float(text), None
+        return float(cleaned), None
     if field.unit == "date":
         if not _DATE.match(text):
             msg = f"expected ISO date (YYYY-MM-DD), got {text!r}"

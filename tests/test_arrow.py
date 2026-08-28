@@ -409,3 +409,82 @@ def test_explicit_datetime_timestamp_is_exact() -> None:
     assert row["published_at"] == dt.datetime(2026, 8, 20, 14, 0, tzinfo=dt.UTC)
     assert row["published_at_status"] == "exact"
     assert row["published_at_raw"] == "2026-08-20 10:00:00"
+
+
+# --- review run 48: items 1-4 -------------------------------------------------
+
+
+def test_text_commas_preserved() -> None:
+    """Item 1: numeric comma cleaning must never touch text columns."""
+    table = _build(
+        "symbol_search",
+        [{"symbol": "BRK.B", "company": "Berkshire Hathaway, Inc.", "exchange": "NYSE"}],
+    )
+    row = _rows(table)[0]
+    assert row["company"] == "Berkshire Hathaway, Inc."
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "Fed, ECB meet", "url": "u"}],
+        on_warning=records.append,
+    )
+    assert _rows(table)[0]["title"] == "Fed, ECB meet"
+    assert records == []
+
+
+def test_non_nullable_field_null_rejected() -> None:
+    """Item 2: null in a registry non-null field is a typed error, not a null row."""
+    with pytest.raises(FinvizDataError, match="symbol"):
+        _build("symbol_search", [{"symbol": None}])
+    with pytest.raises(FinvizDataError, match="title"):
+        _build("quote_news", [{"symbol": "AAPL", "title": None, "url": "u"}])
+    # required-field null paths: missing key, sentinel value, conversion-to-none
+    with pytest.raises(FinvizDataError, match="symbol"):
+        _build("symbol_search", [{"company": "Apple"}])
+    with pytest.raises(FinvizDataError, match="title"):
+        _build("quote_news", [{"symbol": "AAPL", "title": "N/A", "url": "u"}])
+    with pytest.raises(FinvizDataError, match="statement_kind"):
+        _build(
+            "statements",
+            [
+                {
+                    "symbol": "AAPL",
+                    "statement_kind": "---",
+                    "periodicity": "q",
+                    "period_label": "Q2",
+                    "metric": "rev",
+                    "value": "1",
+                }
+            ],
+        )
+
+
+def test_compact_count_normalized_to_int64() -> None:
+    """Item 3: compact count displays become base-unit int64; raw retained."""
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "volume": "1.5M", "average_volume": "45,678K"}],
+    )
+    assert table.schema.field("volume").type == pa.int64()
+    row = _rows(table)[0]
+    assert row["volume"] == 1_500_000
+    assert row["volume_raw"] == "1.5M"
+    assert row["average_volume"] == 45_678_000
+    assert row["average_volume_raw"] == "45,678K"
+    # plain integers and negatives still work
+    table = _build("quote_peers", [{"symbol": "AAPL", "peer": "MSFT", "rank": "3"}])
+    assert _rows(table)[0]["rank"] == 3
+    # non-integral compact counts are rejected deterministically (raw companion)
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "volume": "1.23456789M"}],
+        on_warning=records.append,
+    )
+    row = _rows(table)[0]
+    assert row["volume"] is None
+    assert row["volume_raw"] == "1.23456789M"
+    assert any(w.code == "conversion_failed" for w in records)
+    # invalid count on a field without a companion raises
+    with pytest.raises(FinvizDataError):
+        _build("quote_peers", [{"symbol": "AAPL", "peer": "MSFT", "rank": "many"}])

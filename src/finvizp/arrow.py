@@ -10,6 +10,7 @@ promotion to typed errors.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping
 from decimal import Decimal
@@ -73,8 +74,8 @@ def build_table(
     kept as raw + ``ambiguous`` status.
     """
     dataset = schemas.dataset(dataset_name)
-    if fetched_at.tzinfo is None:
-        msg = "fetched_at must be timezone-aware"
+    if not isinstance(fetched_at, dt.datetime) or fetched_at.tzinfo is None:
+        msg = "fetched_at must be a timezone-aware datetime"
         raise FinvizDataError(msg)
     if response_date is None:
         # Only a time-only display actually needs an anchor; the review work
@@ -86,8 +87,11 @@ def build_table(
             msg = f"unknown response_date sentinel {response_date!r}"
             raise FinvizDataError(msg)
         anchor_date = fetched_at.astimezone(_EASTERN).date()
-    else:
+    elif isinstance(response_date, dt.date) and not isinstance(response_date, dt.datetime):
         anchor_date = response_date
+    else:
+        msg = f"response_date must be a dt.date, 'fetched_at', or None, got {response_date!r}"
+        raise FinvizDataError(msg)
     fmap = dataset.field_map
     warnings: list[FetchWarning] = []
 
@@ -101,21 +105,11 @@ def build_table(
             raise FinvizDataError(msg)
         extra: list[tuple[str, str]] = []
         status_of: dict[str, str] = {}
+        known: dict[str, Any] = {}
+        unknown: list[tuple[str, Any]] = []
         for key, value in row.items():
-            field = fmap.get(str(key))
-            if field is None:
-                warnings.append(
-                    FetchWarning(
-                        code="unknown_field",
-                        message=f"unknown field {key!r} on dataset {dataset_name!r}",
-                        symbol=str(row.get("symbol")) if row.get("symbol") is not None else None,
-                        endpoint=dataset_name,
-                    )
-                )
-                if strict_schema:
-                    msg = f"unknown field {key!r} on dataset {dataset_name!r} (strict_schema=True)"
-                    raise FinvizDataError(msg)
-                extra.append((str(key), "" if value is None else str(value)))
+            if fmap.get(str(key)) is None:
+                unknown.append((str(key), value))
                 continue
             if key == "fetched_at" or (key == "extra_fields" and fmap.get(key)):
                 msg = (
@@ -129,37 +123,59 @@ def build_table(
                     "field and cannot be set directly"
                 )
                 raise FinvizDataError(msg)
-            converted, parse_status = _convert(
-                field, value, dataset_name, anchor_date, warnings, strict_schema
-            )
-            if converted is None and not field.nullable:
-                msg = (
-                    f"field {key!r} on dataset {dataset_name!r} is non-nullable but "
-                    f"row {position} normalized to null (missing, null, or sentinel)"
+            known[str(key)] = value
+        # Deterministic construction: equivalent rows must yield identical Arrow
+        # data and warnings regardless of source key order, so drift is
+        # reported in canonical field-name order and known fields are
+        # processed in registry order below.
+        unknown.sort(key=lambda entry: entry[0])
+        for key, value in unknown:
+            warnings.append(
+                FetchWarning(
+                    code="unknown_field",
+                    message=f"unknown field {key!r} on dataset {dataset_name!r}",
+                    symbol=str(row.get("symbol")) if row.get("symbol") is not None else None,
+                    endpoint=dataset_name,
                 )
+            )
+            if strict_schema:
+                msg = f"unknown field {key!r} on dataset {dataset_name!r} (strict_schema=True)"
                 raise FinvizDataError(msg)
-            columns[key].append(converted)
-            if parse_status is not None:
-                status_of[key] = parse_status
-            raw_name = f"{key}_raw"
-            if field.raw and raw_name in fmap:
-                # Companions retain the lossless source display, always.
-                columns[raw_name].append(None if value is None else str(value))
+            extra.append((key, "" if value is None else str(value)))
         for field in dataset.fields:
-            if field.name in row or field.name == "extra_fields":
+            name = field.name
+            if name in known:
+                value = known[name]
+                converted, parse_status = _convert(
+                    field, value, dataset_name, anchor_date, warnings, strict_schema
+                )
+                if converted is None and not field.nullable:
+                    msg = (
+                        f"field {name!r} on dataset {dataset_name!r} is non-nullable but "
+                        f"row {position} normalized to null (missing, null, or sentinel)"
+                    )
+                    raise FinvizDataError(msg)
+                columns[name].append(converted)
+                if parse_status is not None:
+                    status_of[name] = parse_status
+                raw_name = f"{name}_raw"
+                if field.raw and raw_name in fmap:
+                    # Companions retain the lossless source display, always.
+                    columns[raw_name].append(None if value is None else str(value))
                 continue
-            if field.unit == "raw" and field.name.removesuffix("_raw") in row:
+            if name == "extra_fields":
+                continue  # filled after the loop
+            if field.unit == "raw" and name.removesuffix("_raw") in known:
                 continue  # companion already mirrored from its base field
-            if field.name.endswith("_status") and field.name[: -len("_status")] in status_of:
+            if name.endswith("_status") and name[: -len("_status")] in status_of:
                 continue  # parse status filled from the temporal conversion below
             if field.nullable:
-                columns[field.name].append(None)
-            elif field.name == "fetched_at":
-                columns[field.name].append(fetched_at)
+                columns[name].append(None)
+            elif name == "fetched_at":
+                columns[name].append(fetched_at)
             else:
                 msg = (
-                    f"row {position} of dataset {dataset_name!r} is missing required "
-                    f"field {field.name!r}"
+                    f"row {position} of dataset {dataset_name!r} is missing required field {name!r}"
                 )
                 raise FinvizDataError(msg)
         for base_name, status in status_of.items():
@@ -265,6 +281,13 @@ def _parse_eastern(
     return naive.replace(tzinfo=_EASTERN).astimezone(dt.UTC), exact_status
 
 
+def _finite(value: float, display: str) -> float:
+    """Reject non-finite float results (NaN/Infinity spellings are drift)."""
+    if not math.isfinite(value):
+        raise ValueError(f"non-finite numeric display {display!r}")
+    return value
+
+
 def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tuple[Any, str | None]:
     if field.unit == "text":
         return text, None
@@ -290,17 +313,20 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tupl
         return value, None
     if field.unit == "compact":
         if not _COMPACT.match(cleaned):
-            return float(cleaned), None
+            return _finite(float(cleaned), text), None
         suffix = _COMPACT_SUFFIX.search(cleaned)
         if suffix is None:
-            return float(cleaned), None
-        return float(
-            Decimal(_COMPACT_SUFFIX.sub("", cleaned)) * _SUFFIX_SCALE[suffix.group(1).upper()]
+            return _finite(float(cleaned), text), None
+        return _finite(
+            float(
+                Decimal(_COMPACT_SUFFIX.sub("", cleaned)) * _SUFFIX_SCALE[suffix.group(1).upper()]
+            ),
+            text,
         ), None
     if field.unit == "percent":
-        return float(_PERCENT.sub("", cleaned)) / 100.0, None
+        return _finite(float(_PERCENT.sub("", cleaned)) / 100.0, text), None
     if field.unit == "number":
-        return float(cleaned), None
+        return _finite(float(cleaned), text), None
     if field.unit == "date":
         if not _DATE.match(text):
             msg = f"expected ISO date (YYYY-MM-DD), got {text!r}"

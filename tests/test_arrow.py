@@ -566,3 +566,70 @@ def test_response_date_not_needed_without_time_only() -> None:
             [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
             fetched_at=NOW,
         )
+
+
+# --- review run 53: items 1-3 -------------------------------------------------
+
+
+def test_non_finite_numeric_displays_are_drift() -> None:
+    """Run-53 item 1: NaN/Infinity spellings never become silent float values."""
+    for dataset, row, field in (
+        ("quote_snapshot", {"symbol": "AAPL", "price": "NaN"}, "price"),
+        ("symbol_search", {"symbol": "AAPL", "market_cap": "Infinity"}, "market_cap"),
+        ("symbol_search", {"symbol": "AAPL", "div_yield": "-Infinity%"}, "div_yield"),
+    ):
+        records: list[FetchWarning] = []
+        table = _build(dataset, [row], on_warning=records.append)
+        assert _rows(table)[0][field] is None, (dataset, field)
+        assert _rows(table)[0][f"{field}_raw"] == row[field]
+        assert any(w.code == "conversion_failed" for w in records), (dataset, field)
+        with pytest.raises(FinvizDataError):
+            _build(dataset, [row], strict_schema=True)
+    # recognized null-like spelling with a finite prefix still fails, not nan
+    records: list[FetchWarning] = []
+    table = _build(
+        "quote_snapshot", [{"symbol": "AAPL", "price": "nan"}], on_warning=records.append
+    )
+    assert _rows(table)[0]["price"] is None
+    assert any(w.code == "conversion_failed" for w in records)
+
+
+def test_extra_fields_are_canonically_ordered() -> None:
+    """Run-53 item 2: input key insertion order never changes Arrow data."""
+    base = {"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}
+    rows = [dict(base, zeta="1", alpha="2"), dict(base, alpha="2", zeta="1")]
+    t1 = _build("quote_news", [rows[0]])
+    t2 = _build("quote_news", [rows[1]])
+    assert t1.equals(t2)
+    assert _rows(t1)[0]["extra_fields"] == [("alpha", "2"), ("zeta", "1")]
+    # drift warnings follow the same canonical field order
+    seen: list[str] = []
+
+    def _record(w: FetchWarning) -> None:
+        if w.code == "unknown_field":
+            seen.append(str(w.message))
+
+    _build("quote_news", [rows[0]], on_warning=_record)
+    assert seen == sorted(seen)
+
+
+def test_provenance_argument_types_are_validated() -> None:
+    """Run-53 item 3: bad fetched_at/response_date types raise the typed error."""
+    with pytest.raises(FinvizDataError, match="fetched_at"):
+        fa.build_table("symbol_universe", [{"symbol": "AAPL"}], fetched_at=dt.date(2026, 8, 27))  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError, match="fetched_at"):
+        fa.build_table("symbol_universe", [], fetched_at="2026-08-27")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError, match="response_date"):
+        fa.build_table(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+            fetched_at=NOW,
+            response_date=42,  # type: ignore[arg-type]
+        )
+    with pytest.raises(FinvizDataError, match="response_date"):
+        fa.build_table(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
+            fetched_at=NOW,
+            response_date="tomorrow",  # type: ignore[arg-type]
+        )

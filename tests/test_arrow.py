@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Iterable, Iterator, Mapping
 from decimal import localcontext
 
 import pyarrow as pa
@@ -18,7 +19,7 @@ NOW = dt.datetime(2026, 8, 27, 14, 30, tzinfo=dt.UTC)
 RESPONSE_DATE = dt.date(2026, 8, 27)
 
 
-def _build(dataset: str, rows: list[dict[str, object]], **kwargs: object) -> pa.Table:
+def _build(dataset: str, rows: Iterable[Mapping[str, object]], **kwargs: object) -> pa.Table:
     if "response_date" not in kwargs:
         kwargs["response_date"] = RESPONSE_DATE
     return fa.build_table(dataset, rows, fetched_at=NOW, **kwargs)  # type: ignore[arg-type]
@@ -159,6 +160,57 @@ def test_extra_fields_typed_as_map() -> None:
     assert pa.types.is_map(table.schema.field("extra_fields").type)
 
 
+def test_raw_overrides_validation() -> None:
+    """Override plumbing: unknown keys, count mismatches, and non-string values are typed errors."""
+    # key that is not a raw-declared base field
+    with pytest.raises(FinvizDataError, match="raw override"):
+        _build("quote_snapshot", [{"symbol": "AAPL"}], raw_overrides={"company": ["x"]})
+    # derived key
+    with pytest.raises(FinvizDataError, match="raw override"):
+        _build("quote_snapshot", [{"symbol": "AAPL"}], raw_overrides={"price_raw": ["x"]})
+    # count mismatch
+    with pytest.raises(FinvizDataError, match="1 values for 2 rows"):
+        _build(
+            "quote_snapshot",
+            [{"symbol": "AAPL"}, {"symbol": "MSFT"}],
+            raw_overrides={"price": ["1.00"]},
+        )
+    # non-string sequence member
+    with pytest.raises(FinvizDataError, match="string"):
+        _build("quote_snapshot", [{"symbol": "AAPL"}], raw_overrides={"price": [123.0]})
+    # non-string/sequence value
+    with pytest.raises(FinvizDataError, match="string"):
+        _build("quote_snapshot", [{"symbol": "AAPL"}], raw_overrides={"price": "232.04"})
+    # a valid override wins over the normalized shape
+    table = _build(
+        "quote_snapshot",
+        [{"symbol": "AAPL", "ex_dividend_date": "2026-08-10"}],
+        raw_overrides={"ex_dividend_date": ["Aug 10, 2026"]},
+    )
+    row = _rows(table)[0]
+    assert row["ex_dividend_date"] == dt.date(2026, 8, 10)
+    assert row["ex_dividend_date_raw"] == "Aug 10, 2026"
+    # empty rows + empty overrides stay fine
+    table = _build("quote_snapshot", [], raw_overrides={})
+    assert table.num_rows == 0
+
+
+def test_builder_streams_rows_without_raw_overrides() -> None:
+    """No overrides: a generator input is consumed lazily, exactly once."""
+
+    def _gen() -> Iterator[dict[str, object]]:
+        yield {"symbol": "AAPL"}
+        yield {"symbol": "MSFT"}
+
+    stream = _gen()
+    streamed = _build("symbol_universe", stream)
+    listed = _build("symbol_universe", [{"symbol": "AAPL"}, {"symbol": "MSFT"}])
+    assert streamed.equals(listed)
+    assert streamed.num_rows == 2
+    # exactly-once: re-iterating the exhausted generator yields nothing more
+    assert list(stream) == []
+
+
 def test_strict_schema_promotes_drift_to_errors() -> None:
     with pytest.raises(FinvizDataError):
         _build("symbol_search", [{"symbol": "AAPL", "brand_new_ratio": "3.5%"}], strict_schema=True)
@@ -282,9 +334,10 @@ def test_time_only_parse_status_and_raw() -> None:
         "quote_news",
         [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
         response_date=dt.date(2026, 8, 20),
+        raw_overrides={"published_at": ["Today 10:00AM"]},
     )
     row = _rows(table)[0]
-    assert row["published_at_raw"] == "10:00"
+    assert row["published_at_raw"] == "Today 10:00AM"
     assert row["published_at_status"] == "anchored"  # date assumed from response
 
 

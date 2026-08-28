@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -53,6 +53,7 @@ def build_table(
     response_date: dt.date | None = None,
     strict_schema: bool = False,
     on_warning: WarningCallback | None = None,
+    raw_overrides: Mapping[str, Sequence[str]] | None = None,
 ) -> Any:
     """Build a deterministic Arrow table from source-near row mappings.
 
@@ -66,7 +67,10 @@ def build_table(
     date and is required only when a time-only display is actually converted
     (``"fetched_at"`` opts into using the provenance timestamp's US-Eastern
     date). DST fold/gap local times have no unambiguous UTC instant and are
-    kept as raw + ``ambiguous`` status.
+    kept as raw + ``ambiguous`` status. ``raw_overrides`` lets a parser supply
+    the exact provider display for a ``*_raw`` companion when it handed over a
+    normalized shape (temporal normalization); value counts must match the row
+    count.
     """
     dataset = schemas.dataset(dataset_name)
     if not isinstance(fetched_at, dt.datetime):
@@ -99,9 +103,52 @@ def build_table(
         raise FinvizDataError(msg)
     fmap = dataset.field_map
     warnings: list[FetchWarning] = []
+    overrides = dict(raw_overrides) if raw_overrides else {}
+    for name, values in overrides.items():
+        base = fmap.get(name)
+        if base is None or not base.raw or f"{name}_raw" not in fmap:
+            msg = (
+                f"raw override key {name!r} on dataset {dataset_name!r} is not a "
+                "raw-declared base field"
+            )
+            raise FinvizDataError(msg)
+        if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+            msg = (
+                f"raw override for {name!r} on dataset {dataset_name!r} must be a "
+                f"string sequence, got {type(values).__name__}"
+            )
+            raise FinvizDataError(msg)
+        for value in values:
+            if not isinstance(value, str):
+                msg = (
+                    f"raw override for {name!r} on dataset {dataset_name!r} must contain "
+                    f"only strings, got {type(value).__name__}"
+                )
+                raise FinvizDataError(msg)
+    if overrides:
+        # Count and per-row override lookup need random access: only callers
+        # that actually use overrides pay for materializing the input.
+        rows_list = list(rows)
+        for name, values in overrides.items():
+            if len(values) != len(rows_list):
+                msg = (
+                    f"raw override for {name!r} on dataset {dataset_name!r} has {len(values)} "
+                    f"values for {len(rows_list)} rows"
+                )
+                raise FinvizDataError(msg)
+        rows_iter: Iterable[Mapping[str, Any]] = rows_list
+    else:
+        rows_iter = rows
 
     columns: dict[str, list[Any]] = {field.name: [] for field in dataset.fields}
-    for position, row in enumerate(rows):
+    row_overrides_by_position: dict[int, dict[str, str]] = {}
+    for name, values in overrides.items():
+        for position, value in enumerate(values):
+            row_overrides_by_position.setdefault(position, {})[name] = value
+    position = -1
+    for row in rows_iter:
+        position += 1
+        position_row_overrides = row_overrides_by_position.get(position)
         if not isinstance(row, Mapping):
             msg = f"row {position} of dataset {dataset_name!r} must be a mapping"
             raise FinvizDataError(msg)
@@ -112,6 +159,8 @@ def build_table(
         status_of: dict[str, str] = {}
         known: dict[str, Any] = {}
         unknown: list[tuple[str, Any]] = []
+        # Per-row provider displays: override field -> this row's raw display.
+        position_row_overrides = {name: values[position] for name, values in overrides.items()}
         for key, value in row.items():
             if fmap.get(str(key)) is None:
                 unknown.append((str(key), value))
@@ -165,8 +214,13 @@ def build_table(
                     status_of[name] = parse_status
                 raw_name = f"{name}_raw"
                 if field.raw and raw_name in fmap:
-                    # Companions retain the lossless source display, always.
-                    columns[raw_name].append(None if value is None else str(value))
+                    # Companions retain the lossless source display, always;
+                    # raw_overrides restores the provider display when the row
+                    # value itself is a parser-normalized shape.
+                    if position_row_overrides is not None and name in position_row_overrides:
+                        columns[raw_name].append(str(position_row_overrides[name]))
+                    else:
+                        columns[raw_name].append(None if value is None else str(value))
                 continue
             if name == "extra_fields":
                 continue  # filled after the loop
@@ -183,6 +237,9 @@ def build_table(
                     raise FinvizDataError(msg)
                 if base_field.name in known:
                     continue  # companion already mirrored from its base field
+                if name in position_row_overrides:
+                    columns[name].append(str(position_row_overrides[name]))
+                    continue
             if name.endswith("_status") and name[: -len("_status")] in status_of:
                 continue  # parse status filled from the temporal conversion below
             if field.nullable:

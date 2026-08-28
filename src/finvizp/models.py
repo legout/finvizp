@@ -8,6 +8,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any
 
+from finvizp.errors import FinvizDataError
 from finvizp.results import AccessTier, ResultStatus, _freeze
 
 __all__ = ["Artifact", "QuoteBundle"]
@@ -55,5 +56,29 @@ class QuoteBundle:
     access_tier: AccessTier = AccessTier.UNKNOWN
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, ResultStatus):
+            msg = f"status must be a ResultStatus, got {type(self.status).__name__}"
+            raise FinvizDataError(msg)
+        if not isinstance(self.access_tier, AccessTier):
+            msg = f"access_tier must be an AccessTier, got {type(self.access_tier).__name__}"
+            raise FinvizDataError(msg)
+        if not isinstance(self.snapshot_tables, Mapping):
+            msg = f"snapshot_tables must be a Mapping, got {type(self.snapshot_tables).__name__}"
+            raise FinvizDataError(msg)
         object.__setattr__(self, "artifacts", tuple(self.artifacts))
         object.__setattr__(self, "snapshot_tables", _freeze(self.snapshot_tables))
+        # Freeze every container-valued relation so caller-owned dicts/lists
+        # cannot mutate the "frozen" bundle through their original reference.
+        for name in (
+            "snapshot",
+            "description",
+            "ratings",
+            "news",
+            "insider",
+            "peers",
+            "etf_holders",
+            "signals",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+                object.__setattr__(self, name, _freeze(value))

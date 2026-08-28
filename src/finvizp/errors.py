@@ -30,15 +30,24 @@ _QUERY_SECRET = re.compile(
     r"|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*=)"
     r"([^&\s'\"]+)"
 )
-# Header-style credential values: "Authorization: Bearer xxx", "authorization=xxx".
+# Header-style credential values: consume the ENTIRE value (any scheme word
+# included) — "Authorization: Bearer x", "Proxy-Authorization: Basic x",
+# "Cookie: session=x".
 _HEADER_SECRET = re.compile(
-    r"(?i)((?:^|[\s,;])(?:authorization|auth|cookie|proxy-authorization)\s*[:=]\s*(?:bearer\s+)?)"
-    r"([^\s,;'\"]+)"
+    r"(?i)((?:^|[\s,;\"'])(?:proxy[-_]authorization|authorization|auth|cookies?)\s*[:=]\s*)"
+    r"(?:(?:bearer|basic|digest|token)\s+)?[^\s,;'\"=][^\s,;'\"]*"
 )
-# Bare proxy assignment in prose: "proxy=http://host:9" / "via proxy socks5://...".
-_PROXY_ASSIGNMENT = re.compile(
-    r"(?i)((?:^|[\s,;])(?:proxy(?:_[a-z0-9]+)?)\s*[:=]\s*)"
-    r"((?:https?|socks[45])://[^\s'\"]+)"
+# Proxy URL in prose or assignment: "via proxy http://...", "proxy=http://...".
+# The whole URL (host included) is route-sensitive and consumed in full.
+_PROXY_URL = re.compile(
+    r"(?i)((?:^|[\s,;(])(?:proxy(?:_[a-z0-9]+)?|route)\s*[:=]?\s*)"
+    r"((?:https?|socks[45])://[^\s'\"<>]+)"
+)
+# Quoted or bare key=value secrets: token="x", access_token=x, cookies=x.
+_QUERY_SECRET = re.compile(
+    r"(?i)((?:^|[?&\s\"'=,;])[a-z0-9_.-]*(?:token|secret|password|passwd|pwd|api[-_]?key"
+    r"|apikey|key|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*\s*=\s*)"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s&'\"]+)"
 )
 
 
@@ -51,6 +60,13 @@ class FetchWarning:
     symbol: str | None = None
     endpoint: str | None = None
 
+    def __post_init__(self) -> None:
+        # Public records must never carry credentials/proxy/response text.
+        for name in ("code", "message", "symbol", "endpoint"):
+            value = getattr(self, name)
+            if isinstance(value, str):
+                object.__setattr__(self, name, redact_value(value))
+
 
 @dataclass(frozen=True, slots=True)
 class UnitError:
@@ -61,6 +77,13 @@ class UnitError:
     raw: str | None = None
     symbol: str | None = None
     field: str | None = None
+
+    def __post_init__(self) -> None:
+        # ``raw`` is hostile provider input; sanitize every string field.
+        for name in ("code", "message", "raw", "symbol", "field"):
+            value = getattr(self, name)
+            if isinstance(value, str):
+                object.__setattr__(self, name, redact_value(value))
 
 
 def redact_value(value: Any) -> Any:
@@ -89,7 +112,7 @@ def redact_value(value: Any) -> Any:
         )
         value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
         value = _HEADER_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
-        value = _PROXY_ASSIGNMENT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+        value = _PROXY_URL.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
         return value
     return value
 

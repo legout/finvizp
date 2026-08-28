@@ -206,6 +206,20 @@ def test_quotebundle_snapshot_tables_freeze_nested_sets() -> None:
     assert 3.0 not in stored
 
 
+def test_quotebundle_freezes_relation_dicts_and_validates_declared_types() -> None:
+    fetched = datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+    snapshot = {"market_cap": "2T"}
+    bundle = QuoteBundle(symbol="AAPL", fetched_at=fetched, snapshot=snapshot)
+    snapshot["market_cap"] = "mutated"
+    assert bundle.snapshot["market_cap"] == "2T"
+    with pytest.raises(FinvizDataError):
+        QuoteBundle(symbol="AAPL", fetched_at=fetched, status="COMPLETE")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        QuoteBundle(symbol="AAPL", fetched_at=fetched, access_tier="PUBLIC")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        QuoteBundle(symbol="AAPL", fetched_at=fetched, snapshot_tables=None)  # type: ignore[arg-type]
+
+
 def test_fetchresult_is_frozen_and_generic() -> None:
     result = FetchResult[pa.Table](
         data=pa.table({"symbol": ["AAPL"]}),

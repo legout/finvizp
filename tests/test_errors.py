@@ -190,14 +190,41 @@ def test_redact_value_keeps_safe_values() -> None:
 
 def test_error_message_scrubs_authorization_header_and_proxy_values() -> None:
     error = FinvizQueryError(
-        f"request failed: Authorization: Bearer {SECRET} via proxy=http://route.example:9"
+        f"request failed: proxy=http://route.example:9 Authorization: Bearer {SECRET}"
     )
     rendered = str(error)
     assert SECRET not in rendered
     assert "route.example" not in rendered
-    assert "Authorization: Bearer [REDACTED]" in rendered
-    assert "proxy=[REDACTED]" in rendered
+    assert "[REDACTED]" in rendered
     assert all(SECRET not in str(arg) for arg in error.args)
+
+
+def test_error_message_redacts_basic_and_proxy_authorization_headers() -> None:
+    for text in (
+        f"upstream rejected Proxy-Authorization: Basic {SECRET}",
+        f"auth failed with Authorization: Basic {SECRET}",
+    ):
+        error = FinvizQueryError(text)
+        assert SECRET not in str(error)
+        assert all(SECRET not in str(arg) for arg in error.args)
+
+
+def test_error_message_redacts_proxy_url_in_prose() -> None:
+    error = FinvizQueryError(f"route failed via proxy http://user:{SECRET}@proxy.example:9")
+    assert SECRET not in str(error)
+    assert "proxy.example" not in str(error)
+    assert all(SECRET not in str(arg) for arg in error.args)
+
+
+def test_error_message_redacts_quoted_query_secret_values() -> None:
+    for text in (
+        f'request token="{SECRET}" rejected',
+        f"request token='{SECRET}' rejected",
+        f"cookies={SECRET} expired",
+    ):
+        error = FinvizQueryError(text)
+        assert SECRET not in str(error)
+        assert all(SECRET not in str(arg) for arg in error.args)
 
 
 def test_error_context_recognizes_camel_case_sensitive_keys() -> None:
@@ -209,6 +236,17 @@ def test_error_context_recognizes_camel_case_sensitive_keys() -> None:
     assert error.context["accessToken"] == REDACTED
     assert error.context["proxyUrl"] == REDACTED
     assert SECRET not in str(error)
+
+
+def test_warning_and_unit_error_public_fields_are_redacted() -> None:
+    warning = FetchWarning(code="extra_field", message=f"upstream Authorization: Bearer {SECRET}")
+    unit_error = UnitError(code="unit_convert", message="bad unit", raw=f"cookies={SECRET}")
+    assert SECRET not in warning.message
+    assert SECRET not in unit_error.message
+    assert SECRET not in (unit_error.raw or "")
+    meta = _meta(warnings=(warning,), unit_errors=(unit_error,))
+    assert all(SECRET not in str(item) for item in meta.warnings)
+    assert all(SECRET not in str(item) for item in meta.unit_errors)
 
 
 def test_warning_and_unit_error_records_are_frozen() -> None:

@@ -2,7 +2,9 @@
 
 Owns one fastreq ``Backend`` (transport seam), explicit same-origin routes,
 proxy precedence, caller-supplied auth isolation, SHA-256 hashing, bounded
-retries, and typed response classification.
+retries, typed response classification, and the parsed-result cache /
+single-flight layer. ``cache.py`` owns the store; this module owns the fetch
+integration, so the import below is TYPE_CHECKING-only to avoid a cycle.
 """
 
 from __future__ import annotations
@@ -12,10 +14,11 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from time import monotonic
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit
 
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
@@ -40,6 +43,9 @@ from finvizp.errors import (
 )
 from finvizp.models import Artifact
 from finvizp.results import AccessTier
+
+if TYPE_CHECKING:
+    from finvizp.cache import ResultCache
 
 __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
 
@@ -75,6 +81,10 @@ _NEVER_RETRY: tuple[type[FinvizError], ...] = (
     FinvizNotFoundError,
     FinvizParseError,
 )
+
+# Transient failures stale-if-error may paper over (opt-in only); typed
+# verdicts — query, parse, entitlement, challenge, not-found — are excluded.
+FINVIZ_TRANSPORT_ERRORS: tuple[type[FinvizError], ...] = (FinvizTransportError,)
 
 
 def _parse_retry_after(value: str | float | None) -> float | None:
@@ -225,6 +235,9 @@ class ClientResponse:
     browser_profile: str
     route_fingerprint: str
     attempts: int
+    served_at: datetime | None = None
+    cache_hit: bool = False
+    stale: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.query, MappingProxyType):
@@ -325,6 +338,15 @@ class FinvizClient:
         retry_attempts: bounded retries for transient transport/5xx/429 only.
         retry_backoff: base seconds for exponential backoff (capped at 60s).
         on_event: opt-in diagnostic callback receiving ``ClientEvent`` values.
+        cache_ttl: seconds a classified response stays fresh; ``None`` (the
+            default) disables caching entirely.
+        cache: bounded LRU store of classified responses; one per client is
+            created when caching is first used. Callers may inject any object
+            with ``get``/``set``/``delete``/``clear``/``stats``/``make_key``.
+        cache_max_bytes: approximate byte budget for the built-in cache.
+        cache_max_entries: entry cap for the built-in cache.
+        stale_if_error: opt-in; serve an expired cached response when an
+            eligible transport failure occurs. Never masks typed verdicts.
     """
 
     base_url: str
@@ -355,6 +377,11 @@ class FinvizClient:
         retry_attempts: int = 2,
         retry_backoff: float = 1.0,
         on_event: Callable[[ClientEvent], Any] | None = None,
+        cache_ttl: float | None = None,
+        cache: ResultCache | bool | None = None,
+        cache_max_bytes: int = 8 * 1024 * 1024,
+        cache_max_entries: int = 256,
+        stale_if_error: bool = False,
     ) -> None:
         if (normalized := base_url.rstrip("/")) != BASE_URL:
             msg = f"base_url must be {BASE_URL}, got {base_url!r}"
@@ -438,6 +465,23 @@ class FinvizClient:
         self._lifecycle_lock = asyncio.Lock()
         self._route_lock = asyncio.Lock()
         self._entered = False
+        self._cache_ttl = None if cache_ttl is None else max(0.0, float(cache_ttl))
+        # Runtime lazy import: cache.py imports ClientResponse from this
+        # module, so a module-level import would be circular.
+        from finvizp.cache import ResultCache
+
+        # ``cache=False`` is a hard kill switch; ``cache=None``/``True`` use
+        # the built-in bounded LRU; a store instance is injected as-is.
+        effective_cache: ResultCache | None
+        if cache is False:
+            effective_cache = None
+        elif cache is True or cache is None:
+            effective_cache = ResultCache(max_bytes=cache_max_bytes, max_entries=cache_max_entries)
+        else:
+            effective_cache = cache
+        self._cache: ResultCache | None = effective_cache
+        self._stale_if_error = bool(stale_if_error)
+        self._inflight: dict[str, asyncio.Task[ClientResponse]] = {}
 
     # --- lifecycle ---------------------------------------------------------
 
@@ -527,6 +571,132 @@ class FinvizClient:
     def _emit(self, event: ClientEvent) -> None:
         if self._on_event is not None:
             self._on_event(event)
+
+    async def fetch(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        proxy: str | bool | None = None,
+        cache: bool = True,
+        refresh: bool = False,
+    ) -> ClientResponse:
+        """Fetch one route with transparent parsed-result caching and single-flight.
+
+        Only enabled when the client was constructed with ``cache_ttl``.
+        ``cache=False`` bypasses the cache entirely; ``refresh=True`` fetches
+        a fresh copy and replaces any cached entry. Identical concurrent
+        misses share one underlying request.
+        """
+        effective_query = dict(params or {})
+        store = self._cache
+        if not cache or self._cache_ttl is None or store is None:
+            return await self._fetch(path, params=effective_query, proxy=proxy)
+        key = self._cache_key(path, effective_query, proxy)
+        if refresh:
+            response = await self._fetch(path, params=effective_query, proxy=proxy)
+            self._store(path, effective_query, proxy, response)
+            return response
+        # peek() (not get()): an expired entry must survive here so the
+        # opt-in stale-if-error fallback in _miss can still serve it; get()
+        # would drop it on read. Freshness is re-checked via expires_at, so
+        # hit counting stays in ResultCache.get for ordinary read paths.
+        entry = store.peek(key)
+        if entry is not None and monotonic() < entry.expires_at:
+            return self._stamped(entry.response, cache_hit=True, stale=False)
+        return await self._single_flight(key, path, effective_query, proxy)
+
+    async def _single_flight(
+        self, key: str, path: str, query: dict[str, Any], proxy: str | bool | None
+    ) -> ClientResponse:
+        """Coalesce identical concurrent misses onto one underlying request."""
+        existing = self._inflight.get(key)
+        if existing is not None:
+            response = await asyncio.shield(existing)
+            # Losers report the winner's entry as a cache hit.
+            return self._stamped(response, cache_hit=True, stale=False)
+        task: asyncio.Task[ClientResponse] = asyncio.ensure_future(
+            self._miss(key, path, query, proxy)
+        )
+        self._inflight[key] = task
+        try:
+            return await asyncio.shield(task)
+        finally:
+            if self._inflight.get(key) is task:
+                del self._inflight[key]
+
+    async def _miss(
+        self, key: str, path: str, query: dict[str, Any], proxy: str | bool | None
+    ) -> ClientResponse:
+        """One cache miss: fetch, store on success, stale-if-error on failure."""
+        cache = self._cache
+        assert cache is not None  # only reachable when caching is enabled
+        try:
+            response = await self._fetch(path, params=query, proxy=proxy)
+        except FinvizError as exc:
+            if self._stale_if_error and isinstance(exc, FINVIZ_TRANSPORT_ERRORS):
+                entry = cache.peek(key)
+                if entry is not None:
+                    return self._stamped(entry.response, cache_hit=True, stale=True)
+            raise
+        self._store(path, query, proxy, response)
+        return response
+
+    def _cache_key(self, path: str, query: Mapping[str, Any], proxy: str | bool | None) -> str:
+        cache = self._cache
+        assert cache is not None  # only reachable when caching is enabled
+        return cache.make_key(
+            endpoint=path,
+            query=query,
+            access_tier=AccessTier.AUTHENTICATED if self._auth_cookies else AccessTier.PUBLIC,
+            route_fingerprint=self._route_fingerprint(self._normalize_per_call_proxy(proxy)),
+            browser_profile=self.browser_profile,
+        )
+
+    def _store(
+        self,
+        path: str,
+        query: Mapping[str, Any],
+        proxy: str | bool | None,
+        response: ClientResponse,
+    ) -> None:
+        now = monotonic()
+        from finvizp.cache import CacheEntry
+
+        cache = self._cache
+        assert cache is not None  # only reachable when caching is enabled
+        cache.set(
+            self._cache_key(path, query, proxy),
+            CacheEntry(
+                response=response,
+                expires_at=now + (self._cache_ttl or 0.0),
+                stored_at=now,
+                approx_bytes=max(
+                    1,
+                    len(response.response_hash) // 2
+                    + (len(response.data) if isinstance(response.data, (str, bytes)) else 0),
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _stamped(response: ClientResponse, *, cache_hit: bool, stale: bool) -> ClientResponse:
+        """Return the cached envelope with this serve's provenance facts."""
+        return replace(response, served_at=datetime.now(UTC), cache_hit=cache_hit, stale=stale)
+
+    def invalidate(self, path: str, *, params: Mapping[str, Any] | None = None) -> bool:
+        """Drop one cached route entry; ``True`` when an entry was held."""
+        store = self._cache
+        if store is None:
+            return False
+        return store.delete(self._cache_key(path, dict(params or {}), None))
+
+    def clear_cache(self) -> int:
+        """Drop every cached entry; returns how many were held."""
+        store = self._cache
+        if store is None:
+            return 0
+        return store.clear()
 
     async def _fetch(
         self,

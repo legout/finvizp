@@ -327,3 +327,32 @@ def test_error_context_and_records_redact_json_quoted_labels() -> None:
     unit_error = UnitError(code="unit", message="bad", raw=note)
     assert SECRET not in warning.message
     assert SECRET not in (unit_error.raw or "")
+
+
+def test_error_message_redacts_multi_token_header_values() -> None:
+    """Round 9: header values with several ``k=v`` parts must not leak later parts."""
+    digest = (
+        'Authorization: Digest username="u", realm="r", nonce="abc", '
+        'uri="/q", response="' + SECRET + '", opaque="z"'
+    )
+    for text in (
+        "Cookie: session=opaque; theme=" + SECRET + "; tz=utc",
+        digest,
+    ):
+        error = FinvizError(text)
+        assert SECRET not in str(error)
+        assert SECRET not in error.args[0]
+        assert "[REDACTED]" in str(error)
+
+
+def test_error_message_redacts_whitespace_and_escaped_quote_values() -> None:
+    """Round 9: labelled values keep their content even with spaces/escaped quotes."""
+    escaped_json = '{"access_token": "he said \\" hi ' + SECRET + '"}'
+    for text in (
+        "response_body=prefix " + SECRET + " trailing parse halted",
+        escaped_json,
+    ):
+        error = FinvizError(text)
+        assert SECRET not in str(error)
+        assert SECRET not in error.args[0]
+        assert "[REDACTED]" in str(error)

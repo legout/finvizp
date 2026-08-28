@@ -24,18 +24,30 @@ _BODY_KEY = re.compile(r"(?i)(?:^|[_-])(?:body|response_body|content|html|payloa
 
 # URL credential forms: scheme://user:pass@...
 _URL_CREDENTIALS = re.compile(r"(?i)\b(https?|socks[45])://([^/\s:@]+):([^@\s/]+)@")
-# Label-driven secret markers: a "label:" or "label=" whose name contains a
-# credential/body/proxy word. Value is consumed in full (quoted or bare) —
-# covers Authorization/X-Api-Key/X-Auth-Token/Set-Cookie headers with scheme
-# words ("Bearer x", "Basic x"), response_body=..., HTTP_PROXY=...,
-# proxy-url: ..., access_token=... in query strings, etc.
-_SECRET_LABEL = re.compile(
-    r"(?i)((?:^|[\s,{\"'=\[]|[?&])[a-z0-9_.-]*(?:"
+# Label-driven secret markers. Consumption is separator-aware:
+# - ``label:`` (headers, JSON keys) runs to end of line — Digest parts,
+#   multi-pair cookies, escaped quotes and embedded spaces all die together.
+# - ``body|payload|content|html=`` is prose and also runs to end of line.
+# - every other ``label=`` is a query/env token: one quoted value (backslash
+#   escapes honoured) or one bare chunk up to ``&``/whitespace, so
+#   neighbouring query params (``?token=X&t=AAPL``) survive.
+_LEAD = r"(?:^|[\s,{\"'=\[]|[?&])"
+_NAME = r"[a-z0-9_.-]*"
+_SECRET_WORDS = (
     r"authorization|auth[-_]?token|api[-_]?key|apikey|access[-_]?token|credential"
     r"|cookie|session|password|passwd|pwd|secret|token"
-    r"|body|payload|content|html"
-    r")[a-z0-9_.-]*\s*\"?\s*[:=]\s*)"
-    r"(?:(?:bearer|basic|digest|token)\s+)?(?:\"[^\"]*\"|'[^']*'|[^\s&;,\"']+)"
+    r"|proxy|proxies|body|payload|content|html"
+)
+_SECRET_LABEL = re.compile(
+    # ``label:`` — header/JSON value: everything to end of line is the value
+    # (Digest parts, multi-pair cookies, escaped quotes, scheme words die
+    # together).
+    rf"(?i)((?:{_LEAD}){_NAME}(?:{_SECRET_WORDS}){_NAME}\s*\"?\s*:\s*).*"
+    # ``label=`` — query/env/prose value: everything up to the next ``&``
+    # (query continuation such as ``?token=X&t=AAPL`` keeps ``t=AAPL``) or
+    # end of line. Deliberately over-redacts trailing prose after a labelled
+    # token; under-redaction is the unacceptable direction.
+    rf"|((?:{_LEAD}){_NAME}(?:{_SECRET_WORDS}){_NAME}\s*\"?\s*=)[^&\n]*"
 )
 # Proxy URLs are route-sensitive: consume the whole URL (host included) when
 # the surrounding text names it as a proxy/route ("via proxy http://...",
@@ -51,7 +63,7 @@ _PROXY_URL = re.compile(
 def _redact_text(text: str) -> str:
     """Redact all credential/proxy/body markers inside one string."""
     text = _URL_CREDENTIALS.sub(lambda m: f"{m.group(1)}://[REDACTED]@", text)
-    text = _SECRET_LABEL.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
+    text = _SECRET_LABEL.sub(lambda m: next(g for g in m.groups() if g) + REDACTED, text)
     return _PROXY_URL.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
 
 

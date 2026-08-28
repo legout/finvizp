@@ -8,6 +8,7 @@ HTML, scripts, ads, or tracking.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import Path
 
 import pyarrow as pa
@@ -106,6 +107,34 @@ def test_reordered_fixture_produces_equivalent_records() -> None:
 
     assert pair_groups(reordered) == pair_groups(current)
 
+    # The reordered fixture also physically permutes whole relation blocks
+    # (insider, description, ratings, news, peers/ETF, charts) around the
+    # snapshot wrapper, so relations must be position-independent too.
+    for name in ("description", "ratings", "news", "insider", "peers", "etf_holders", "signals"):
+        left = getattr(current, name)
+        right = getattr(reordered, name)
+        assert left is not None and right is not None, name
+        assert right.equals(left), name
+    assert reordered.artifacts == current.artifacts
+
+
+def test_reordered_fixture_physically_permutes_relation_blocks() -> None:
+    # The reorder proof must be physical: whole relation blocks sit at
+    # different document positions in the two fixtures, not just snapshot
+    # groups (plan:223). Semantic equivalence is asserted separately above.
+    markers = (
+        "js-table-ratings",
+        "quote_profile-bio",
+        'id="news-table"',
+        "body-table styled-table-new",
+        "data-boxover-ticker",
+    )
+
+    def order(html: str) -> list[int]:
+        return [html.index(marker) for marker in markers]
+
+    assert order(_page("stock-current.html")) != order(_page("stock-reordered.html"))
+
 
 def test_reordered_labels_and_values_stay_paired() -> None:
     row = _rows(_parse("stock-reordered.html").snapshot)[0]
@@ -185,6 +214,29 @@ def test_empty_snapshot_region_raises() -> None:
         _parse_html(html)
 
 
+def test_all_labels_blank_snapshot_region_raises() -> None:
+    # A region whose label cells are all blank passes the cell-count guard but
+    # yields zero valid label/value pairs: still a missing required region.
+    html = _page().replace(
+        '<div class="snapshot-td-label">Beta</div>', '<div class="snapshot-td-label"></div>', 1
+    )
+    start = html.index('<table width="100%" cellpadding="3"')
+    end = html.index("</table>", start)
+    region = html[start:end]
+    blanked = region.replace(
+        '<div class="snapshot-td-label">', '<div class="snapshot-td-label x-blank">'
+    )
+    # Strip every label text inside that one region only.
+    blanked = re.sub(
+        r'<div class="snapshot-td-label x-blank">[^<]*</div>',
+        '<div class="snapshot-td-label"></div>',
+        blanked,
+    )
+    html = html[:start] + blanked + html[end:]
+    with pytest.raises(FinvizParseError):
+        _parse_html(html)
+
+
 # --- header: identity and classification ------------------------------------
 
 
@@ -212,11 +264,7 @@ def test_blank_description_keeps_registered_empty_table() -> None:
     # The bio container is present but has no text: a positively recognized
     # empty payload, not a missing region. The registered empty Arrow table
     # survives and the bundle stays COMPLETE, including in strict mode.
-    html = _page().replace(
-        "Sample Technologies, Inc. engages in the design and sale of imaginary "
-        "devices for testing purposes. It operates through the Testing segment.",
-        "",
-    )
+    html = re.sub(r'(<div class="quote_profile-bio">).*?(</div>)', r"\1\2", _page(), count=1)
     bundle = _parse_html(html, strict_schema=True)
     assert bundle.description is not None
     assert bundle.description.num_rows == 0
@@ -235,14 +283,42 @@ def test_ratings_relation() -> None:
     assert first["symbol"] == "AAPL"
     assert first["status"] == "Upgrade"
     assert first["analyst"] == "Redburn"
-    # Registry keeps the rating change as its text display (no numeric scale).
-    assert first["rating"] == "Neutral → Buy"
+    # The registered rating column is numeric; the provider shows text, which
+    # is provenance, not a number: typed null, exact display in rating_raw.
+    assert first["rating"] is None
+    assert first["rating_raw"] == "Neutral → Buy"
     assert first["price_target"] == 230.0
     # Temporal: Aug-17-26 is a complete date display -> exact midnight Eastern.
     assert first["published_at"] == dt.datetime(2026, 8, 17, 4, 0, tzinfo=dt.UTC)
-    # The raw companion is the parser's builder-facing display.
-    assert first["published_at_raw"] == "2026-08-17 00:00"
+    # The raw companion preserves the exact provider display.
+    assert first["published_at_raw"] == "Aug-17-26"
     assert first["published_at_status"] == "exact"
+
+
+def test_ratings_registry_keeps_numeric_rating_with_raw_provenance() -> None:
+    # quote_ratings v1 stays as registered: float64 rating with a rating_raw
+    # companion carrying the provider's textual display.
+    assert schemas.dataset_version("quote_ratings") == 1
+    rating_names = set(fa.dataset_field_names("quote_ratings"))
+    assert "rating" in rating_names and "rating_raw" in rating_names
+
+
+def test_strict_mode_raises_on_malformed_ratings_date() -> None:
+    # Parser-level conversion drift must fail strict parsing, not just the
+    # builder's share of the pipeline.
+    html = _page().replace("<td>Aug-17-26</td>", "<td>not-a-date</td>", 1)
+    with pytest.raises(FinvizParseError):
+        _parse_html(html, strict_schema=True)
+
+
+def test_malformed_ratings_date_warns_and_keeps_provider_raw_without_strict() -> None:
+    html = _page().replace("<td>Aug-17-26</td>", "<td>not-a-date</td>", 1)
+    warnings: list[FetchWarning] = []
+    bundle = _parse_html(html, on_warning=warnings.append)
+    row = _rows(bundle.ratings)[0]
+    assert any(w.code == "conversion_failed" for w in warnings)
+    assert row["published_at"] is None
+    assert row["published_at_raw"] == "not-a-date"
 
 
 def test_ratings_rows_preserve_order() -> None:
@@ -261,17 +337,39 @@ def test_news_relation_with_temporal_anchoring() -> None:
     assert rows[0]["url"] == "https://example.com/a"
     assert rows[0]["publisher"] == "Example News"
     # "Today 05:25AM" anchors to the response date in US Eastern; the raw
-    # companion is the parser's builder-facing display ("Today" stripped).
+    # companion preserves the exact provider display.
     assert rows[0]["published_at"] == dt.datetime(2026, 8, 28, 9, 25, tzinfo=dt.UTC)
-    assert rows[0]["published_at_raw"] == "05:25"
+    assert rows[0]["published_at_raw"] == "Today 05:25AM"
     assert rows[0]["published_at_status"] == "anchored"
     # Time-only display also anchors.
     assert rows[1]["published_at"] == dt.datetime(2026, 8, 28, 13, 0, tzinfo=dt.UTC)
+    assert rows[1]["published_at_raw"] == "09:00AM"
     assert rows[1]["published_at_status"] == "anchored"
+    # "Aug-27-26 04:15PM" is a full datetime -> exact prior-day Eastern instant.
+    assert rows[2]["published_at"] == dt.datetime(2026, 8, 27, 20, 15, tzinfo=dt.UTC)
+    assert rows[2]["published_at_raw"] == "Aug-27-26 04:15PM"
+    assert rows[2]["published_at_status"] == "exact"
     # "Yesterday 11:30PM" resolves to the exact prior-day Eastern instant.
     assert rows[3]["published_at"] == dt.datetime(2026, 8, 28, 3, 30, tzinfo=dt.UTC)
-    assert rows[3]["published_at_raw"] == "2026-08-27 23:30"
+    assert rows[3]["published_at_raw"] == "Yesterday 11:30PM"
     assert rows[3]["published_at_status"] == "exact"
+
+
+def test_strict_mode_raises_on_malformed_insider_date() -> None:
+    # Parser-level conversion drift must fail strict parsing, not just the
+    # builder's share of the pipeline.
+    html = _page().replace("<td>Aug 25 '26</td>", "<td>not-a-date</td>", 1)
+    with pytest.raises(FinvizParseError):
+        _parse_html(html, strict_schema=True)
+
+
+def test_malformed_insider_date_warns_and_keeps_null_without_strict() -> None:
+    html = _page().replace("<td>Aug 25 '26</td>", "<td>not-a-date</td>", 1)
+    warnings: list[FetchWarning] = []
+    bundle = _parse_html(html, on_warning=warnings.append)
+    assert any(w.code == "conversion_failed" for w in warnings)
+    row = _rows(bundle.insider)[0]
+    assert row["transaction_date"] is None
 
 
 def test_news_publisher_parentheses_stripped() -> None:
@@ -416,6 +514,35 @@ def test_strict_schema_promotes_missing_optional_region() -> None:
 
 def test_complete_page_is_complete_status() -> None:
     assert _parse().status.name == "COMPLETE"
+
+
+def test_valid_snapshot_with_all_optional_structures_absent_is_partial() -> None:
+    # EMPTY is reserved for a positively recognized no-results state. A page
+    # whose required snapshot parses fine but carries none of the optional
+    # relation structures is successful-with-drift: PARTIAL plus warnings.
+    html = _page()
+    # Replacements strip the structure marker itself (no "x-" prefix: that
+    # would re-contain the marker for substring markers).
+    replacements = {
+        "js-table-ratings": "js-x-ratings",
+        'id="news-table"': 'id="x-news-table"',
+        "quote_profile-bio": "quote_x-bio",
+        ">Peers<": ">xrPeers<",  # peers/ETF lose their introducing anchors
+        ">Held by<": ">xrHeldby<",
+        "screener.ashx?v=111&s=": "screener_x",  # signals lose screener hrefs
+        "js-quote-correlation-links-container": "js-x-corr",
+        "body-table styled-table-new": "body-x",  # insider loses region class
+        "SEC Form 4": "xr Form 4",
+    }
+    for marker, replacement in replacements.items():
+        html = html.replace(marker, replacement)
+    warnings: list[FetchWarning] = []
+    bundle = _parse_html(html, on_warning=warnings.append)
+    assert bundle.snapshot is not None
+    assert bundle.snapshot.num_rows == 1
+    missing = [w for w in warnings if w.code == "missing_region"]
+    assert len(missing) == 7
+    assert bundle.status.name == "PARTIAL"
 
 
 def test_complete_page_has_no_conversion_warnings_and_strict_passes() -> None:

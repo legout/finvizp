@@ -21,13 +21,18 @@ companions, and additive ``extra_fields`` drift. The parser therefore:
 - maps verified provider labels to ``quote_snapshot`` registry fields and
   passes every unmapped label through as its own row key (builder routes it
   to ``extra_fields`` with an ``unknown_field`` warning);
-- enforces the verified six-region snapshot contract: fewer regions, or a
-  region with no valid label/value cell pairs, raises ``FinvizParseError``;
-- normalizes provider temporal displays into builder-compatible shapes:
-  full datetimes become ISO ``YYYY-MM-DD HH:MM`` US-Eastern strings, news
+- enforces the verified six-region snapshot contract: fewer regions, a
+  region with no valid label/value cell pairs, or malformed pair structure
+  raises ``FinvizParseError``;
+- normalizes provider temporal displays into builder-compatible shapes
+  (full datetimes become ISO ``YYYY-MM-DD HH:MM`` US-Eastern strings, news
   time-only displays keep ``HH:MM`` so the builder anchors them to the
-  response date with an ``anchored`` status;
-- never sets ``_raw``/``_status``/``fetched_at``/``extra_fields`` itself.
+  response date) and hands the exact provider displays to the builder via
+  ``raw_overrides``, so ``*_raw`` companions preserve source provenance
+  verbatim while the typed columns stay normalized;
+- reports its own conversion drift (unparseable temporal displays) through
+  ``conversion_failed`` warnings and raises under ``strict_schema=True``;
+- never sets ``_status``/``fetched_at``/``extra_fields`` itself.
 """
 
 from __future__ import annotations
@@ -137,6 +142,10 @@ def parse_quote_page(
             context={"endpoint": "quote"},
         )
 
+    # Provider raw displays for temporal companions, captured before the
+    # parser normalizes the typed shapes. dataset -> field -> per-row display.
+    raw_overrides: dict[str, dict[str, list[str]]] = {}
+
     # Source-near row: registry-mapped fields plus every unknown label as its
     # own key. The Arrow builder routes unknown keys into extra_fields with a
     # drift warning and fills provenance/raw/status companions.
@@ -174,6 +183,7 @@ def parse_quote_page(
             response_date=response_date,
             strict_schema=strict_schema,
             on_warning=on_warning,
+            raw_overrides=raw_overrides.pop(dataset, None),
         )
 
     def presence(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -187,9 +197,13 @@ def parse_quote_page(
     # Tri-state: None = bio structure absent (missing optional region);
     # "" = structure present but empty payload -> registered empty table.
     description_text = _parse_description(document)
-    ratings_rows = _parse_ratings(document, symbol, warn)
-    news_rows = _parse_news(document, symbol, response_date)
-    insider_rows = _parse_insider(document, symbol, warn)
+    ratings_rows, ratings_overrides = _parse_ratings(document, symbol, warn, strict_schema)
+    if ratings_rows is not None:
+        raw_overrides["quote_ratings"] = ratings_overrides
+    news_rows, news_overrides = _parse_news(document, symbol, response_date)
+    if news_rows is not None:
+        raw_overrides["quote_news"] = news_overrides
+    insider_rows = _parse_insider(document, symbol, warn, strict_schema)
     peers_entries = _parse_ticker_links(document, "Peers")
     etf_entries = _parse_ticker_links(document, "Held by")
     signals_rows = _parse_signals(document, symbol)
@@ -277,12 +291,11 @@ def parse_quote_page(
         )
     for name in missing:
         warn("missing_region", f"optional stock page region {name!r} not found")
-    if not missing:
-        status = ResultStatus.COMPLETE
-    elif len(missing) == len(_OPTIONAL_REGIONS):
-        status = ResultStatus.EMPTY
-    else:
-        status = ResultStatus.PARTIAL
+    # Any missing optional structure is drift on an otherwise successful page.
+    # EMPTY is reserved for a positively recognized no-results state, so
+    # partial structure loss is PARTIAL even when everything optional is
+    # absent (the required snapshot still parsed).
+    status = ResultStatus.COMPLETE if not missing else ResultStatus.PARTIAL
 
     return QuoteBundle(
         symbol=symbol,
@@ -327,9 +340,10 @@ def _merge_snapshot_tables(
 ) -> list[list[tuple[str, str]]]:
     """Merge the verified six ``snapshot-table2`` regions, per-table grouped.
 
-    Fewer regions (a required region vanished) or malformed pair structure
-    (odd snapshot cell count inside a region) is required-structure drift
-    and raises ``FinvizParseError`` — never a silent COMPLETE parse.
+    Fewer regions (a required region vanished), a region with no valid
+    label/value cell pairs (empty or all-labels-blank), or malformed pair
+    structure (odd snapshot cell count inside a region) is required-structure
+    drift and raises ``FinvizParseError`` — never a silent COMPLETE parse.
     """
     per_table: list[list[tuple[str, str]]] = []
     seen: set[str] = set()
@@ -360,8 +374,14 @@ def _merge_snapshot_tables(
                 continue
             seen.add(label)
             pairs.append((label, value))
-        if pairs:
-            per_table.append(pairs)
+        if not pairs:
+            # All-labels-blank (or fully duplicated) cells pass the cell-count
+            # guard but carry no valid pairs: still a missing required region.
+            raise FinvizParseError(
+                "snapshot region has no valid label/value pairs",
+                context={"endpoint": "quote"},
+            )
+        per_table.append(pairs)
     return per_table
 
 
@@ -425,36 +445,62 @@ def _parse_ratings(
     document: Any,
     symbol: str,
     warn: Callable[[str, str], None],
-) -> list[dict[str, Any]] | None:
+    strict_schema: bool = False,
+) -> tuple[list[dict[str, Any]] | None, dict[str, list[str]]]:
+    """Parse ratings rows; also return provider raw displays per field.
+
+    The registry types ``rating`` numerically while the provider shows the
+    change text: the text is provenance, not a number, so the typed value is
+    null and the display lands in ``rating_raw``. Date drift is reported
+    through ``warn`` here and raises under ``strict_schema`` (parser-owned
+    conversion drift must fail strict parsing, not just builder conversion).
+    """
     tables = document.xpath(f".//table[{_CLASS.format('js-table-ratings')}]")
     if not tables:
-        return None
+        return None, {}
     rows: list[dict[str, Any]] = []
+    published_raw: list[str] = []
+    rating_raw: list[str] = []
     for tr in tables[0].xpath(".//tr"):
         cells = tr.xpath("./td")
         if len(cells) < 5:
             continue
         date_text = cells[0].text_content().strip()
+        rating_text = cells[3].text_content().strip()
         target_text = cells[4].text_content().strip().lstrip("$")
         rows.append(
             {
                 "symbol": symbol,
-                # "Aug-17-26" -> builder-compatible exact Eastern display.
-                "published_at": _normalize_ratings_date(date_text, warn),
+                # "Aug-17-26" -> builder-compatible exact Eastern display; the
+                # provider display itself rides in published_at_raw.
+                "published_at": _normalize_ratings_date(date_text, warn, strict_schema),
                 "status": cells[1].text_content().strip() or None,
-                "rating": cells[3].text_content().strip() or None,
+                # The numeric registered column stays null for textual rating
+                # changes; the display is provenance, not a number.
+                "rating": None,
                 "analyst": cells[2].text_content().strip() or None,
                 "price_target": target_text or None,
             }
         )
-    return rows
+        published_raw.append(date_text)
+        rating_raw.append(rating_text or "")
+    return rows, {"published_at": published_raw, "rating": rating_raw}
 
 
-def _normalize_ratings_date(text: str, warn: Callable[[str, str], None]) -> str | None:
+def _normalize_ratings_date(
+    text: str,
+    warn: Callable[[str, str], None],
+    strict_schema: bool = False,
+) -> str | None:
     if match := re.match(r"([A-Z][a-z]{2})-(\d{1,2})-(\d{2})$", text):
         month_name, day, year = match.groups()
         return f"20{int(year):02d}-{_MONTHS[month_name]:02d}-{int(day):02d} 00:00"
     warn("conversion_failed", f"cannot parse ratings date {text!r}")
+    if strict_schema:
+        raise FinvizParseError(
+            f"cannot parse ratings date {text!r} (strict_schema=True)",
+            context={"endpoint": "quote"},
+        )
     return None
 
 
@@ -462,11 +508,13 @@ def _parse_news(
     document: Any,
     symbol: str,
     response_date: dt.date | None,
-) -> list[dict[str, Any]] | None:
+) -> tuple[list[dict[str, Any]] | None, dict[str, list[str]]]:
+    """Parse news rows; also return the provider's own ``published_at`` displays."""
     tables = document.xpath(".//table[@id='news-table']")
     if not tables:
-        return None
+        return None, {}
     rows: list[dict[str, Any]] = []
+    published_raw: list[str] = []
     for tr in tables[0].xpath(".//tr"):
         cells = tr.xpath("./td")
         if len(cells) < 2:
@@ -481,7 +529,8 @@ def _parse_news(
                 "symbol": symbol,
                 # Relative/time-only displays are normalized into
                 # builder-anchorable (or exact) shapes; the builder anchors
-                # them to the response date and statuses the parse.
+                # them to the response date and statuses the parse. The
+                # provider's exact display rides in published_at_raw.
                 "published_at": _normalize_news_time(when, response_date),
                 "title": anchors[0].text_content().strip(),
                 "url": anchors[0].get("href") or "",
@@ -490,7 +539,8 @@ def _parse_news(
                 else None,
             }
         )
-    return rows
+        published_raw.append(when)
+    return rows, {"published_at": published_raw}
 
 
 def _normalize_news_time(text: str, response_date: dt.date | None) -> str | None:
@@ -530,6 +580,7 @@ def _parse_insider(
     document: Any,
     symbol: str,
     warn: Callable[[str, str], None],
+    strict_schema: bool = False,
 ) -> list[dict[str, Any]] | None:
     target = None
     for table in document.xpath(f".//table[{_CLASS.format('body-table')}]"):
@@ -567,6 +618,11 @@ def _parse_insider(
             transaction_date = dt.date(2000 + int(year), _MONTHS[month_name], int(day))
         elif date_text:
             warn("conversion_failed", f"cannot parse insider date {date_text!r}")
+            if strict_schema:
+                raise FinvizParseError(
+                    f"cannot parse insider date {date_text!r} (strict_schema=True)",
+                    context={"endpoint": "quote"},
+                )
         rows.append(
             {
                 "symbol": symbol,

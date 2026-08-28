@@ -282,9 +282,10 @@ def test_time_only_parse_status_and_raw() -> None:
         "quote_news",
         [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "10:00"}],
         response_date=dt.date(2026, 8, 20),
+        raw_overrides={"published_at": ["Today 10:00AM"]},
     )
     row = _rows(table)[0]
-    assert row["published_at_raw"] == "10:00"
+    assert row["published_at_raw"] == "Today 10:00AM"
     assert row["published_at_status"] == "anchored"  # date assumed from response
 
 

@@ -110,14 +110,15 @@
     },
     {
       "name": "quote_ratings",
-      "version": 2,
+      "version": 1,
       "fields": [
         { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
         { "name": "published_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": true, "temporal": true, "raw": true },
         { "name": "published_at_raw", "type": "string", "unit": "raw", "nullable": true },
         { "name": "published_at_status", "type": "string", "unit": "text", "nullable": true },
         { "name": "status", "type": "string", "unit": "text", "nullable": true },
-        { "name": "rating", "type": "string", "unit": "text", "nullable": true },
+        { "name": "rating", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "rating_raw", "type": "string", "unit": "raw", "nullable": true },
         { "name": "analyst", "type": "string", "unit": "text", "nullable": true },
         { "name": "price_target", "type": "float64", "unit": "number", "nullable": true, "raw": true },
         { "name": "price_target_raw", "type": "string", "unit": "raw", "nullable": true },

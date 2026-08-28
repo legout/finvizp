@@ -46,6 +46,12 @@ SNAPSHOT: list[tuple[str, str]] = [
 # Reordering the groups must not change the parse.
 TABLE_GROUPS = [(0, 6), (6, 11), (11, 13), (13, 15), (15, 17), (17, 19)]
 
+# Bio payload is shared by both variants (and by tests that blank it out).
+BIO_TEXT = (
+    "Sample Technologies, Inc. engages in the design and sale of imaginary "
+    "devices for testing purposes. It operates through the Testing segment."
+)
+
 
 def _snapshot_table(cells: list[tuple[str, str]]) -> str:
     rows = "".join(
@@ -299,27 +305,63 @@ def _auxiliary_tables() -> list[str]:
 
 
 def _page(tables: list[str], reordered: bool = False) -> str:
+    # The reorder proof is physical: whole relation blocks sit at different
+    # document positions in the two variants (plan:223), while the parser
+    # must still produce equivalent relation records.
+    blocks = {
+        "header": _header(),
+        "ad": _auxiliary_tables()[0],
+        "signals": _signals(),
+        "snapshot": (
+            '<div class="screener_snapshot-table-wrapper js-snapshot-table-wrapper">'
+            + "".join(tables)
+            + "</div>"
+        ),
+        "ratings": _ratings(),
+        "peers": _peers_and_etf(),
+        "news": '<div class="quote-news">' + _news() + "</div>",
+        "bio": (
+            '<td class="fullview-profile quote_profile"><div class="quote_profile-bio">'
+            + BIO_TEXT
+            + "</div></td>"
+        ),
+        "insider": _insider(reordered),
+        "aux": "".join(_auxiliary_tables()[1:]),
+        "charts": _chart_links(),
+    }
+    order = (
+        [
+            "header",
+            "ad",
+            "signals",
+            "snapshot",
+            "insider",
+            "bio",
+            "news",
+            "ratings",
+            "peers",
+            "aux",
+            "charts",
+        ]
+        if reordered
+        else [
+            "header",
+            "ad",
+            "signals",
+            "snapshot",
+            "ratings",
+            "peers",
+            "news",
+            "bio",
+            "insider",
+            "aux",
+            "charts",
+        ]
+    )
     return (
         "<!DOCTYPE html><html><head><title>AAPL - Sample Technologies Inc Stock"
         " Price and Quote</title></head><body>"
-        + _header()
-        + _auxiliary_tables()[0]
-        + _signals()
-        + '<div class="screener_snapshot-table-wrapper js-snapshot-table-wrapper">'
-        + "".join(tables)
-        + "</div>"
-        + _ratings()
-        + _peers_and_etf()
-        + '<div class="quote-news">'
-        + _news()
-        + "</div>"
-        + '<td class="fullview-profile quote_profile"><div class="quote_profile-bio">'
-        "Sample Technologies, Inc. engages in the design and sale of imaginary "
-        "devices for testing purposes. It operates through the Testing segment."
-        "</div></td>"
-        + _insider(reordered)
-        + "".join(_auxiliary_tables()[1:])
-        + _chart_links()
+        + "".join(blocks[key] for key in order)
         + "</body></html>"
     )
 

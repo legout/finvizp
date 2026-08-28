@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 REDACTED = "[REDACTED]"
 
-# Keys whose values are always considered sensitive.
+# Keys whose values are always considered sensitive. Canonical and camelCase forms.
 _SENSITIVE_KEY = re.compile(
     r"(?i)(?:^|[_-])(?:"
     r"cookie|cookies|authorization|proxy|proxies|token|secret|password|passwd|pwd"
@@ -29,6 +29,16 @@ _QUERY_SECRET = re.compile(
     r"(?i)((?:^|[?&\s])[a-z0-9_.-]*(?:token|secret|password|passwd|pwd|api[-_]?key|apikey|key"
     r"|sig(?:nature)?|session|auth|credential|cookie)[a-z0-9_.-]*=)"
     r"([^&\s'\"]+)"
+)
+# Header-style credential values: "Authorization: Bearer xxx", "authorization=xxx".
+_HEADER_SECRET = re.compile(
+    r"(?i)((?:^|[\s,;])(?:authorization|auth|cookie|proxy-authorization)\s*[:=]\s*(?:bearer\s+)?)"
+    r"([^\s,;'\"]+)"
+)
+# Bare proxy assignment in prose: "proxy=http://host:9" / "via proxy socks5://...".
+_PROXY_ASSIGNMENT = re.compile(
+    r"(?i)((?:^|[\s,;])(?:proxy(?:_[a-z0-9]+)?)\s*[:=]\s*)"
+    r"((?:https?|socks[45])://[^\s'\"]+)"
 )
 
 
@@ -59,9 +69,11 @@ def redact_value(value: Any) -> Any:
         clean: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
-            if _SENSITIVE_KEY.search(key_text):
+            # camelCase ("responseBody", "accessToken") acts as a separator boundary for matching.
+            match_text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key_text)
+            if _SENSITIVE_KEY.search(match_text):
                 clean[key_text] = REDACTED
-            elif _BODY_KEY.search(key_text):
+            elif _BODY_KEY.search(match_text):
                 clean[key_text] = "[BODY REDACTED]"
             else:
                 clean[key_text] = redact_value(item)
@@ -76,6 +88,8 @@ def redact_value(value: Any) -> Any:
             value,
         )
         value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+        value = _HEADER_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+        value = _PROXY_ASSIGNMENT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
         return value
     return value
 

@@ -137,6 +137,25 @@ def test_metadata_rejects_invalid_enums_and_negative_counters() -> None:
         _meta(attempts=-1)
 
 
+def test_metadata_rejects_non_mapping_query() -> None:
+    with pytest.raises(FinvizDataError):
+        _meta(query=None)  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(query="t=AAPL")  # type: ignore[arg-type]
+    with pytest.raises(FinvizDataError):
+        _meta(query=[("t", "AAPL")])  # type: ignore[arg-type]
+
+
+def test_metadata_complete_requires_succeeded_unit() -> None:
+    with pytest.raises(FinvizDataError):
+        _meta(
+            status=ResultStatus.COMPLETE,
+            requested_units=0,
+            succeeded_units=0,
+            failed_units=0,
+        )
+
+
 def test_quotebundle_normalizes_mutable_inputs() -> None:
     fetched = datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
     table = pa.table({"symbol": ["AAPL"]})

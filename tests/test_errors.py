@@ -188,6 +188,29 @@ def test_redact_value_keeps_safe_values() -> None:
     assert "AAPL" in rendered
 
 
+def test_error_message_scrubs_authorization_header_and_proxy_values() -> None:
+    error = FinvizQueryError(
+        f"request failed: Authorization: Bearer {SECRET} via proxy=http://route.example:9"
+    )
+    rendered = str(error)
+    assert SECRET not in rendered
+    assert "route.example" not in rendered
+    assert "Authorization: Bearer [REDACTED]" in rendered
+    assert "proxy=[REDACTED]" in rendered
+    assert all(SECRET not in str(arg) for arg in error.args)
+
+
+def test_error_context_recognizes_camel_case_sensitive_keys() -> None:
+    error = FinvizQueryError(
+        "bad request",
+        context={"responseBody": SECRET, "accessToken": SECRET, "proxyUrl": SECRET},
+    )
+    assert error.context["responseBody"] == "[BODY REDACTED]"
+    assert error.context["accessToken"] == REDACTED
+    assert error.context["proxyUrl"] == REDACTED
+    assert SECRET not in str(error)
+
+
 def test_warning_and_unit_error_records_are_frozen() -> None:
     warning = FetchWarning(code="extra_field", message="unknown label", symbol="AAPL")
     unit_error = UnitError(code="unit_convert", message="bad unit", raw="1.2x", symbol="AAPL")

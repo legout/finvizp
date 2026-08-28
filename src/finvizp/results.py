@@ -76,6 +76,9 @@ class ResultMetadata:
     schema_version: int | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.query, Mapping):
+            msg = f"query must be a Mapping, got {type(self.query).__name__}"
+            raise FinvizDataError(msg)
         object.__setattr__(self, "query", _freeze(self.query))
         object.__setattr__(self, "symbols", tuple(self.symbols))
         object.__setattr__(self, "warnings", tuple(self.warnings))
@@ -103,6 +106,9 @@ class ResultMetadata:
             raise FinvizDataError(msg)
         if self.status is ResultStatus.COMPLETE and self.failed_units:
             msg = "COMPLETE result cannot have failed units"
+            raise FinvizDataError(msg)
+        if self.status is ResultStatus.COMPLETE and not self.succeeded_units:
+            msg = "COMPLETE result requires at least one succeeded unit"
             raise FinvizDataError(msg)
         if self.status is ResultStatus.PARTIAL and not (self.failed_units and self.succeeded_units):
             msg = "PARTIAL result requires both succeeded and failed units"

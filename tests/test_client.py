@@ -1087,4 +1087,80 @@ def test_non_url_proxy_values_are_rejected_before_transport(bad: dict[str, Any])
 )
 def test_non_list_pool_containers_are_rejected(bad: dict[str, Any]) -> None:
     with pytest.raises(FinvizQueryError):
-        FinvizClient(transport=FakeTransport(), **bad)  # type: ignore[arg-type]
+        FinvizClient(transport=FakeTransport(), **bad)
+
+
+# --- round 5: errors never echo proxy routes/credentials; structural URL check
+
+
+_PROXY_WITH_SECRET = "socks5://u:pwsecret@exit-proxy.example:1080"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"proxy": _PROXY_WITH_SECRET},
+        {"proxies": [_PROXY_WITH_SECRET]},
+        {"proxy": "http://u:pwsecret@"},
+        {"proxies": ["http://u:pwsecret@"]},
+    ],
+)
+def test_invalid_proxy_errors_never_contain_route_or_credentials(
+    kwargs: dict[str, Any],
+) -> None:
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError) as excinfo:
+        FinvizClient(transport=fake, **kwargs)  # type: ignore[arg-type]
+    rendered = str(excinfo.value) + repr(excinfo.value)
+    assert "exit-proxy.example" not in rendered
+    assert "pwsecret" not in rendered
+    assert fake.calls == []  # rejected before any transport/pool use
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"proxy": "http://"},
+        {"proxy": "https://"},
+        {"proxy": "http://:8080"},
+        {"proxies": ["http://"]},
+        {"proxies": ["http://good.example:1", "http://:1"]},
+    ],
+)
+def test_scheme_only_proxy_urls_are_rejected_before_transport(bad: dict[str, Any]) -> None:
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError):
+        FinvizClient(transport=fake, **bad)  # type: ignore[arg-type]
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize("bad", [{"proxy": "http://"}, {"proxy": _PROXY_WITH_SECRET}])
+async def test_invalid_per_call_proxy_rejected_without_leaking_route(
+    bad: dict[str, Any],
+) -> None:
+    fake = FakeTransport()
+    client = _client(fake)
+    with pytest.raises(FinvizQueryError) as excinfo:
+        await client._fetch("/quote.ashx", **bad)  # type: ignore[arg-type]
+    rendered = str(excinfo.value) + repr(excinfo.value)
+    assert "exit-proxy.example" not in rendered
+    assert "pwsecret" not in rendered
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize(
+    "env_val",
+    ["http://", _PROXY_WITH_SECRET],
+)
+def test_invalid_env_proxy_is_rejected_without_leaking_route(
+    env_val: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FINVIZP_PROXY", env_val.replace("pwsecret", "envsecret"))
+    fake = FakeTransport()
+    with pytest.raises(FinvizQueryError) as excinfo:
+        FinvizClient(transport=fake)
+    rendered = str(excinfo.value) + repr(excinfo.value)
+    assert "exit-proxy.example" not in rendered
+    assert "envsecret" not in rendered
+    assert fake.calls == []

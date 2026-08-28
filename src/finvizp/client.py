@@ -20,7 +20,7 @@ from urllib.parse import urljoin, urlsplit
 from fastreq.backends.base import Backend, NormalizedResponse, RequestConfig
 from fastreq.backends.curl_cffi import CurlCffiBackend
 from fastreq.exceptions import BackendError, RetryableResponse
-from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig, _is_valid_proxy
+from fastreq.utils.proxies import ProxyPool, ProxyPoolConfig
 from fastreq.utils.rate_limiter import AsyncRateLimiter, RateLimitConfig
 
 from finvizp.errors import (
@@ -114,6 +114,29 @@ def _normalize_kind(content_type: str) -> str | None:
 def _proxy_seed(proxy: str | None) -> str:
     digest = hashlib.sha256((proxy or "direct").encode()).hexdigest()[:12]
     return f"{digest}-direct" if proxy is None else digest
+
+
+def _is_valid_proxy_url(value: str) -> bool:
+    """Structural check for client-accepted proxy forms.
+
+    Supersedes fastreq's prefix-only check: scheme URLs must carry a real
+    authority (host, sane port); bare host:port[/user:pass] stay supported.
+    Never returns the input to callers — errors must stay route-free.
+    """
+    if not value or not isinstance(value, str):
+        return False
+    parts = urlsplit(value)
+    if parts.scheme in ("http", "https"):
+        if not parts.hostname:
+            return False
+        try:
+            return parts.port is None or 0 < parts.port <= 65535
+        except ValueError:
+            return False
+    if parts.scheme:
+        return False
+    pieces = value.split(":")
+    return len(pieces) in (2, 4) and bool(pieces[0]) and pieces[1].isdigit()
 
 
 # Header-specific sanitization: redact credential-bearing headers by label
@@ -350,8 +373,8 @@ class FinvizClient:
         if proxy is False or proxy == "":
             self._force_direct = True
         elif proxy is None or isinstance(proxy, str):
-            if isinstance(proxy, str) and not _is_valid_proxy(proxy):
-                msg = f"invalid proxy URL: {proxy!r}"
+            if isinstance(proxy, str) and not _is_valid_proxy_url(proxy):
+                msg = "invalid proxy URL"
                 raise FinvizQueryError(msg)
             self._explicit_proxy = proxy
         else:
@@ -367,24 +390,24 @@ class FinvizClient:
         if proxies is False or (isinstance(proxies, list) and not proxies):
             self._force_direct = True
         elif isinstance(proxies, list):
-            invalid = [p for p in proxies if not _is_valid_proxy(p)]
+            invalid = [p for p in proxies if not _is_valid_proxy_url(p)]
             if invalid:
-                msg = f"invalid proxy URL(s): {invalid!r}"
+                msg = "invalid proxy URL in proxies list"
                 raise FinvizQueryError(msg)
             self._pool = ProxyPool(proxies=list(proxies), config=ProxyPoolConfig())
         if not self._force_direct and self._explicit_proxy is None and self._pool is None:
             import os
 
             if env_proxy := os.getenv("FINVIZP_PROXY", ""):
-                if not _is_valid_proxy(env_proxy):
-                    msg = f"invalid FINVIZP_PROXY value: {env_proxy!r}"
+                if not _is_valid_proxy_url(env_proxy):
+                    msg = "invalid proxy URL in FINVIZP_PROXY"
                     raise FinvizQueryError(msg)
                 self._explicit_proxy = env_proxy
             else:
                 env_entries = [
                     p.strip() for p in os.getenv("FASTREQ_PROXIES", "").split(",") if p.strip()
                 ]
-                env_entries = [p for p in env_entries if _is_valid_proxy(p)]
+                env_entries = [p for p in env_entries if _is_valid_proxy_url(p)]
                 if env_entries:
                     self._pool = ProxyPool(proxies=env_entries, config=ProxyPoolConfig())
         self._pinned_proxy: Any = _UNPINNED
@@ -449,8 +472,8 @@ class FinvizClient:
         if proxy is False or proxy == "":
             return None
         if isinstance(proxy, str):
-            if not _is_valid_proxy(proxy):
-                msg = f"invalid proxy URL: {proxy!r}"
+            if not _is_valid_proxy_url(proxy):
+                msg = "invalid proxy URL"
                 raise FinvizQueryError(msg)
             return proxy
         msg = "proxy must be a URL, False, or None"

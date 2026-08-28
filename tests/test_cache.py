@@ -115,7 +115,9 @@ def test_key_is_query_order_insensitive() -> None:
 # --- TTL ----------------------------------------------------------------------
 
 
-def test_expired_entry_is_a_miss_and_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_expired_entry_is_a_miss_but_stays_retrievable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import finvizp.cache as cache_module
 
     now = 1000.0
@@ -125,9 +127,10 @@ def test_expired_entry_is_a_miss_and_is_dropped(monkeypatch: pytest.MonkeyPatch)
     cache.set(key, _entry(expires_at=now + 10))
     assert cache.get(key) is not None
     now += 11
-    assert cache.get(key) is None  # expired -> miss
-    assert cache.stats()["entries"] == 0  # dropped on read
-    assert cache.stats()["misses"] == 1  # only the expired read is a miss
+    assert cache.get(key) is not None  # returned: stale-if-error may still serve it
+    assert cache.stats()["entries"] == 1  # kept, reclaimable by eviction
+    assert cache.stats()["misses"] == 1
+    assert cache.stats()["hits"] == 1
 
 
 # --- eviction -----------------------------------------------------------------
@@ -156,7 +159,7 @@ def test_entry_cap_evicts_oldest() -> None:
     assert cache.stats()["entries"] == 2
 
 
-def test_peek_returns_entry_without_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_expired_reads_are_counted_but_not_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
     import finvizp.cache as cache_module
 
     now = 1000.0
@@ -164,12 +167,10 @@ def test_peek_returns_entry_without_side_effects(monkeypatch: pytest.MonkeyPatch
     cache = ResultCache()
     key = _key(cache)
     cache.set(key, _entry(expires_at=now + 10))
-    assert cache.peek(key) is not None
-    assert cache.stats()["hits"] == 0 and cache.stats()["misses"] == 0  # no counters
+    assert cache.get(key) is not None  # hit
     now += 11  # entry is now expired
-    assert cache.peek(key) is not None  # stays visible: stale-if-error fallback
-    assert cache.stats()["entries"] == 1  # peek never drops
-    assert cache.get(key) is None  # ordinary read still drops expired
+    assert cache.get(key) is not None  # returned (miss-counted) but freshness is gone
+    assert cache.stats()["hits"] == 1 and cache.stats()["misses"] == 1
 
 
 def test_access_refreshes_lru_order() -> None:

@@ -10,6 +10,7 @@ integration, so the import below is TYPE_CHECKING-only to avoid a cycle.
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import re
@@ -127,6 +128,19 @@ def _proxy_seed(proxy: str | None) -> str:
     return f"{digest}-direct" if proxy is None else digest
 
 
+def _payload_bytes(data: Any) -> bytes:
+    """Approximate cached size for any payload shape.
+
+    ponytail: JSON payloads are sized via serialized bytes (exact but O(n) per
+    store); a cheap recursive estimator wins if stores show up in profiles.
+    """
+    if isinstance(data, str):
+        return data.encode()
+    if isinstance(data, bytes):
+        return data
+    return json.dumps(data, default=str, separators=(",", ":")).encode()
+
+
 def _is_valid_proxy_url(value: str) -> bool:
     """Structural check for client-accepted proxy forms.
 
@@ -238,6 +252,7 @@ class ClientResponse:
     served_at: datetime | None = None
     cache_hit: bool = False
     stale: bool = False
+    cache_age: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.query, MappingProxyType):
@@ -597,13 +612,9 @@ class FinvizClient:
             response = await self._fetch(path, params=effective_query, proxy=proxy)
             self._store(path, effective_query, proxy, response)
             return response
-        # peek() (not get()): an expired entry must survive here so the
-        # opt-in stale-if-error fallback in _miss can still serve it; get()
-        # would drop it on read. Freshness is re-checked via expires_at, so
-        # hit counting stays in ResultCache.get for ordinary read paths.
-        entry = store.peek(key)
+        entry = store.get(key)
         if entry is not None and monotonic() < entry.expires_at:
-            return self._stamped(entry.response, cache_hit=True, stale=False)
+            return self._serve(entry, cache_hit=True, stale=False)
         return await self._single_flight(key, path, effective_query, proxy)
 
     async def _single_flight(
@@ -614,16 +625,21 @@ class FinvizClient:
         if existing is not None:
             response = await asyncio.shield(existing)
             # Losers report the winner's entry as a cache hit.
-            return self._stamped(response, cache_hit=True, stale=False)
+            return self._serve_joiner(response)
         task: asyncio.Task[ClientResponse] = asyncio.ensure_future(
             self._miss(key, path, query, proxy)
         )
-        self._inflight[key] = task
-        try:
-            return await asyncio.shield(task)
-        finally:
+
+        # The mapping is released by the shared task's own done callback, not
+        # by the leader's await: if the creator is cancelled, later identical
+        # callers must still be able to join the already-running flight.
+        def _release(f: asyncio.Task[ClientResponse]) -> None:
             if self._inflight.get(key) is task:
                 del self._inflight[key]
+
+        task.add_done_callback(_release)
+        self._inflight[key] = task
+        return await asyncio.shield(task)
 
     async def _miss(
         self, key: str, path: str, query: dict[str, Any], proxy: str | bool | None
@@ -635,9 +651,9 @@ class FinvizClient:
             response = await self._fetch(path, params=query, proxy=proxy)
         except FinvizError as exc:
             if self._stale_if_error and isinstance(exc, FINVIZ_TRANSPORT_ERRORS):
-                entry = cache.peek(key)
+                entry = cache.get(key)
                 if entry is not None:
-                    return self._stamped(entry.response, cache_hit=True, stale=True)
+                    return self._serve(entry, cache_hit=True, stale=True)
             raise
         self._store(path, query, proxy, response)
         return response
@@ -668,21 +684,41 @@ class FinvizClient:
         cache.set(
             self._cache_key(path, query, proxy),
             CacheEntry(
-                response=response,
+                response=self._isolated(response),
                 expires_at=now + (self._cache_ttl or 0.0),
                 stored_at=now,
-                approx_bytes=max(
-                    1,
-                    len(response.response_hash) // 2
-                    + (len(response.data) if isinstance(response.data, (str, bytes)) else 0),
-                ),
+                approx_bytes=max(1, len(_payload_bytes(response.data))),
             ),
         )
 
     @staticmethod
-    def _stamped(response: ClientResponse, *, cache_hit: bool, stale: bool) -> ClientResponse:
-        """Return the cached envelope with this serve's provenance facts."""
-        return replace(response, served_at=datetime.now(UTC), cache_hit=cache_hit, stale=stale)
+    def _isolated(response: ClientResponse) -> ClientResponse:
+        """Snapshot the envelope so no caller mutation can reach the cache."""
+        return replace(response, data=copy.deepcopy(response.data))
+
+    @classmethod
+    def _serve(cls, entry: Any, *, cache_hit: bool, stale: bool) -> ClientResponse:
+        """Return a cached envelope with this serve's provenance facts."""
+        response: ClientResponse = entry.response
+        age = (datetime.now(UTC) - response.fetched_at).total_seconds()
+        return replace(
+            cls._isolated(response),
+            served_at=datetime.now(UTC),
+            cache_hit=cache_hit,
+            stale=stale,
+            cache_age=age,
+        )
+
+    @staticmethod
+    def _serve_joiner(response: ClientResponse) -> ClientResponse:
+        """Provenance for a caller that joined an in-flight miss."""
+        return replace(
+            FinvizClient._isolated(response),
+            served_at=datetime.now(UTC),
+            cache_hit=True,
+            stale=False,
+            cache_age=0.0,
+        )
 
     def invalidate(self, path: str, *, params: Mapping[str, Any] | None = None) -> bool:
         """Drop one cached route entry; ``True`` when an entry was held."""

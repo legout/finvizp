@@ -87,27 +87,23 @@ class ResultCache:
         return f"finviz-cache-v1:{digest}"
 
     def get(self, key: str) -> CacheEntry | None:
+        """Counted read: fresh entries are hits with refreshed LRU recency.
+
+        Expired entries are misses but are still returned (and left in the
+        store, reclaimable by eviction) so the opt-in stale-if-error fallback
+        can serve them after a transport failure.
+        """
         entry = self._entries.get(key)
         if entry is None:
             self._misses += 1
             return None
-        if monotonic() >= entry.expires_at:
-            self._drop(key)
-            self._evictions += 1
+        if monotonic() < entry.expires_at:
+            del self._entries[key]  # re-insert to refresh LRU recency
+            self._entries[key] = entry
+            self._hits += 1
+        else:
             self._misses += 1
-            return None
-        del self._entries[key]  # re-insert to refresh LRU recency
-        self._entries[key] = entry
-        self._hits += 1
         return entry
-
-    def peek(self, key: str) -> CacheEntry | None:
-        """Side-effect-free read: never touches counters, order, or expiry.
-
-        Stale-if-error looks past expiry, so expired entries must stay
-        retrievable here even though ordinary ``get`` drops them.
-        """
-        return self._entries.get(key)
 
     def set(self, key: str, entry: CacheEntry) -> None:
         self._drop(key)

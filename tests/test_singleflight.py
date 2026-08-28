@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
 from fastreq.exceptions import BackendError
 
+from finvizp.cache import ResultCache
 from finvizp.client import FinvizClient
 from finvizp.errors import (
     FinvizEntitlementError,
@@ -262,3 +264,123 @@ async def test_singleflight_released_after_failure_so_retry_can_succeed() -> Non
     ok = await client.fetch("/quote.ashx")  # must not be poisoned by the failed flight
     assert flaky.calls == 2
     assert ok.cache_hit is False
+
+
+# --- review regressions ---------------------------------------------------------
+
+
+async def test_creator_cancellation_does_not_spawn_a_second_backend_call() -> None:
+    slow = SlowTransport()
+    client = _client(slow, cache_ttl=60.0)
+    leader = asyncio.create_task(client.fetch("/quote.ashx"))
+    await asyncio.sleep(0.01)  # leader has registered its flight
+    leader.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await leader
+    await client.fetch("/quote.ashx")  # immediately: must join the orphaned flight
+    await asyncio.sleep(0.1)  # let the shielded miss finish before asserting
+    assert slow.calls == 1  # the completed flight still serves the later caller
+
+
+async def test_fresh_hits_refresh_lru_recency_and_hit_stats() -> None:
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0, cache_max_entries=2)
+    await client.fetch("/quote.ashx", params={"t": "A"})  # miss
+    await client.fetch("/quote.ashx", params={"t": "B"})  # miss
+    await client.fetch("/quote.ashx", params={"t": "A"})  # hit -> A becomes MRU
+    await client.fetch("/quote.ashx", params={"t": "C"})  # miss -> evicts B, keeps A
+    await client.fetch("/quote.ashx", params={"t": "A"})  # hit: A survived its re-read
+    assert fake.calls == 3
+    assert client._cache is not None
+    assert client._cache.stats()["hits"] == 2  # fresh hits counted
+
+
+async def test_json_responses_are_byte_bounded() -> None:
+    payload = json.dumps({"data": "x" * 300_000}).encode()
+    fake = CountingTransport(
+        *[
+            _resp(
+                body=payload,
+                content_type="application/json",
+                url=f"{BASE}/api/quote",
+            )
+            for _ in range(4)
+        ]
+    )
+    client = _client(fake, cache_ttl=60.0, cache_max_bytes=400_000)
+    for i in range(4):
+        await client.fetch("/api/quote", params={"t": f"S{i}"})
+    assert client._cache is not None
+    stats = client._cache.stats()
+    assert stats["approx_bytes"] <= 400_000
+    assert stats["entries"] < 4  # big JSON entries actually evicted
+
+
+async def test_cached_json_payload_is_immutable_across_hits() -> None:
+    payload = {"price": 100, "tags": ["a"]}
+    fake = CountingTransport(
+        _resp(
+            body=json.dumps(payload).encode(),
+            content_type="application/json",
+            url=f"{BASE}/api/quote",
+        )
+    )
+    client = _client(fake, cache_ttl=60.0)
+    first = await client.fetch("/api/quote")
+    first.data["price"] = 999  # type: ignore[index]
+    first.data["tags"].append("mutated")  # type: ignore[index]
+    second = await client.fetch("/api/quote")
+    assert fake.calls == 1
+    assert second.data == {"price": 100, "tags": ["a"]}
+
+
+async def test_injected_caller_cache_adapter_is_sufficient() -> None:
+    class DocumentedAdapter:
+        """Implements exactly the documented seam: get/set/delete/clear/stats/make_key."""
+
+        def __init__(self) -> None:
+            self.inner = ResultCache()
+
+        def get(self, key: str) -> Any:
+            return self.inner.get(key)
+
+        def set(self, key: str, entry: Any) -> None:
+            self.inner.set(key, entry)
+
+        def delete(self, key: str) -> bool:
+            return self.inner.delete(key)
+
+        def clear(self) -> int:
+            return self.inner.clear()
+
+        def stats(self) -> Any:
+            return self.inner.stats()
+
+        def make_key(self, **facets: Any) -> str:
+            return self.inner.make_key(**facets)
+
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0, cache=DocumentedAdapter())
+    first = await client.fetch("/quote.ashx")
+    second = await client.fetch("/quote.ashx")
+    assert fake.calls == 1
+    assert second.cache_hit is True
+    assert first.response_hash == second.response_hash
+
+
+async def test_provenance_reports_cache_age_on_hit_and_stale() -> None:
+    fake = CountingTransport(_resp(), _resp(), BackendError("boom"))
+    client = _client(fake, cache_ttl=0.05, stale_if_error=True)
+    fresh = await client.fetch("/quote.ashx")
+    assert fresh.cache_hit is False
+    assert fresh.cache_age is None  # a miss has no cache age
+    await asyncio.sleep(0.08)  # first entry is now stale
+    hit = await client.fetch("/quote.ashx")  # miss -> underlying refetch
+    assert fake.calls == 2 and hit.cache_hit is False
+    aged = await client.fetch("/quote.ashx")  # fresh hit on the second entry
+    assert aged.cache_hit is True
+    assert aged.cache_age is not None and 0.0 <= aged.cache_age < 0.05
+    await asyncio.sleep(0.08)  # second entry is now stale too
+    stale = await client.fetch("/quote.ashx")  # transport failure -> stale fallback
+    assert stale.stale is True and stale.cache_hit is True
+    assert stale.cache_age is not None and stale.cache_age >= 0.08

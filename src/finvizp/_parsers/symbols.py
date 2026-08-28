@@ -20,6 +20,12 @@ from finvizp.errors import FetchWarning, FinvizParseError
 __all__ = ["parse_sitemap", "parse_suggestions"]
 
 _SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+_LOC_TAG = _SITEMAP_NS + "loc"
+# Standard sitemap-protocol optional children of <url>; never data here, but
+# their presence is not structure drift.
+_SITEMAP_OPTIONAL_TAGS = frozenset(
+    _SITEMAP_NS + name for name in ("lastmod", "changefreq", "priority")
+)
 _STOCK_PATH = "/stock"
 _CANONICAL_HOST = "finviz.com"
 # Raw source-value gate: unpadded ASCII alnum/dash only, before any
@@ -65,8 +71,22 @@ def _canonical_symbol(loc: str) -> str | None:
         or parts.fragment
     ):
         return None
+    # Raw-query gate: the source value is validated BEFORE percent-decoding,
+    # so percent-escaped tickers (%41APL, BRK%2DB, %C5%BF) never normalize.
+    # The `t` token must already be an unpadded ASCII [A-Za-z0-9-]+ value;
+    # any encoded form is an unexpected URL, not a symbol.
+    raw_query = parts.query
+    t_raw: str | None = None
+    for field in raw_query.split("&") if raw_query else ():
+        key, sep, value = field.partition("=")
+        if key == "t":
+            if t_raw is not None or not sep or not _VALID_SOURCE_SYMBOL.fullmatch(value):
+                return None
+            t_raw = value
+    if t_raw is None:
+        return None
     try:
-        pairs = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+        pairs = parse_qsl(raw_query, keep_blank_values=True, strict_parsing=True)
     except ValueError:
         return None
     fields: dict[str, list[str]] = {}
@@ -74,16 +94,12 @@ def _canonical_symbol(loc: str) -> str | None:
         fields.setdefault(key, []).append(value)
     if set(fields) - {"t", "ty"}:
         return None
-    t_values = fields.get("t", [])
-    if len(t_values) != 1:
+    if len(fields.get("t", [])) != 1:
         return None
     ty_values = fields.get("ty", [])
     if ty_values not in ([], ["oc"]):
         return None
-    raw = t_values[0]
-    if not _VALID_SOURCE_SYMBOL.fullmatch(raw):
-        return None
-    return raw.upper()
+    return t_raw.upper()
 
 
 def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
@@ -124,11 +140,13 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
             msg = f"unexpected sitemap child {url.tag!r}"
             raise FinvizParseError(msg)
         children = _elements(url)
-        locs = [child for child in children if child.tag == _SITEMAP_NS + "loc"]
-        if len(locs) != 1 or len(children) != 1:
-            # Exactly one namespaced loc and nothing else: unknown nested
-            # elements (lastmod, priority, foreign-namespace tags, ...) are
-            # structure drift, never ordinary data.
+        locs = [child for child in children if child.tag == _LOC_TAG]
+        unknown = [child for child in children if child.tag not in _SITEMAP_OPTIONAL_TAGS]
+        if len(locs) != 1 or len(unknown) != 1:
+            # Exactly one namespaced loc plus only the protocol's standard
+            # optional children (lastmod/changefreq/priority, never data):
+            # unknown nested elements (widget, foreign-namespace tags, ...)
+            # are structure drift, never ordinary data.
             msg = "sitemap URL entry must contain exactly one loc"
             raise FinvizParseError(msg)
         text = (locs[0].text or "").strip()

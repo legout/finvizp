@@ -471,3 +471,30 @@ async def test_manifest_encoded_and_padded_tickers_warn_not_normalize() -> None:
     with pytest.raises(FinvizParseError):
         await symbols_api.symbols_async(client=FinvizClient(transport=fake))
     assert fake.urls == [f"{BASE}/sitemap.xml"]  # one request, nothing followed
+
+
+async def test_manifest_percent_escaped_tickers_never_decode_to_symbols() -> None:
+    """Raw query is validated pre-decode: %41APL and BRK%2DB never normalize."""
+    xml = (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=%41APL</loc></url>"
+        "<url><loc>https://finviz.com/stock?t=BRK%2DB</loc></url>"
+        "</urlset>"
+    )
+    fake = RecordingTransport(_resp(xml.encode(), "text/xml", f"{BASE}/sitemap.xml"))
+    with pytest.raises(FinvizParseError):
+        await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert fake.urls == [f"{BASE}/sitemap.xml"]
+
+
+async def test_manifest_with_standard_optional_children_still_parses() -> None:
+    """A real-world sitemap with <lastmod> etc. yields its symbol end to end."""
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
+        "<lastmod>2026-08-28</lastmod></url>"
+        "</urlset>"
+    )
+    fake = RecordingTransport(_resp(xml.encode(), "text/xml", f"{BASE}/sitemap.xml"))
+    await symbols_api.symbols_async(client=FinvizClient(transport=fake))

@@ -182,14 +182,28 @@ def test_xml_comments_and_processing_instructions_are_ignored() -> None:
     assert warnings == []
 
 
+def test_standard_optional_url_children_are_accepted() -> None:
+    # The sitemap protocol allows optional <lastmod>/<changefreq>/<priority>
+    # inside <url>; they are never data here but must not be structure drift.
+    rows, warnings = symbols_parser.parse_sitemap(
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
+        "<lastmod>2026-08-28</lastmod>"
+        "<changefreq>daily</changefreq>"
+        "<priority>0.5</priority></url></urlset>"
+    )
+    assert rows == ["AAPL"]
+    assert warnings == []
+
+
 def test_unknown_nested_element_inside_url_is_structure_drift() -> None:
-    # Unknown element children must never be accepted as ordinary data; the
-    # sitemap model has no optional elements beyond loc here.
+    # Unknown element children must never be accepted as ordinary data; only
+    # the standard optional sitemap children are tolerated alongside loc.
     with pytest.raises(FinvizParseError):
         symbols_parser.parse_sitemap(
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             "<url><loc>https://finviz.com/stock?t=AAPL</loc>"
-            "<lastmod>2026-08-28</lastmod></url></urlset>"
+            "<lastmod>2026-08-28</lastmod><widget>x</widget></url></urlset>"
         )
 
 
@@ -260,12 +274,19 @@ def test_parse_suggestions_malformed_json_is_parse_drift() -> None:
 
 
 @pytest.mark.parametrize(
-    "loc", ["https://finviz.com/stock?t=%C5%BF", "https://finviz.com/stock?t=AAPL+"]
+    "loc",
+    [
+        "https://finviz.com/stock?t=%C5%BF",
+        "https://finviz.com/stock?t=AAPL+",
+        "https://finviz.com/stock?t=%41APL",  # decodes to AAPL; must not normalize
+        "https://finviz.com/stock?t=BRK%2DB",  # encoded dash; must not decode
+    ],
 )
 def test_percent_encoded_and_padded_source_values_are_unexpected_urls(loc: str) -> None:
-    # Validation happens on the raw source value BEFORE normalization:
-    # %C5%BF must not decode/collapse to "S" and "AAPL+" must not trim to
-    # "AAPL" — both shapes are unexpected URLs, skipped with a warning.
+    # Validation happens on the RAW query string BEFORE percent-decoding:
+    # %C5%BF must not decode/collapse to "S", %41APL must not decode to
+    # "AAPL", %2D must not decode to a dash, and "AAPL+" must not trim to
+    # "AAPL" — all shapes are unexpected URLs, skipped with a warning.
     rows, warnings = symbols_parser.parse_sitemap(
         f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
     )

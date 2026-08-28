@@ -11,19 +11,22 @@ registry-driven Arrow builder into the long ``statements`` dataset.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 from collections.abc import Iterable
 from typing import Any
 
 from finvizp import arrow as fa
 from finvizp._parsers import statements as stmt_parser
-from finvizp._symbols import canonical_symbols
+from finvizp._symbols import resolve_symbols
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
+    FetchWarning,
     FinvizBatchError,
     FinvizPartialError,
     FinvizQueryError,
+    UnitError,
 )
 from finvizp.results import (
     AccessTier,
@@ -78,8 +81,10 @@ def _parse_response(
     statement: str,
     kind: str,
     periodicity: str,
+    strict_schema: bool = False,
 ) -> FetchResult[Any]:
     """Reviewed endpoint parser: classified envelope -> immutable FetchResult."""
+    warnings: list[FetchWarning] = []
     records = stmt_parser.parse_statement_json(
         response.data, symbol=symbol, statement=statement, fetched_at=response.fetched_at
     )
@@ -96,12 +101,14 @@ def _parse_response(
                 access_tier=response.access_tier,
                 fetched_at=response.fetched_at,
                 query={"t": symbol, "s": statement},
+                symbols=(SymbolResolutionRecord(position=0, requested=symbol, canonical=symbol),),
                 requested_units=0,
                 succeeded_units=0,
                 failed_units=0,
                 attempts=response.attempts,
                 response_hash=response.response_hash,
                 route_fingerprint=response.route_fingerprint,
+                warnings=tuple(warnings),
             ),
         )
     rows = [
@@ -118,7 +125,13 @@ def _parse_response(
         }
         for row in records.rows
     ]
-    table = fa.build_table("statements", rows, fetched_at=response.fetched_at)
+    table = fa.build_table(
+        "statements",
+        rows,
+        fetched_at=response.fetched_at,
+        strict_schema=strict_schema,
+        on_warning=warnings.append,
+    )
     return FetchResult(
         data=table,
         metadata=ResultMetadata(
@@ -127,12 +140,14 @@ def _parse_response(
             access_tier=response.access_tier,
             fetched_at=response.fetched_at,
             query={"t": symbol, "s": statement},
+            symbols=(SymbolResolutionRecord(position=0, requested=symbol, canonical=symbol),),
             requested_units=1,
             succeeded_units=1,
             failed_units=0,
             attempts=response.attempts,
             response_hash=response.response_hash,
             route_fingerprint=response.route_fingerprint,
+            warnings=tuple(warnings),
         ),
     )
 
@@ -146,12 +161,18 @@ def _symbol_op(
     *,
     refresh: bool = False,
     proxy: str | bool | None = None,
+    strict_schema: bool = False,
 ):
     """Bind one cached per-symbol endpoint operation."""
 
     def parse(response: ClientResponse) -> FetchResult[Any]:
         return _parse_response(
-            response, symbol=symbol, statement=statement, kind=kind, periodicity=periodicity
+            response,
+            symbol=symbol,
+            statement=statement,
+            kind=kind,
+            periodicity=periodicity,
+            strict_schema=strict_schema,
         )
 
     return client._endpoint_op(
@@ -173,38 +194,97 @@ async def statements_async(
     client: FinvizClient | None = None,
     refresh: bool = False,
     proxy: str | bool | None = None,
+    strict_schema: bool = False,
 ) -> FetchResult[Any]:
     """Fetch one statement form for one symbol; long Arrow table result.
 
     Args:
-        symbols: one symbol or an iterable (deduped, canonicalized).
+        symbols: one symbol or an iterable resolving to exactly one canonical
+            symbol (original spellings are preserved in the metadata).
         statement: reviewed code — ``IA``/``IQ``/``BA``/``BQ``/``CA``/``CQ``.
         client: reusable client; a transient one is created and closed when
             omitted.
         refresh: bypass the cache and replace any cached entry.
         proxy: per-call proxy override (URL, ``False`` forces direct, ``None``
             keeps client config).
+        strict_schema: promote recoverable Arrow conversion drift to typed
+            errors (foundation contract).
 
     Returns an immutable :class:`FetchResult` whose ``.data`` is the long
     ``statements`` Arrow table (``.table`` accessor). A provider
     ``{"error": "no data"}`` payload is a recognized ``EMPTY`` result.
     """
     kind, periodicity = _validate(statement)
-    canonical = canonical_symbols(symbols)
+    canonical, records = resolve_symbols(symbols)
     if len(canonical) != 1:
         msg = (
             "statements_async() takes exactly one symbol; use statements_batch_async() for batches"
         )
         raise FinvizQueryError(msg)
+    # One canonical fetch; metadata keeps every original input position and
+    # spelling (multiple spellings may collapse onto the one canonical form).
+    spellings = [record.requested for record in records]
     symbol = canonical[0]
     if client is None:
         async with _transient_client() as transient:
-            op = _symbol_op(
-                transient, symbol, statement, kind, periodicity, refresh=refresh, proxy=proxy
+            return await _statements_via(
+                transient,
+                spellings,
+                symbol,
+                statement,
+                kind,
+                periodicity,
+                refresh=refresh,
+                proxy=proxy,
+                strict_schema=strict_schema,
             )
-            return await op()
-    op = _symbol_op(client, symbol, statement, kind, periodicity, refresh=refresh, proxy=proxy)
-    return await op()
+    return await _statements_via(
+        client,
+        spellings,
+        symbol,
+        statement,
+        kind,
+        periodicity,
+        refresh=refresh,
+        proxy=proxy,
+        strict_schema=strict_schema,
+    )
+
+
+async def _statements_via(
+    client: FinvizClient,
+    spellings: list[str],
+    symbol: str,
+    statement: str,
+    kind: str,
+    periodicity: str,
+    *,
+    refresh: bool,
+    proxy: str | bool | None,
+    strict_schema: bool,
+) -> FetchResult[Any]:
+    """Run the one canonical cached op, then stamp per-input provenance."""
+    op = _symbol_op(
+        client,
+        symbol,
+        statement,
+        kind,
+        periodicity,
+        refresh=refresh,
+        proxy=proxy,
+        strict_schema=strict_schema,
+    )
+    result = await op()
+    return dataclasses.replace(
+        result,
+        metadata=dataclasses.replace(
+            result.metadata,
+            symbols=tuple(
+                SymbolResolutionRecord(position=position, requested=requested, canonical=symbol)
+                for position, requested in enumerate(spellings)
+            ),
+        ),
+    )
 
 
 def statements(
@@ -214,10 +294,18 @@ def statements(
     client: FinvizClient | None = None,
     refresh: bool = False,
     proxy: str | bool | None = None,
+    strict_schema: bool = False,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`statements_async`; fails inside a running loop."""
     return run_sync(
-        statements_async(symbols, statement=statement, client=client, refresh=refresh, proxy=proxy)
+        statements_async(
+            symbols,
+            statement=statement,
+            client=client,
+            refresh=refresh,
+            proxy=proxy,
+            strict_schema=strict_schema,
+        )
     )
 
 
@@ -238,17 +326,20 @@ async def statements_batch_async(
     allow_partial: bool = False,
     refresh: bool = False,
     proxy: str | bool | None = None,
+    strict_schema: bool = False,
 ) -> FetchResult[Any]:
     """Fetch one statement form for many symbols, bounded and concurrent.
 
     Each canonical symbol is fetched once (deduped, first-occurrence order);
-    per-symbol results concatenate into one long Arrow table. Default strict
-    mode raises :class:`FinvizPartialError` carrying the immutable partial
-    result when any unit fails; ``allow_partial=True`` returns it instead. An
-    all-failed batch always raises :class:`FinvizBatchError`.
+    per-symbol results concatenate into one long Arrow table. ``metadata`` keeps
+    one :class:`SymbolResolutionRecord` per original input position/spelling.
+    Default strict mode raises :class:`FinvizPartialError` carrying the
+    immutable partial result (with per-unit failure detail) when any unit
+    fails; ``allow_partial=True`` returns it instead. An all-failed batch
+    always raises :class:`FinvizBatchError`.
     """
     kind, periodicity = _validate(statement)
-    canonical = canonical_symbols(symbols)
+    canonical, records = resolve_symbols(symbols)
     if len(canonical) > MAX_BATCH_SYMBOLS:
         msg = f"batch exceeds the bounded limit of {MAX_BATCH_SYMBOLS} symbols"
         raise FinvizQueryError(msg)
@@ -258,28 +349,33 @@ async def statements_batch_async(
             return await _run_batch(
                 transient,
                 canonical,
+                records,
                 statement,
                 kind,
                 periodicity,
                 allow_partial=allow_partial,
                 refresh=refresh,
                 proxy=proxy,
+                strict_schema=strict_schema,
             )
     return await _run_batch(
         client,
         canonical,
+        records,
         statement,
         kind,
         periodicity,
         allow_partial=allow_partial,
         refresh=refresh,
         proxy=proxy,
+        strict_schema=strict_schema,
     )
 
 
 async def _run_batch(
     client: FinvizClient,
     canonical: list[str],
+    records: list[SymbolResolutionRecord],
     statement: str,
     kind: str,
     periodicity: str,
@@ -287,23 +383,65 @@ async def _run_batch(
     allow_partial: bool,
     refresh: bool,
     proxy: str | bool | None,
+    strict_schema: bool,
 ) -> FetchResult[Any]:
     ops = [
-        _symbol_op(client, symbol, statement, kind, periodicity, refresh=refresh, proxy=proxy)
+        _symbol_op(
+            client,
+            symbol,
+            statement,
+            kind,
+            periodicity,
+            refresh=refresh,
+            proxy=proxy,
+            strict_schema=strict_schema,
+        )
         for symbol in canonical
     ]
-    outcomes = await asyncio.gather(*(op() for op in ops), return_exceptions=True)
+    # First-completed loop: a child cancellation must cancel the siblings and
+    # propagate immediately, never waiting for sibling completion (gather with
+    # return_exceptions=True only observes cancellation after ALL children
+    # finish, so it is not usable here).
+    tasks = [asyncio.ensure_future(op()) for op in ops]
+    pending: set[asyncio.Future[Any]] = set(tasks)
+    try:
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            if any(task.cancelled() for task in done):
+                # A child was cancelled: cancel and reap the siblings, then
+                # propagate immediately — their in-flight work is not awaited.
+                for other in pending:
+                    other.cancel()
+                if pending:
+                    await asyncio.wait(pending)
+                raise asyncio.CancelledError()
+    except BaseException:
+        # The batch itself was cancelled (or a child cancellation surfaced):
+        # cancel every child and reap before propagating.
+        for task in tasks:
+            task.cancel()
+        if not all(task.done() for task in tasks):
+            await asyncio.wait(tasks)
+        raise
 
     succeeded: list[Any] = []
     failed: list[tuple[str, BaseException]] = []
-    for symbol, outcome in zip(canonical, outcomes, strict=True):
-        if isinstance(outcome, asyncio.CancelledError):
-            # Cancellation propagates immediately, never recorded as failure.
-            raise outcome
-        if isinstance(outcome, BaseException):
-            failed.append((symbol, outcome))
+    for symbol, task in zip(canonical, tasks, strict=True):
+        exc = task.exception()
+        if exc is not None:
+            failed.append((symbol, exc))
         else:
-            succeeded.append(outcome)
+            succeeded.append(task.result())
+
+    unit_errors = tuple(
+        UnitError(
+            code="unit_failed",
+            message=f"{type(exc).__name__}: {exc}",
+            symbol=symbol,
+        )
+        for symbol, exc in failed
+    )
+    warnings = tuple(warning for result in succeeded for warning in result.metadata.warnings)
 
     def _combined(status: ResultStatus, succ: list, fail: list) -> FetchResult[Any]:
         tables = [result.data for result in succ]
@@ -322,14 +460,15 @@ async def _run_batch(
                 if succ
                 else dt.datetime.now(dt.UTC),
                 query={"s": statement, "symbols": list(canonical)},
-                symbols=tuple(
-                    SymbolResolutionRecord(position=i, requested=s, canonical=s)
-                    for i, s in enumerate(canonical)
-                ),
+                # One provenance record per original input position/spelling,
+                # even when several spellings collapse onto one canonical fetch.
+                symbols=tuple(records),
                 requested_units=len(canonical),
                 succeeded_units=len(succ),
                 failed_units=len(fail),
                 response_hash=succ[0].metadata.response_hash if len(succ) == 1 else None,
+                unit_errors=unit_errors,
+                warnings=warnings,
             ),
         )
 
@@ -357,6 +496,7 @@ def statements_batch(
     allow_partial: bool = False,
     refresh: bool = False,
     proxy: str | bool | None = None,
+    strict_schema: bool = False,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`statements_batch_async`; fails inside a loop."""
     return run_sync(
@@ -367,5 +507,6 @@ def statements_batch(
             allow_partial=allow_partial,
             refresh=refresh,
             proxy=proxy,
+            strict_schema=strict_schema,
         )
     )

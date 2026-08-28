@@ -124,9 +124,9 @@ async def test_statements_returns_long_arrow_table() -> None:
     assert isinstance(result, FetchResult)
     table = result.table
     assert isinstance(table, pa.Table)
-    from finvizp import schemas
+    from finvizp import arrow as fa
 
-    assert table.schema.names == list(schemas.dataset_field_names("statements"))
+    assert table.schema.names == list(fa.dataset_field_names("statements"))
     assert result.metadata.status is ResultStatus.COMPLETE
     assert result.metadata.endpoint == "/api/statement"
     # 6 metrics x 4 periods
@@ -235,9 +235,9 @@ async def test_no_data_error_is_recognized_empty_result() -> None:
     assert result.metadata.status is ResultStatus.EMPTY
     assert result.table.num_rows == 0
     # Registered schema survives an empty result.
-    from finvizp import schemas
+    from finvizp import arrow as fa
 
-    assert result.table.schema.names == list(schemas.dataset_field_names("statements"))
+    assert result.table.schema.names == list(fa.dataset_field_names("statements"))
 
 
 async def test_structural_drift_raises_parse_error() -> None:

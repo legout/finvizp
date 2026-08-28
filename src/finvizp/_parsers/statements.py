@@ -80,16 +80,22 @@ def parse_statement_json(
     if not isinstance(payload, dict):
         raise _fail(f"statement payload must be a JSON object, got {type(payload).__name__}")
     if "error" in payload:
-        # The provider's recognized no-results state ({"error": "no data"}).
-        return StatementRecords(
-            symbol=symbol,
-            statement=statement,
-            periodicity="quarterly" if statement.endswith("Q") else "annual",
-            currency=None,
-            rows=(),
-            fingerprint=hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
-            empty_recognized=True,
-        )
+        # Only the exact verified no-results envelope is a recognized EMPTY
+        # state; every other error payload is unverified provider surface and
+        # must fail typed instead of masquerading as an empty result.
+        if len(payload) == 1 and payload["error"] == "no data":
+            return StatementRecords(
+                symbol=symbol,
+                statement=statement,
+                periodicity="quarterly" if statement.endswith("Q") else "annual",
+                currency=None,
+                rows=(),
+                fingerprint=hashlib.sha256(
+                    json.dumps(payload, sort_keys=True).encode()
+                ).hexdigest(),
+                empty_recognized=True,
+            )
+        raise _fail(f"unrecognized statement error envelope {payload.get('error')!r}")
     data = payload.get("data")
     if not isinstance(data, dict) or not data:
         raise _fail("statement payload has no statement data object")
@@ -105,6 +111,19 @@ def parse_statement_json(
         raise _fail("statement data 'Period Length' must be an array when present")
 
     labels = [str(label) for label in data["Period"]]
+    # Structural alignment: every period-shaped array must have exactly one
+    # entry per Period position. A short array would raise an untyped
+    # IndexError below; a surplus one would be silently dropped. Both are
+    # typed parse drift, never data loss.
+    for key in (*_PERIOD_KEYS, "Period Length"):
+        row = data.get(key)
+        if row is None:
+            continue  # Period Length is optional
+        if len(row) != len(labels):
+            raise _fail(
+                f"statement data {key!r} array is misaligned with Period "
+                f"({len(row)} entries for {len(labels)} periods)"
+            )
     ends = [_parse_period_end(str(end)) for end in data["Period End Date"]]
     # Day lengths come from consecutive parsed ends (earliest has no neighbor),
     # never from the display text. Blank ends yield None lengths.

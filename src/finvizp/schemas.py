@@ -20,17 +20,11 @@ __all__ = [
     "Field",
     "arrow_schema",
     "dataset",
-    "dataset_field_names",
     "dataset_names",
     "dataset_version",
     "parse_dataset",
     "registry",
 ]
-
-
-def dataset_field_names(name: str) -> tuple[str, ...]:
-    """Ordered registry field names for one dataset."""
-    return dataset(name).field_names
 
 
 TYPE_VOCABULARY: frozenset[str] = frozenset(

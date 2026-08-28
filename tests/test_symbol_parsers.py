@@ -76,6 +76,25 @@ def test_non_canonical_hosts_and_paths_are_rejected() -> None:
         assert [w.code for w in warnings] == ["unexpected_url"]
 
 
+def test_non_canonical_query_and_fragment_variants_are_rejected() -> None:
+    # Canonical shape is exactly https://finviz.com/stock?t=SYMBOL with an
+    # optional ty=oc; fragments, unknown/duplicate query fields, and other ty
+    # variants are not canonical.
+    for loc in (
+        "https://finviz.com/stock?t=AAPL#frag",
+        "https://finviz.com/stock?t=AAPL&amp;unexpected=1",
+        "https://finviz.com/stock?t=AAPL&amp;ty=cb",
+        "https://finviz.com/stock?t=AAPL&amp;t=AAPL",
+        "https://finviz.com/stock?ty=oc",
+        "https://finviz.com/stock",
+    ):
+        rows, warnings = symbols_parser.parse_sitemap(
+            f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+        )
+        assert rows == []
+        assert [w.code for w in warnings] == ["unexpected_url"], loc
+
+
 @pytest.mark.parametrize(
     "xml",
     [
@@ -89,9 +108,33 @@ def test_recognized_empty_manifest_is_empty_not_drift(xml: str) -> None:
     assert warnings == []
 
 
+def test_malformed_and_out_of_range_ports_are_skipped_not_raised() -> None:
+    # Broken URL components must be unexpected-URL warnings, never raw ValueError.
+    for loc in (
+        "https://finviz.com:invalid/stock?t=AAPL",
+        "https://finviz.com:99999/stock?t=AAPL",
+        "https://[::1/stock?t=AAPL",
+    ):
+        rows, warnings = symbols_parser.parse_sitemap(
+            f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{loc}</loc></url></urlset>'
+        )
+        assert rows == []
+        assert [w.code for w in warnings] == ["unexpected_url"], loc
+
+
 def test_malformed_xml_is_parse_drift() -> None:
     with pytest.raises(FinvizParseError):
         symbols_parser.parse_sitemap("<urlset><url></urlset>")
+
+
+def test_lxml_rejects_entities_and_dtd() -> None:
+    # Upstream boundary: entity expansion / DTD constructs are refused, not resolved.
+    with pytest.raises(FinvizParseError):
+        symbols_parser.parse_sitemap(
+            '<?xml version="1.0"?><!DOCTYPE urlset [<!ENTITY x "EVIL">]>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            "<url><loc>https://finviz.com/stock?t=&x;</loc></url></urlset>"
+        )
 
 
 def test_non_urlset_root_is_parse_drift() -> None:

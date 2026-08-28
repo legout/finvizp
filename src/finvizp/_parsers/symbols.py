@@ -1,11 +1,18 @@
-"""Transport-free parsers for the stock sitemap manifest and JSON suggestions."""
+"""Transport-free parsers for the stock sitemap manifest and JSON suggestions.
+
+Pure lxml per the foundation parser contract (NFR-4); the XML boundary is
+network/entity/DTD-safe.
+"""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
-from xml.etree import ElementTree
+
+from lxml.html import (
+    etree,
+)
 
 from finvizp.errors import FetchWarning, FinvizParseError
 
@@ -15,29 +22,55 @@ _SITEMAP_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 _STOCK_PATH = "/stock"
 _CANONICAL_HOST = "finviz.com"
 _SYMBOL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-")
+_XML_PARSER = etree.XMLParser(
+    resolve_entities=False,
+    no_network=True,
+    dtd_validation=False,
+    load_dtd=False,
+    recover=False,
+    huge_tree=False,
+)
 
 
-def _symbol_from_loc(loc: str) -> str | None:
+def _canonical_symbol(loc: str) -> str | None:
     """Canonical symbol from one canonical sitemap ``<loc>`` URL, or ``None``.
 
     Only the canonical ``https://finviz.com/stock?t=...`` shape carries a
     symbol; the ``ty=oc`` variant resolves to the same symbol and dedupes —
-    it is never optionability evidence. Foreign hosts, near-match paths, and
-    an absent or ambiguous ``t`` are not symbols.
+    it is never optionability evidence. Anything else (foreign hosts, other
+    schemes/ports/userinfo, near-match paths, fragments, unknown or duplicate
+    query fields, other ``ty`` variants, malformed URL components) is not a
+    symbol.
     """
-    parts = urlsplit(loc)
+    try:
+        parts = urlsplit(loc)
+        port = parts.port  # may raise ValueError for malformed/oversized ports
+    except ValueError:
+        return None
     if (
         parts.scheme != "https"
         or parts.hostname != _CANONICAL_HOST
-        or parts.port is not None
+        or port is not None
         or parts.username is not None
         or parts.password is not None
         or parts.path != _STOCK_PATH
+        or parts.fragment
     ):
         return None
-    pairs = parse_qsl(parts.query, keep_blank_values=True)
-    t_values = [value for key, value in pairs if key == "t"]
+    try:
+        pairs = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+    except ValueError:
+        return None
+    fields: dict[str, list[str]] = {}
+    for key, value in pairs:
+        fields.setdefault(key, []).append(value)
+    if set(fields) - {"t", "ty"}:
+        return None
+    t_values = fields.get("t", [])
     if len(t_values) != 1:
+        return None
+    ty_values = fields.get("ty", [])
+    if ty_values not in ([], ["oc"]):
         return None
     symbol = t_values[0].strip().upper()
     if not symbol or any(ch not in _SYMBOL_CHARS for ch in symbol):
@@ -51,13 +84,19 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
     Deterministic first-manifest order, ``ty=oc`` duplicates removed, no
     optionability inference. Unexpected URL shapes are skipped with
     ``unexpected_url`` warnings; a recognized empty manifest is empty, not
-    drift. Malformed XML or a non-urlset root raises :class:`FinvizParseError`.
+    drift. Malformed/unsafe XML or a non-urlset root raises
+    :class:`FinvizParseError`.
     """
     try:
-        root = ElementTree.fromstring(xml_text)
-    except ElementTree.ParseError as exc:
-        msg = f"malformed sitemap XML: {exc}"
+        root = etree.fromstring(xml_text.encode("utf-8"), _XML_PARSER)
+    except (etree.XMLSyntaxError, ValueError) as exc:
+        msg = f"malformed or unsafe sitemap XML: {exc}"
         raise FinvizParseError(msg) from None
+    if root.getroottree().docinfo.doctype:
+        # DTDs/entity definitions are never part of a sitemap and are refused
+        # at the upstream boundary rather than resolved.
+        msg = "sitemap XML must not declare a DOCTYPE"
+        raise FinvizParseError(msg)
     if root.tag not in (_SITEMAP_NS + "urlset", "urlset"):
         msg = f"unexpected sitemap root {root.tag!r}"
         raise FinvizParseError(msg)
@@ -67,7 +106,7 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
     warnings: list[FetchWarning] = []
     for loc in (elem.text or "" for elem in root.iter(_SITEMAP_NS + "loc")):
         text = loc.strip()
-        symbol = _symbol_from_loc(text)
+        symbol = _canonical_symbol(text)
         if symbol is None:
             if text:
                 warnings.append(

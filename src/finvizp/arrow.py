@@ -13,7 +13,6 @@ import datetime as dt
 import math
 import re
 from collections.abc import Callable, Iterable, Mapping
-from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -36,13 +35,7 @@ _PERCENT = re.compile(r"(?i)%\s*$")
 _TIME_ONLY = re.compile(r"^\d{1,2}:\d{2}(?::\d{2})?$")
 _DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_SUFFIX_SCALE = {
-    "T": Decimal("1e12"),
-    "B": Decimal("1e9"),
-    "M": Decimal("1e6"),
-    "K": Decimal("1e3"),
-}
-# Exact integer exponents for the count unit (no Decimal, no rounding).
+# Exact integer exponents for suffix scaling (no Decimal, no rounding).
 _SUFFIX_EXPONENT = {"T": 12, "B": 9, "M": 6, "K": 3}
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -311,28 +304,38 @@ def _finite(value: float, display: str) -> float:
     return value
 
 
+def _scaled_decimal(text: str, display: str) -> tuple[str, int]:
+    """Parse a compact display into an exact (mantissa_string, exponent) pair.
+
+    Shared by the count and compact units: no Decimal context and no binary
+    float participate, so no precision boundary can round a valid display.
+    """
+    if not _COMPACT.match(text):
+        msg = f"invalid compact display {display!r}"
+        raise ValueError(msg)
+    mantissa = _COMPACT_SUFFIX.sub("", text)
+    exp = 0
+    if "." in mantissa:
+        whole, frac = mantissa.split(".", 1)
+        mantissa = whole + frac
+        exp = -len(frac)
+    if suffix := _COMPACT_SUFFIX.search(text):
+        exp += _SUFFIX_EXPONENT[suffix.group(1).upper()]
+    return mantissa, exp
+
+
 def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tuple[Any, str | None]:
     if field.unit == "text":
         return text, None
     # Numeric cleaning applies only to numeric units; text keeps its display.
     cleaned = _COMMA.sub("", text)
     if field.unit == "count":
-        # True counts stay int64, parsed with exact integer arithmetic — no
+        # True counts stay int64, scaled with exact integer arithmetic — no
         # Decimal context (fixed or ambient) and no binary float, so no
         # precision boundary can ever round a valid display into a wrong
         # count.
-        if not _COMPACT.match(cleaned):
-            msg = f"invalid count display {text!r}"
-            raise ValueError(msg)
-        mantissa = _COMPACT_SUFFIX.sub("", cleaned)
-        exp = 0
-        if "." in mantissa:
-            whole, frac = mantissa.split(".", 1)
-            mantissa = whole + frac
-            exp = -len(frac)
+        mantissa, exp = _scaled_decimal(cleaned, text)
         coefficient = int(mantissa)
-        if suffix := _COMPACT_SUFFIX.search(cleaned):
-            exp += _SUFFIX_EXPONENT[suffix.group(1).upper()]
         if exp < 0:
             divisor = 10**-exp
             if coefficient % divisor:
@@ -351,12 +354,11 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tupl
         suffix = _COMPACT_SUFFIX.search(cleaned)
         if suffix is None:
             return _finite(float(cleaned), text), None
-        return _finite(
-            float(
-                Decimal(_COMPACT_SUFFIX.sub("", cleaned)) * _SUFFIX_SCALE[suffix.group(1).upper()]
-            ),
-            text,
-        ), None
+        # Exact coefficient+exponent scaled to a plain decimal string; float()
+        # applies exactly one correctly-rounded strtod conversion, independent
+        # of the ambient Decimal context.
+        mantissa, exp = _scaled_decimal(cleaned, text)
+        return _finite(float(f"{mantissa}e{exp}"), text), None
     if field.unit == "percent":
         return _finite(float(_PERCENT.sub("", cleaned)) / 100.0, text), None
     if field.unit == "number":

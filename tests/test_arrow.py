@@ -543,6 +543,27 @@ def test_count_int64_boundaries_parse() -> None:
     assert _rows(table)[0]["volume"] == 2**63 - 1
 
 
+def test_compact_scaling_is_independent_of_decimal_context() -> None:
+    """Run-63 item 1: suffix-bearing compact (float64) conversion ignores ambient precision."""
+    display = "1.23456789M"
+    expected = float("1234567.89")  # exact positional decimal, one correct rounding
+    t_default = _build("symbol_search", [{"symbol": "AAPL", "market_cap": display}])
+    with localcontext() as ctx:
+        ctx.prec = 2  # hostile ambient precision must not corrupt compact parsing
+        t_low = _build("symbol_search", [{"symbol": "AAPL", "market_cap": display}])
+    assert t_low.equals(t_default)
+    assert _rows(t_low)[0]["market_cap"] == pytest.approx(expected)
+    # long mantissa: nearest-float64 rounding of the exact value, not context truncation
+    long_display = "1." + "1" * 30 + "M"
+    expected_long = float("1111111." + "1" * 30)
+    t_default = _build("symbol_search", [{"symbol": "AAPL", "market_cap": long_display}])
+    with localcontext() as ctx:
+        ctx.prec = 2
+        t_low = _build("symbol_search", [{"symbol": "AAPL", "market_cap": long_display}])
+    assert t_low.equals(t_default)
+    assert _rows(t_low)[0]["market_cap"] == expected_long
+
+
 def test_count_scaling_is_independent_of_decimal_context() -> None:
     """Run-56 item 1: count conversion is exact regardless of ambient precision."""
     with localcontext() as ctx:

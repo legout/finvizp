@@ -1164,3 +1164,93 @@ def test_invalid_env_proxy_is_rejected_without_leaking_route(
     assert "exit-proxy.example" not in rendered
     assert "envsecret" not in rendered
     assert fake.calls == []
+
+
+# --- round 6: bare-form proxy validation, +json parsing, exhaustion fingerprint
+
+
+@pytest.mark.parametrize("good", ["10.0.0.1:8080", "10.0.0.1:8080:user:pass", "localhost:3128"])
+async def test_bare_host_port_proxies_are_accepted(good: str) -> None:
+    fake = FakeTransport(_resp())
+    await _client(fake, proxy=good)._fetch("/quote.ashx")
+    assert fake.calls[0].proxy == good
+
+
+@pytest.mark.parametrize("bad", ["127.0.0.1:99999", "127.0.0.1:0", "host:port", ":8080", "h:1:u"])
+@pytest.mark.parametrize("via", ["proxy", "proxies", "per_call", "env"])
+async def test_malformed_bare_proxies_are_rejected_before_transport(
+    bad: str, via: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeTransport()
+    if via == "env":
+        monkeypatch.setenv("FINVIZP_PROXY", bad)
+        with pytest.raises(FinvizQueryError):
+            FinvizClient(transport=fake)
+    elif via == "proxies":
+        with pytest.raises(FinvizQueryError):
+            FinvizClient(transport=fake, proxies=[bad])
+    elif via == "proxy":
+        with pytest.raises(FinvizQueryError):
+            FinvizClient(transport=fake, proxy=bad)
+    else:
+        with pytest.raises(FinvizQueryError):
+            await _client(fake)._fetch("/quote.ashx", proxy=bad)
+    assert fake.calls == []  # no transport, no pool, no log output
+
+
+def _suffix_json_resp(body: bytes) -> NormalizedResponse:
+    """Mirror the real backend: ``+json`` media types are NOT pre-parsed."""
+    return NormalizedResponse.from_backend(
+        status_code=200,
+        headers={"Content-Type": "application/vnd.api+json"},
+        content=body,
+        url=f"{BASE}/api/suggestions",
+        is_json=False,
+    )
+
+
+async def test_json_suffix_media_type_is_parsed_locally() -> None:
+    fake = FakeTransport(_suffix_json_resp(b'{"a": 1}'))
+    resp = await _client(fake)._fetch("/api/suggestions")
+    assert resp.content_kind == "json"
+    assert resp.data == {"a": 1}
+
+
+async def test_malformed_json_suffix_media_type_is_parse_drift() -> None:
+    fake = FakeTransport(_suffix_json_resp(b"{not json"))
+    with pytest.raises(FinvizParseError):
+        await _client(fake)._fetch("/api/suggestions")
+
+
+async def test_retry_exhaustion_event_fingerprints_the_selected_route() -> None:
+    events: list[ClientEvent] = []
+    proxy = "http://exit-proxy.example:9"
+    exhausted = FakeTransport(BackendError("boom"), BackendError("boom"))
+    with pytest.raises(FinvizTransportError):
+        await _client(
+            exhausted,
+            proxy=proxy,
+            retry_attempts=1,
+            retry_backoff=0.0,
+            on_event=events.append,
+        )._fetch("/quote.ashx")
+    success = await _client(FakeTransport(_resp()), proxy=proxy)._fetch("/quote.ashx")
+    assert events[-1].route_fingerprint == success.route_fingerprint
+    direct = await _client(FakeTransport(_resp()))._fetch("/quote.ashx")
+    assert events[-1].route_fingerprint != direct.route_fingerprint
+
+
+async def test_retry_exhaustion_before_route_selection_fingerprints_the_pool() -> None:
+    events: list[ClientEvent] = []
+
+    class ExplodingPool:
+        async def acquire(self) -> str:
+            raise BackendError("no exit available")
+
+    fake = FakeTransport(BackendError("boom"), BackendError("boom"))
+    client = _client(fake, retry_attempts=1, retry_backoff=0.0, on_event=events.append)
+    client._pool = ExplodingPool()
+    with pytest.raises(FinvizTransportError):
+        await client._fetch("/quote.ashx")
+    direct = await _client(FakeTransport(_resp()))._fetch("/quote.ashx")
+    assert events[-1].route_fingerprint != direct.route_fingerprint

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -121,9 +122,17 @@ def _is_valid_proxy_url(value: str) -> bool:
 
     Supersedes fastreq's prefix-only check: scheme URLs must carry a real
     authority (host, sane port); bare host:port[/user:pass] stay supported.
-    Never returns the input to callers — errors must stay route-free.
+    Bare forms are checked textually because ``urlsplit('host:8080')`` parses
+    the host as the scheme. Never returns the input — errors stay route-free.
     """
     if not value or not isinstance(value, str):
+        return False
+    # Bare host:port[/user:pass] (no scheme): checked textually because
+    # urlsplit('host:8080') parses the host as the scheme.
+    if "://" not in value:
+        pieces = value.split(":")
+        if len(pieces) in (2, 4):
+            return bool(pieces[0]) and pieces[1].isdigit() and 0 < int(pieces[1]) <= 65535
         return False
     parts = urlsplit(value)
     if parts.scheme in ("http", "https"):
@@ -133,10 +142,7 @@ def _is_valid_proxy_url(value: str) -> bool:
             return parts.port is None or 0 < parts.port <= 65535
         except ValueError:
             return False
-    if parts.scheme:
-        return False
-    pieces = value.split(":")
-    return len(pieces) in (2, 4) and bool(pieces[0]) and pieces[1].isdigit()
+    return False  # only http/https scheme URLs are client-supported
 
 
 # Header-specific sanitization: redact credential-bearing headers by label
@@ -262,8 +268,13 @@ def classify_response(
     if kind == "json":
         data: Any = response.json_data
         if data is None:
-            msg = f"malformed JSON body for {endpoint!r}"
-            raise FinvizParseError(msg)
+            # The real backend pre-parses only exact ``application/json``;
+            # ``*+json`` suffix media types arrive unparsed, so decode here.
+            try:
+                data = json.loads(response.text)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                msg = f"malformed JSON body for {endpoint!r}"
+                raise FinvizParseError(msg) from None
     elif kind == "artifact":
         # Image/chart bodies are hashed for identity; the envelope keeps only
         # a descriptor, so raw provider bytes are never retained by callers.
@@ -508,7 +519,10 @@ class FinvizClient:
                     raise FinvizQueryError("authenticated client route is already pinned")
                 else:
                     selected = self._auth_route
-            return selected if isinstance(selected, str) else None
+            if selected is not None and not isinstance(selected, str):
+                msg = "invalid proxy URL"
+                raise FinvizQueryError(msg)  # e.g. a per-call int that typed validation missed
+            return selected
 
     def _emit(self, event: ClientEvent) -> None:
         if self._on_event is not None:
@@ -649,7 +663,13 @@ class FinvizClient:
                 endpoint=path,
                 ok=False,
                 attempts=attempts,
-                route_fingerprint=self._route_fingerprint(selected_proxy),
+                # Fingerprint the route this call actually used or tried to
+                # select: only a completed selection may name it directly,
+                # otherwise resolve the configured route (pinned/explicit/
+                # pool) instead of silently claiming direct.
+                route_fingerprint=self._route_fingerprint(
+                    selected_proxy if route_selected else _UNPINNED
+                ),
             )
         )
         raise self._classify_failure(

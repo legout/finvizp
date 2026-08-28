@@ -103,7 +103,6 @@ def build_table(
         raise FinvizDataError(msg)
     fmap = dataset.field_map
     warnings: list[FetchWarning] = []
-    rows_list = list(rows)
     overrides = dict(raw_overrides) if raw_overrides else {}
     for name, values in overrides.items():
         base = fmap.get(name)
@@ -113,15 +112,43 @@ def build_table(
                 "raw-declared base field"
             )
             raise FinvizDataError(msg)
-        if len(values) != len(rows_list):
+        if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
             msg = (
-                f"raw override for {name!r} on dataset {dataset_name!r} has {len(values)} "
-                f"values for {len(rows_list)} rows"
+                f"raw override for {name!r} on dataset {dataset_name!r} must be a "
+                f"string sequence, got {type(values).__name__}"
             )
             raise FinvizDataError(msg)
+        for value in values:
+            if not isinstance(value, str):
+                msg = (
+                    f"raw override for {name!r} on dataset {dataset_name!r} must contain "
+                    f"only strings, got {type(value).__name__}"
+                )
+                raise FinvizDataError(msg)
+    if overrides:
+        # Count and per-row override lookup need random access: only callers
+        # that actually use overrides pay for materializing the input.
+        rows_list = list(rows)
+        for name, values in overrides.items():
+            if len(values) != len(rows_list):
+                msg = (
+                    f"raw override for {name!r} on dataset {dataset_name!r} has {len(values)} "
+                    f"values for {len(rows_list)} rows"
+                )
+                raise FinvizDataError(msg)
+        rows_iter: Iterable[Mapping[str, Any]] = rows_list
+    else:
+        rows_iter = rows
 
     columns: dict[str, list[Any]] = {field.name: [] for field in dataset.fields}
-    for position, row in enumerate(rows_list):
+    row_overrides_by_position: dict[int, dict[str, str]] = {}
+    for name, values in overrides.items():
+        for position, value in enumerate(values):
+            row_overrides_by_position.setdefault(position, {})[name] = value
+    position = -1
+    for row in rows_iter:
+        position += 1
+        position_row_overrides = row_overrides_by_position.get(position)
         if not isinstance(row, Mapping):
             msg = f"row {position} of dataset {dataset_name!r} must be a mapping"
             raise FinvizDataError(msg)

@@ -178,13 +178,15 @@
     },
     {
       "name": "quote_etf_holders",
-      "version": 1,
+      "version": 2,
       "fields": [
         { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
         { "name": "etf", "type": "string", "unit": "text", "nullable": false, "key": true },
         { "name": "rank", "type": "int64", "unit": "count", "nullable": true },
         { "name": "weight_percent", "type": "float64", "unit": "percent", "nullable": true, "raw": true },
         { "name": "weight_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "aum", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "aum_raw", "type": "string", "unit": "raw", "nullable": true },
         { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
         { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
       ]

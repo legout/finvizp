@@ -81,6 +81,10 @@ def test_snapshot_raw_and_status_companions() -> None:
     assert row["change_percent_raw"] == "0.28%"
     assert row["earnings_date"] == "Jul 30 AMC"
     assert row["price"] == 315.46
+    # The parser rewrites US-style provider dates into ISO; the raw companions
+    # must preserve the exact provider displays, not the normalized shapes.
+    assert row["ex_dividend_date_raw"] == "Aug 10, 2026"
+    assert row["ipo_date_raw"] == "Dec 12, 1980"
 
 
 def test_reordered_fixture_produces_equivalent_records() -> None:
@@ -288,6 +292,8 @@ def test_ratings_relation() -> None:
     assert first["rating"] is None
     assert first["rating_raw"] == "Neutral → Buy"
     assert first["price_target"] == 230.0
+    # The parser strips the dollar sign; the raw companion keeps the display.
+    assert first["price_target_raw"] == "$230"
     # Temporal: Aug-17-26 is a complete date display -> exact midnight Eastern.
     assert first["published_at"] == dt.datetime(2026, 8, 17, 4, 0, tzinfo=dt.UTC)
     # The raw companion preserves the exact provider display.
@@ -324,6 +330,36 @@ def test_malformed_ratings_date_warns_and_keeps_provider_raw_without_strict() ->
 def test_ratings_rows_preserve_order() -> None:
     rows = _rows(_parse().ratings)
     assert [r["analyst"] for r in rows] == ["Redburn", "Jefferies", "DZ Bank"]
+
+
+def test_ratings_maps_cells_by_header_text_not_position() -> None:
+    # Physically permute the Date and Rating Change columns (headers move with
+    # their cells); every typed and raw value must match the ordinary parse.
+    html = _page()
+    date_head = "<th>Date</th>"
+    rating_head = "<th>Rating Change</th>"
+    html = html.replace(
+        date_head + "<th>Action</th><th>Analyst</th>" + rating_head,
+        rating_head + "<th>Action</th><th>Analyst</th>" + date_head,
+        1,
+    )
+    # Swap the matching body cells: column 0 (was Date) <-> column 3 (was
+    # Rating Change) in each ratings row.
+    markers = [
+        ("<td>Aug-17-26</td>", "<td>Neutral &rarr; Buy</td>"),
+        ("<td>Aug-10-26</td>", "<td>Hold &rarr; Underperform</td>"),
+        ("<td>Aug-04-26</td>", "<td>Buy</td>"),
+    ]
+    for date_cell, rating_cell in markers:
+        html = (
+            html.replace(date_cell, "\0DATE\0", 1)
+            .replace(rating_cell, date_cell, 1)
+            .replace("\0DATE\0", rating_cell, 1)
+        )
+    permuted = _parse_html(html).ratings
+    ordinary = _parse().ratings
+    assert permuted is not None and ordinary is not None
+    assert permuted.equals(ordinary)
 
 
 # --- news -------------------------------------------------------------------
@@ -427,9 +463,37 @@ def test_etf_holders_relation() -> None:
     rows = _rows(table)
     assert rows[0]["etf"] == "VTI"
     assert rows[0]["rank"] == 1
-    # AUM values are not weights; weight stays null and raw lands in extra.
+    # AUM values are fund sizes, not holding weights: weight stays null.
     assert rows[0]["weight_percent"] is None
     assert rows[1]["etf"] == "QQQ"
+    # The verified ETF data-boxover-value 'AUM: ...' display is first-class:
+    # compact numeric + exact raw display, no extra_fields drift.
+    assert rows[0]["aum"] == 688.83e9
+    assert rows[0]["aum_raw"] == "AUM: 688.83B"
+    assert rows[1]["aum"] == 483.26e9
+    assert rows[1]["aum_raw"] == "AUM: 483.26B"
+
+
+def test_etf_holders_dataset_is_versioned_with_aum_fields() -> None:
+    # Adding first-class aum/aum_raw is a breaking dataset shape change: the
+    # registered version must move with it.
+    assert schemas.dataset_version("quote_etf_holders") == 2
+    names = set(fa.dataset_field_names("quote_etf_holders"))
+    assert "aum" in names and "aum_raw" in names
+    assert schemas.dataset("quote_etf_holders").field_map["aum"].unit == "compact"
+
+
+def test_standard_fixture_is_strict_and_drift_free() -> None:
+    # The standard fixture must pass strict_schema=True with no conversion or
+    # unknown-field warnings: every provider display is either registered or
+    # preserved via raw_overrides.
+    warnings: list[FetchWarning] = []
+    bundle = _parse(strict_schema=True, on_warning=warnings.append)
+    assert bundle.status.name == "COMPLETE"
+    assert warnings == []
+    etf_rows = _rows(bundle.etf_holders)
+    assert etf_rows[0]["weight_percent"] is None
+    assert etf_rows[0]["extra_fields"] == []
 
 
 # --- signals and links --------------------------------------------------------

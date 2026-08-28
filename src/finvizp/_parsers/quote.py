@@ -142,9 +142,10 @@ def parse_quote_page(
             context={"endpoint": "quote"},
         )
 
-    # Provider raw displays for temporal companions, captured before the
-    # parser normalizes the typed shapes. dataset -> field -> per-row display.
+    # Provider raw displays for companions the parser normalizes, captured
+    # before the typed shapes are rewritten. dataset -> field -> per-row display.
     raw_overrides: dict[str, dict[str, list[str]]] = {}
+    snapshot_overrides: dict[str, list[str]] = {"ex_dividend_date": [], "ipo_date": []}
 
     # Source-near row: registry-mapped fields plus every unknown label as its
     # own key. The Arrow builder routes unknown keys into extra_fields with a
@@ -174,6 +175,10 @@ def parse_quote_page(
                     warn("duplicate_label", f"duplicate snapshot label {label!r}")
                     continue
                 row[name] = prepared_value
+                if name in snapshot_overrides:
+                    # The parser rewrote the display (US date -> ISO); keep the
+                    # exact provider display for the raw companion.
+                    snapshot_overrides[name].append(value)
 
     def build(dataset: str, rows: list[dict[str, Any]]) -> Any:
         return fa.build_table(
@@ -186,12 +191,11 @@ def parse_quote_page(
             raw_overrides=raw_overrides.pop(dataset, None),
         )
 
-    def presence(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-        # ``None`` means the region structure itself is absent (missing
-        # optional region); ``[]`` means the structure is present but empty —
-        # the no-results state is positively recognized, so the registered
-        # empty Arrow table is preserved.
-        return [] if rows is None else rows
+    # Only complete per-row override lists are valid (builder enforces counts);
+    # an absent label simply keeps the pass-through raw display.
+    complete = {k: v for k, v in snapshot_overrides.items() if len(v) == 1}
+    if complete:
+        raw_overrides["quote_snapshot"] = complete
 
     snapshot = build("quote_snapshot", [row])
     # Tri-state: None = bio structure absent (missing optional region);
@@ -206,6 +210,10 @@ def parse_quote_page(
     insider_rows = _parse_insider(document, symbol, warn, strict_schema)
     peers_entries = _parse_ticker_links(document, "Peers")
     etf_entries = _parse_ticker_links(document, "Held by")
+    if etf_entries is not None:
+        # Exact 'AUM: ...' provider displays for the aum_raw companions.
+        aum_displays: list[str] = [raw or "" for _etf, _numeric, raw in etf_entries]
+        raw_overrides["quote_etf_holders"] = {"aum": aum_displays}
     signals_rows = _parse_signals(document, symbol)
 
     def rows_or_empty(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -259,12 +267,14 @@ def parse_quote_page(
                     "symbol": symbol,
                     "etf": etf,
                     "rank": position + 1,
-                    # AUM-style values are fund sizes, not holding weights: keep
-                    # them out of weight_percent; the raw display lands in
-                    # extra_fields via the unknown 'data_boxover_value' key.
+                    # AUM-style values are fund sizes, not holding weights:
+                    # weight_percent stays null. Strip the "AUM:" prefix for
+                    # the compact conversion; the exact provider display rides
+                    # in aum_raw via raw_overrides (dataset v2).
                     "weight_percent": None,
+                    "aum": (aum_raw or "").removeprefix("AUM:").strip() or None,
                 }
-                for position, (etf, _size, _raw) in enumerate(etf_entries)
+                for position, (etf, _numeric, aum_raw) in enumerate(etf_entries)
             ],
         ),
     )
@@ -449,42 +459,66 @@ def _parse_ratings(
 ) -> tuple[list[dict[str, Any]] | None, dict[str, list[str]]]:
     """Parse ratings rows; also return provider raw displays per field.
 
-    The registry types ``rating`` numerically while the provider shows the
-    change text: the text is provenance, not a number, so the typed value is
-    null and the display lands in ``rating_raw``. Date drift is reported
-    through ``warn`` here and raises under ``strict_schema`` (parser-owned
-    conversion drift must fail strict parsing, not just builder conversion).
+    Cells map by verified header text, never fixed column offsets. The
+    registry types ``rating`` numerically while the provider shows the change
+    text: the text is provenance, not a number, so the typed value is null and
+    the display lands in ``rating_raw``. The parser strips the price-target
+    dollar sign, so its exact display rides in ``price_target_raw``. Date
+    drift is reported through ``warn`` here and raises under ``strict_schema``
+    (parser-owned conversion drift must fail strict parsing, not just builder
+    conversion).
     """
     tables = document.xpath(f".//table[{_CLASS.format('js-table-ratings')}]")
     if not tables:
         return None, {}
+    heads = [th.text_content().strip() for th in tables[0].xpath(".//th")]
+    column = {name: position for position, name in enumerate(heads)}
+    for required in ("Date", "Action", "Analyst", "Rating Change", "Price Target Change"):
+        if required not in column:
+            raise FinvizParseError(
+                f"ratings table has no {required!r} header",
+                context={"endpoint": "quote"},
+            )
+
+    def cell(cells: list[Any], name: str) -> str:
+        position = column[name]
+        if position >= len(cells):
+            return ""
+        return cells[position].text_content().strip()
+
     rows: list[dict[str, Any]] = []
     published_raw: list[str] = []
     rating_raw: list[str] = []
+    target_raw: list[str] = []
     for tr in tables[0].xpath(".//tr"):
         cells = tr.xpath("./td")
-        if len(cells) < 5:
+        if len(cells) < len(heads):
             continue
-        date_text = cells[0].text_content().strip()
-        rating_text = cells[3].text_content().strip()
-        target_text = cells[4].text_content().strip().lstrip("$")
+        date_text = cell(cells, "Date")
+        rating_text = cell(cells, "Rating Change")
+        target_text = cell(cells, "Price Target Change")
         rows.append(
             {
                 "symbol": symbol,
                 # "Aug-17-26" -> builder-compatible exact Eastern display; the
                 # provider display itself rides in published_at_raw.
                 "published_at": _normalize_ratings_date(date_text, warn, strict_schema),
-                "status": cells[1].text_content().strip() or None,
+                "status": cell(cells, "Action") or None,
                 # The numeric registered column stays null for textual rating
                 # changes; the display is provenance, not a number.
                 "rating": None,
-                "analyst": cells[2].text_content().strip() or None,
-                "price_target": target_text or None,
+                "analyst": cell(cells, "Analyst") or None,
+                "price_target": target_text.lstrip("$") or None,
             }
         )
         published_raw.append(date_text)
         rating_raw.append(rating_text or "")
-    return rows, {"published_at": published_raw, "rating": rating_raw}
+        target_raw.append(target_text or "")
+    return rows, {
+        "published_at": published_raw,
+        "rating": rating_raw,
+        "price_target": target_raw,
+    }
 
 
 def _normalize_ratings_date(

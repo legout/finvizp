@@ -587,7 +587,7 @@ class FinvizClient:
         if self._on_event is not None:
             self._on_event(event)
 
-    async def fetch(
+    async def _cached_fetch(
         self,
         path: str,
         *,
@@ -596,12 +596,13 @@ class FinvizClient:
         cache: bool = True,
         refresh: bool = False,
     ) -> ClientResponse:
-        """Fetch one route with transparent parsed-result caching and single-flight.
+        """Cache + single-flight wrapper around ``_fetch``.
 
-        Only enabled when the client was constructed with ``cache_ttl``.
-        ``cache=False`` bypasses the cache entirely; ``refresh=True`` fetches
-        a fresh copy and replaces any cached entry. Identical concurrent
-        misses share one underlying request.
+        Internal seam for reviewed endpoint operations; there is no public
+        arbitrary-request method. Only enabled when the client was constructed
+        with ``cache_ttl``. ``cache=False`` bypasses the cache entirely;
+        ``refresh=True`` fetches a fresh copy and replaces any cached entry.
+        Identical concurrent misses share one underlying request.
         """
         effective_query = dict(params or {})
         store = self._cache
@@ -681,6 +682,13 @@ class FinvizClient:
 
         cache = self._cache
         assert cache is not None  # only reachable when caching is enabled
+        if response.content_kind in ("html", "xml"):
+            # No raw authenticated-body cache: HTML/XML payloads are provider
+            # pages, not parsed results. Endpoint operations must parse into
+            # structured payloads before anything is stored.
+            raise FinvizParseError(
+                f"refusing to cache raw {response.content_kind} body for {path!r}"
+            )
         cache.set(
             self._cache_key(path, query, proxy),
             CacheEntry(
@@ -711,21 +719,35 @@ class FinvizClient:
 
     @staticmethod
     def _serve_joiner(response: ClientResponse) -> ClientResponse:
-        """Provenance for a caller that joined an in-flight miss."""
+        """Provenance for a caller that joined an in-flight miss.
+
+        The joined payload is the leader's, so its freshness facts carry over:
+        a stale-fallback leader yields stale/aged joiner envelopes too.
+        """
         return replace(
             FinvizClient._isolated(response),
             served_at=datetime.now(UTC),
             cache_hit=True,
-            stale=False,
-            cache_age=0.0,
+            stale=response.stale,
+            cache_age=response.cache_age,
         )
 
-    def invalidate(self, path: str, *, params: Mapping[str, Any] | None = None) -> bool:
-        """Drop one cached route entry; ``True`` when an entry was held."""
+    def invalidate(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        proxy: str | bool | None = None,
+    ) -> bool:
+        """Drop one cached route entry; ``True`` when an entry was held.
+
+        Takes the same route identity inputs as the cached operation, so
+        per-call-proxy routes are addressable.
+        """
         store = self._cache
         if store is None:
             return False
-        return store.delete(self._cache_key(path, dict(params or {}), None))
+        return store.delete(self._cache_key(path, dict(params or {}), proxy))
 
     def clear_cache(self) -> int:
         """Drop every cached entry; returns how many were held."""
@@ -733,6 +755,27 @@ class FinvizClient:
         if store is None:
             return 0
         return store.clear()
+
+    def _endpoint_op(
+        self,
+        path: str,
+        *,
+        query: Mapping[str, Any] | None = None,
+        proxy: str | bool | None = None,
+    ) -> Callable[[], Any]:
+        """Bind one reviewed endpoint operation to its route inputs.
+
+        Returns a zero-argument coroutine function; endpoint modules expose
+        named operations built on this seam instead of a generic request
+        method. Caching applies only at these reviewed operations, and raw
+        HTML/XML bodies are never stored (``_store`` refuses them).
+        """
+        params = dict(query or {})
+
+        async def op() -> ClientResponse:
+            return await self._cached_fetch(path, params=params, proxy=proxy)
+
+        return op
 
     async def _fetch(
         self,

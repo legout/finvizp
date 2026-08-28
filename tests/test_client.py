@@ -1069,10 +1069,9 @@ async def test_per_call_proxy_must_be_url_false_or_none() -> None:
 
 
 def test_public_surface_exposes_no_raw_request_method() -> None:
-    """fetch is the only request entry: route-gated, never an arbitrary-URL hatch."""
+    """No public arbitrary-request method exists (Card 0.1-C hard constraint)."""
     assert {n for n in dir(FinvizClient) if not n.startswith("_")} == {
         "close",
-        "fetch",
         "invalidate",
         "clear_cache",
     }

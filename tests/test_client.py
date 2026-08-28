@@ -1069,9 +1069,12 @@ async def test_per_call_proxy_must_be_url_false_or_none() -> None:
 
 
 def test_public_surface_exposes_no_raw_request_method() -> None:
-    """No public arbitrary-request escape hatch: advanced requests use fastreq."""
-    assert not hasattr(FinvizClient, "fetch")
-    assert {n for n in dir(FinvizClient) if not n.startswith("_")} == {"close"}
+    """No public arbitrary-request method exists (Card 0.1-C hard constraint)."""
+    assert {n for n in dir(FinvizClient) if not n.startswith("_")} == {
+        "close",
+        "invalidate",
+        "clear_cache",
+    }
 
 
 @pytest.mark.parametrize("bad", [{"proxy": 123}, {"proxy": ["http://p:1"]}, {"proxy": object()}])

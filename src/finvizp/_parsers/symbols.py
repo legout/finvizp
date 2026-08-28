@@ -155,7 +155,10 @@ def parse_sitemap(xml_text: str) -> tuple[list[str], list[FetchWarning]]:
         if any(_elements(child) for child in children):
             msg = f"unexpected sitemap element nested inside {locs[0].tag!r} siblings"
             raise FinvizParseError(msg)
-        text = (locs[0].text or "").strip()
+        # Comments/PIs are ignored, not content: the loc value is the
+        # concatenation of the direct text nodes (loc.text would stop at the
+        # first comment/PI child and truncate or erase the URL).
+        text = "".join(locs[0].xpath("text()")).strip()
         symbol = _canonical_symbol(text)
         if symbol is None:
             warnings.append(

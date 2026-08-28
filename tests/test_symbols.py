@@ -438,6 +438,20 @@ async def test_manifest_same_origin_redirect_is_not_followed() -> None:
     assert len(fake.urls) == 1  # the stock URL was never requested
 
 
+async def test_manifest_loc_with_comments_and_pis_yields_the_symbol() -> None:
+    # Comments/PIs inside <loc> are ignored, not loc content: the canonical
+    # symbol still reaches symbols_async() instead of drift.
+    manifest = (
+        b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        b"<url><loc><!--lead-->https://finviz.com/stock?t=<!--mid-->MSFT</loc></url>"
+        b"</urlset>"
+    )
+    fake = RecordingTransport(_resp(manifest, "text/xml", f"{BASE}/sitemap.xml"))
+    result = await symbols_api.symbols_async(client=FinvizClient(transport=fake))
+    assert result.table.column("symbol").to_pylist() == ["MSFT"]
+    assert result.metadata.warnings == ()
+
+
 async def test_search_malformed_ticker_never_reaches_a_complete_result() -> None:
     payload = json.dumps([{"ticker": "BAD!", "company": "C", "exchange": "NYSE"}])
     fake = RecordingTransport(

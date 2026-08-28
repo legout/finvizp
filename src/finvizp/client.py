@@ -808,6 +808,7 @@ class FinvizClient:
             representation=facets.representation,
             parser_version=facets.parser_version,
             schema_version=facets.schema_version,
+            follow_redirects=facets.follow_redirects,
         )
 
     def _store(self, facets: _CacheFacets, key: str, result: FetchResult[Any]) -> None:

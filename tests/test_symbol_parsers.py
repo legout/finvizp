@@ -207,6 +207,21 @@ def test_unknown_nested_element_inside_url_is_structure_drift() -> None:
         )
 
 
+def test_comments_and_pis_inside_loc_are_ignored_not_loc_content() -> None:
+    # A comment/PI preceding or splitting the loc URL is never loc content:
+    # the value is the concatenation of the direct text nodes, so a comment
+    # can neither erase nor truncate the canonical URL.
+    for xml in (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc><!--c-->https://finviz.com/stock?t=AAPL<?pi x?></loc></url></urlset>",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://finviz.com/stock?t=AA<!--x-->PL</loc></url></urlset>",
+    ):
+        rows, warnings = symbols_parser.parse_sitemap(xml)
+        assert rows == ["AAPL"]
+        assert warnings == []
+
+
 def test_unknown_element_descendants_of_accepted_leaf_tags_are_drift() -> None:
     # loc/lastmod/changefreq/priority carry only text: unknown element
     # descendants at any depth below them are structure drift, while

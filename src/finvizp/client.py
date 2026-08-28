@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Coroutine, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from time import monotonic
 from types import MappingProxyType
@@ -45,7 +45,7 @@ from finvizp.errors import (
     redact_value,
 )
 from finvizp.models import Artifact
-from finvizp.results import AccessTier, FetchResult
+from finvizp.results import _ARROW_TABLE_TYPES, AccessTier, FetchResult
 
 __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
 
@@ -165,17 +165,25 @@ def _proxy_seed(proxy: str | None) -> str:
     return f"{digest}-direct" if proxy is None else digest
 
 
-def _payload_bytes(data: Any) -> bytes:
-    """Approximate cached size for any payload shape.
+def _payload_size(data: Any) -> int:
+    """Approximate cached size for any payload shape, in bytes.
 
     ponytail: JSON payloads are sized via serialized bytes (exact but O(n) per
     store); a cheap recursive estimator wins if stores show up in profiles.
+    Arrow tables are sized by their buffer accounting (nbytes); other typed
+    objects fall back to str(), so any future payload type must be added here
+    if its str() is not proportional to memory.
     """
     if isinstance(data, str):
-        return data.encode()
+        return len(data.encode())
     if isinstance(data, bytes):
-        return data
-    return json.dumps(data, default=str, separators=(",", ":")).encode()
+        return len(data)
+    if isinstance(data, _ARROW_TABLE_TYPES):
+        return int(data.nbytes)
+    if is_dataclass(data) and not isinstance(data, type):
+        # Compound bundles: sum typed fields (tables dominate payload size).
+        return sum(_payload_size(getattr(data, f.name)) for f in fields(data))
+    return len(json.dumps(data, default=str, separators=(",", ":")).encode())
 
 
 def _is_valid_proxy_url(value: str) -> bool:
@@ -780,7 +788,7 @@ class FinvizClient:
                 result=self._isolated(result),
                 expires_at=now + (self._cache_ttl or 0.0),
                 stored_at=now,
-                approx_bytes=max(1, len(_payload_bytes(result.data))),
+                approx_bytes=max(1, _payload_size(result.data)),
             ),
         )
 

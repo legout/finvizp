@@ -6,20 +6,23 @@ import asyncio
 import gc
 import json
 from collections.abc import Coroutine
+from datetime import UTC, datetime
 from typing import Any
 
+import pyarrow as pa
 import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
 from fastreq.exceptions import BackendError
 
 from finvizp.cache import CacheEntry, ResultCache
-from finvizp.client import ClientResponse, FinvizClient
+from finvizp.client import ClientResponse, FinvizClient, _payload_size
 from finvizp.errors import (
     FinvizEntitlementError,
     FinvizNotFoundError,
     FinvizParseError,
     FinvizTransportError,
 )
+from finvizp.models import QuoteBundle
 from finvizp.results import FetchResult, ResultMetadata, ResultStatus
 
 BASE = "https://finviz.com"
@@ -424,6 +427,36 @@ async def test_json_responses_are_byte_bounded() -> None:
     stats = client._cache.stats()
     assert stats["approx_bytes"] <= 400_000
     assert stats["entries"] < 4  # big parsed entries actually evicted
+
+
+def test_arrow_tables_are_sized_by_table_nbytes() -> None:
+    table = pa.table({"x": pa.array(["y" * 1000] * 10)})  # ~10 KB of Arrow buffers
+    assert table.nbytes >= 10_000
+    assert _payload_size(table) >= table.nbytes  # not a str() round-trip
+
+
+def test_compound_bundle_tables_count_toward_payload_size() -> None:
+    big = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    bundle = QuoteBundle(symbol="AAPL", fetched_at=datetime.now(UTC), snapshot=big)
+    assert _payload_size(bundle) >= big.nbytes
+
+
+async def test_overbudget_arrow_results_are_not_retained() -> None:
+    table = pa.table({"x": pa.array(["y" * 1000] * 10)})
+    assert table.nbytes >= 10_000
+
+    def _arrow_parser(response: ClientResponse) -> FetchResult[Any]:
+        return FetchResult(table, _meta(response))
+
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0, cache_max_bytes=8_000)
+    op = client._endpoint_op("/api/quote", query={"t": "AAPL"}, parse=_arrow_parser)
+    await op()
+    assert client._cache is not None
+    stats = client._cache.stats()
+    assert stats["approx_bytes"] <= 8_000  # 10 KB table must not be resident
+    assert stats["entries"] == 0
+    assert fake.calls == 1
 
 
 async def test_cached_parsed_payload_is_immutable_across_hits() -> None:

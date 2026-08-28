@@ -349,18 +349,24 @@ class FinvizClient:
         self._explicit_proxy: str | None = None
         if proxy is False or proxy == "":
             self._force_direct = True
-        elif proxy is True or proxies is True or not isinstance(proxies, (list, tuple, type(None))):
-            msg = "proxy must be a URL/False/None and proxies a list of URLs/False/None"
-            raise FinvizQueryError(msg)
-        elif isinstance(proxy, str):
-            if not _is_valid_proxy(proxy):
+        elif proxy is None or isinstance(proxy, str):
+            if isinstance(proxy, str) and not _is_valid_proxy(proxy):
                 msg = f"invalid proxy URL: {proxy!r}"
                 raise FinvizQueryError(msg)
             self._explicit_proxy = proxy
+        else:
+            msg = "proxy must be a URL, False, or None and proxies a list of URLs/False/None"
+            raise FinvizQueryError(msg)
+        if proxies is not None and not (
+            proxies is False
+            or (isinstance(proxies, list) and all(isinstance(p, str) for p in proxies))
+        ):
+            msg = "proxies must be a list of URLs, False, or None"
+            raise FinvizQueryError(msg)
         self._pool: ProxyPool | None = None
-        if proxies is False or (isinstance(proxies, (list, tuple)) and not proxies):
+        if proxies is False or (isinstance(proxies, list) and not proxies):
             self._force_direct = True
-        elif isinstance(proxies, (list, tuple)):
+        elif isinstance(proxies, list):
             invalid = [p for p in proxies if not _is_valid_proxy(p)]
             if invalid:
                 msg = f"invalid proxy URL(s): {invalid!r}"
@@ -485,7 +491,7 @@ class FinvizClient:
         if self._on_event is not None:
             self._on_event(event)
 
-    async def fetch(
+    async def _fetch(
         self,
         path: str,
         *,
@@ -494,9 +500,10 @@ class FinvizClient:
     ) -> ClientResponse:
         """Fetch one explicit same-origin route and return its classified envelope.
 
-        ``proxy`` is a per-call override: a URL takes precedence over the
-        client proxy (including forced-direct), ``False`` forces direct,
-        ``None`` keeps client config.
+        Internal transport primitive for reviewed endpoint modules; there is no
+        public arbitrary-request API. ``proxy`` is a per-call override: a URL
+        takes precedence over the client proxy (including forced-direct),
+        ``False`` forces direct, ``None`` keeps client config.
         """
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             msg = f"route must be a relative {self.base_url} path, got {path!r}"

@@ -38,7 +38,11 @@ def _good_payload() -> dict[str, Any]:
     }
 
 
-def _json_client(payload: dict[str, Any] | Exception, calls: list | None = None) -> FinvizClient:
+def _json_client(
+    payload: dict[str, Any] | Exception,
+    calls: list | None = None,
+    cache_ttl: float | None = None,
+) -> FinvizClient:
     """A client whose transport always answers with one scripted payload."""
 
     class ScriptedBackend:
@@ -70,7 +74,7 @@ def _json_client(payload: dict[str, Any] | Exception, calls: list | None = None)
         def supports_http2(self) -> bool:
             return True
 
-    return FinvizClient(transport=ScriptedBackend(), retry_attempts=0)
+    return FinvizClient(transport=ScriptedBackend(), retry_attempts=0, cache_ttl=cache_ttl)
 
 
 # --- finding 1: only the exact no-data envelope is EMPTY -------------------------
@@ -352,11 +356,15 @@ async def test_child_cancellation_cancels_sibling_and_propagates() -> None:
     and propagates without waiting for the sibling's in-flight work."""
     sibling_started = asyncio.Event()
     sibling_cancelled = asyncio.Event()
+    sibling_tasks: list[asyncio.Task[Any]] = []
 
     class MixedBackend:
         async def request(self, config: Any, stream_callback: Any = None) -> Any:
             if config.params["t"] == "MSFT":
                 sibling_started.set()
+                me = asyncio.current_task()
+                assert me is not None
+                sibling_tasks.append(me)
                 try:
                     await asyncio.sleep(30)
                 except asyncio.CancelledError:
@@ -390,7 +398,12 @@ async def test_child_cancellation_cancels_sibling_and_propagates() -> None:
             statements.statements_batch_async(["AAPL", "MSFT"], statement="IA", client=client),
             timeout=2.0,
         )
+    # Cancellation was requested on the sibling before propagation returned.
+    assert sibling_tasks[0].cancelling() >= 1
+    # Drain: the reaped sibling finishes cancelled in the background.
+    await asyncio.sleep(0.05)
     assert sibling_cancelled.is_set()
+    assert sibling_tasks[0].cancelled()
 
 
 # --- finding 6: schema field-name access -----------------------------------------
@@ -403,3 +416,99 @@ def test_statement_table_uses_registry_field_names() -> None:
 
     assert isinstance(result.table, pa.Table)
     assert result.table.schema.names == list(fa.dataset_field_names("statements"))
+
+
+# --- review round 2: strict cache isolation + sibling-cleanup delay ----------------
+
+
+async def test_strict_call_never_serves_non_strict_cache_entry() -> None:
+    """A strict request after a lenient one must re-parse (raising), not serve
+    the lenient parsed cache entry — cache identity includes strict_schema."""
+    payload = {
+        "currency": "USD",
+        "data": {"Period": ["2025FY"], "Period End Date": [""], "X": ["not-a-number"]},
+    }
+    calls: list[Any] = []
+    client = _json_client(payload, calls, cache_ttl=60.0)
+    lenient = await statements.statements_async("AAPL", statement="IA", client=client)
+    assert [w.code for w in lenient.metadata.warnings] == ["conversion_failed"]
+    assert len(calls) == 1
+
+    from finvizp.errors import FinvizError
+
+    with pytest.raises(FinvizError):
+        await statements.statements_async("AAPL", statement="IA", client=client, strict_schema=True)
+    # The strict miss re-ran the network parse instead of reusing the entry.
+    assert len(calls) == 2
+
+
+async def test_strict_and_lenient_single_flight_do_not_share() -> None:
+    """Concurrent strict + lenient misses for the same symbol coalesce only
+    onto their own facet; the strict joiner must not receive the lenient
+    (warning-carrying) result."""
+    payload = {
+        "currency": "USD",
+        "data": {"Period": ["2025FY"], "Period End Date": [""], "X": ["not-a-number"]},
+    }
+    client = _json_client(payload, cache_ttl=60.0)
+    lenient_task = asyncio.ensure_future(
+        statements.statements_async("AAPL", statement="IA", client=client)
+    )
+    strict_task = asyncio.ensure_future(
+        statements.statements_async("AAPL", statement="IA", client=client, strict_schema=True)
+    )
+    lenient = await lenient_task
+
+    from finvizp.errors import FinvizError
+
+    with pytest.raises(FinvizError):
+        await strict_task
+    assert [w.code for w in lenient.metadata.warnings] == ["conversion_failed"]
+
+
+async def test_child_cancel_propagates_while_sibling_cleanup_is_blocked() -> None:
+    """A sibling that catches CancelledError and blocks in its cleanup must
+    not delay propagation: the batch surfaces CancelledError first."""
+
+    class CleanupBlocksBackend:
+        async def request(self, config: Any, stream_callback: Any = None) -> Any:
+            if config.params["t"] == "MSFT":
+                sibling_started.set()
+                # Child cancelled by the batch; its cleanup stalls until the
+                # test releases it — propagation may not wait for this.
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    await cleanup_release.wait()
+                    raise
+                raise AssertionError("never reached")  # pragma: no cover
+            # AAPL: cancel the whole batch from inside this child.
+            await sibling_started.wait()
+            batch_task = asyncio.current_task()
+            assert batch_task is not None
+            batch_task.cancel()
+            raise asyncio.CancelledError
+
+        async def close(self) -> None:
+            pass
+
+        async def __aenter__(self) -> CleanupBlocksBackend:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
+
+        def supports_http2(self) -> bool:
+            return True
+
+    sibling_started = asyncio.Event()
+    cleanup_release = asyncio.Event()
+    client = FinvizClient(transport=CleanupBlocksBackend(), retry_attempts=0)
+    batch = asyncio.ensure_future(
+        statements.statements_batch_async(["AAPL", "MSFT"], statement="IA", client=client)
+    )
+    await sibling_started.wait()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(batch, timeout=2.0)
+    cleanup_release.set()  # let the sibling finish its stalled cleanup
+    await asyncio.sleep(0.05)  # drain: sibling completes cancelled, callback reaps it

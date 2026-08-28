@@ -178,7 +178,10 @@ def _symbol_op(
     return client._endpoint_op(
         _ROUTE,
         query={"t": symbol, "s": statement},
-        representation="statement-json",
+        # strict_schema changes parse behavior, so it must join the cache
+        # identity: a strict call may never serve a non-strict parsed entry
+        # (and vice versa), cache or single-flight.
+        representation="statement-json+strict" if strict_schema else "statement-json",
         parser_version=_PARSER_VERSION,
         schema_version=_SCHEMA_VERSION,
         refresh=refresh,
@@ -398,30 +401,37 @@ async def _run_batch(
         )
         for symbol in canonical
     ]
-    # First-completed loop: a child cancellation must cancel the siblings and
-    # propagate immediately, never waiting for sibling completion (gather with
+    # Immediate propagation: a child cancellation cancels the siblings and
+    # re-raises CancelledError without awaiting their completion (gather with
     # return_exceptions=True only observes cancellation after ALL children
-    # finish, so it is not usable here).
+    # finish, so it is not usable here). Reaping is non-blocking: done
+    # callbacks consume each task's outcome so the loop never reports
+    # "exception was never retrieved".
     tasks = [asyncio.ensure_future(op()) for op in ops]
+
+    def _consume(task: asyncio.Future[Any]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    for task in tasks:
+        task.add_done_callback(_consume)
     pending: set[asyncio.Future[Any]] = set(tasks)
     try:
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             if any(task.cancelled() for task in done):
-                # A child was cancelled: cancel and reap the siblings, then
-                # propagate immediately — their in-flight work is not awaited.
+                # A child was cancelled: cancel the siblings and propagate
+                # immediately — their in-flight work is never awaited; the
+                # done callbacks reap their outcomes in the background.
                 for other in pending:
                     other.cancel()
-                if pending:
-                    await asyncio.wait(pending)
                 raise asyncio.CancelledError()
     except BaseException:
         # The batch itself was cancelled (or a child cancellation surfaced):
-        # cancel every child and reap before propagating.
+        # cancel every still-running child and propagate without waiting.
         for task in tasks:
-            task.cancel()
-        if not all(task.done() for task in tasks):
-            await asyncio.wait(tasks)
+            if not task.done():
+                task.cancel()
         raise
 
     succeeded: list[Any] = []

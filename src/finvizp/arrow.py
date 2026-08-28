@@ -204,12 +204,15 @@ def _parse_eastern(naive: dt.datetime, exact_status: str = "exact") -> tuple[dt.
     for time-only displays whose date came from the response).
     """
     offset = _EASTERN.utcoffset(naive.replace(tzinfo=_EASTERN, fold=0))
-    if offset is None:  # pragma: no cover - ZoneInfo offsets are always defined
+    offset_late = _EASTERN.utcoffset(naive.replace(tzinfo=_EASTERN, fold=1))
+    if offset is None or offset_late is None:  # pragma: no cover - ZoneInfo always defines
         msg = f"cannot resolve US Eastern offset for {naive!r}"
         raise ValueError(msg)
     aware = naive.replace(tzinfo=dt.timezone(offset))
-    roundtrip = aware.astimezone(_EASTERN)
-    if roundtrip.replace(tzinfo=None) != naive:
+    if offset != offset_late:
+        # PEP 495: differing fold-0/fold-1 offsets mean this local time occurs
+        # twice (fall-back) or not at all (spring gap). Keep the first
+        # occurrence's offset and mark it; UTC conversion is not unambiguous.
         return aware, "ambiguous"
     return aware, exact_status
 

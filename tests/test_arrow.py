@@ -294,6 +294,29 @@ def test_time_only_dst_spring_gap_is_ambiguous() -> None:
     assert row["published_at_raw"] == "02:30"
 
 
+def test_time_only_dst_fall_back_is_ambiguous_and_keeps_first_occurrence() -> None:
+    """A wall time occurring twice (fall-back) keeps the earlier instant, marked."""
+    table = _build(
+        "quote_news",
+        [{"symbol": "AAPL", "title": "t", "url": "u", "published_at": "01:30"}],
+        response_date=dt.date(2026, 11, 1),  # US fall-back day
+    )
+    row = _rows(table)[0]
+    assert row["published_at_status"] == "ambiguous"
+    assert row["published_at"] == dt.datetime(2026, 11, 1, 5, 30, tzinfo=dt.UTC)  # first EDT
+
+
+def test_explicit_raw_companion_key_rejected() -> None:
+    """`*_raw`/`*_status` columns are derived; setting them directly is a typed error."""
+    with pytest.raises(FinvizDataError):
+        _build("quote_snapshot", [{"symbol": "AAPL", "price": "232.04", "price_raw": "x"}])
+    with pytest.raises(FinvizDataError):
+        _build(
+            "quote_news",
+            [{"symbol": "AAPL", "title": "t", "url": "u", "published_at_status": "exact"}],
+        )
+
+
 def test_explicit_datetime_timestamp_is_exact() -> None:
     table = _build(
         "quote_news",

@@ -140,13 +140,57 @@ def test_raw_companions_reference_nullable_base() -> None:
             assert base.unit not in {"text", "map", "raw"}, (ds.name, f.name)
 
 
-def test_at_most_one_extra_fields_map() -> None:
+def test_every_dataset_has_exactly_one_extra_fields_map() -> None:
     for ds in schemas.registry().values():
         maps = [f for f in ds.fields if f.unit == "map"]
-        assert len(maps) <= 1, ds.name
-        if maps:
-            assert maps[0].type == "map_string_string"
-            assert maps[0].nullable
+        assert len(maps) == 1 and maps[0].name == "extra_fields", ds.name
+        assert maps[0].nullable
+
+
+def test_registered_raw_fields_have_status_when_temporal() -> None:
+    for ds in schemas.registry().values():
+        fmap = ds.field_map
+        for f in ds.fields:
+            if f.raw and f.unit == "timestamp":
+                assert f"{f.name}_status" in fmap, (ds.name, f.name)
+
+
+def test_registry_payload_rejects_raw_flag_without_companion() -> None:
+    bad = {"name": "x", "type": "float64", "unit": "number", "nullable": True, "raw": True}
+    with pytest.raises(FinvizDataError):
+        schemas.parse_dataset(_payload(fields=[*_payload()["fields"], bad]))  # type: ignore[list-item]
+
+
+def test_registry_payload_rejects_timestamp_without_status_field() -> None:
+    fields = [
+        *_payload()["fields"],  # type: ignore[list-item]
+        {
+            "name": "published_at",
+            "type": "timestamp_us_utc",
+            "unit": "timestamp",
+            "nullable": True,
+            "temporal": True,
+            "raw": True,
+        },
+        {"name": "published_at_raw", "type": "string", "unit": "raw", "nullable": True},
+    ]
+    with pytest.raises(FinvizDataError, match="published_at_status"):
+        schemas.parse_dataset(_payload(fields=fields))
+
+
+def test_registry_payload_rejects_missing_extra_fields_map() -> None:
+    fields = [
+        {"name": "symbol", "type": "string", "unit": "text", "nullable": False, "key": True},
+        {
+            "name": "fetched_at",
+            "type": "timestamp_us_utc",
+            "unit": "timestamp",
+            "nullable": False,
+            "temporal": True,
+        },
+    ]
+    with pytest.raises(FinvizDataError, match="extra_fields"):
+        schemas.parse_dataset(_payload(fields=fields))  # type: ignore[list-item]
 
 
 def test_arrow_schema_matches_registry() -> None:

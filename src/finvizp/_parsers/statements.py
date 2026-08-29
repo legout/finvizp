@@ -95,7 +95,9 @@ def parse_statement_json(
                 ).hexdigest(),
                 empty_recognized=True,
             )
-        raise _fail(f"unrecognized statement error envelope {payload.get('error')!r}")
+        # Fixed message: the provider's error value is untrusted raw content
+        # and must never surface through public error carriers (spec 0.1).
+        raise _fail("unrecognized statement error envelope")
     data = payload.get("data")
     if not isinstance(data, dict) or not data:
         raise _fail("statement payload has no statement data object")

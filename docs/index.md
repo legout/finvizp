@@ -2,7 +2,8 @@
 
 **Research date:** 2026-08-27
 
-**Project status:** confirmed design and implementation plans; endpoint implementation not started
+**Project status:** milestone 0.1 implemented (symbols, statements, quote
+bundles); later milestones planned per the roadmap
 
 `finvizp` means **Finviz for Python**. It is intended to be an async,
 Arrow-native public Finviz client covering the verified 2026-08-27 public
@@ -42,6 +43,21 @@ The approved foundation design is recorded at
 [docs/superpowers/specs/2026-08-27-finvizp-foundation-design.md](superpowers/specs/2026-08-27-finvizp-foundation-design.md).
 The machine-readable dormant board graph is
 [`docs/plans/kanban-cards.json`](plans/kanban-cards.json).
+
+## Using finvizp (0.1)
+
+- [Results, provenance, and errors](reference/results.md) — the immutable
+  `FetchResult` envelope, status/provenance facts, batching semantics, and
+  the typed error hierarchy.
+- [Arrow schemas in 0.1](reference/schemas-0.1.md) — every registered
+  dataset, units, `_raw` companions, and the versioning contract.
+- [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
+  opt-in TTL caching with single-flight, provisional conservative
+  defaults, and caller-owned persistence.
+
+The implemented-versus-planned capability ledger is machine-readable:
+`finvizp.capabilities()` (see `src/finvizp/capabilities.json` and
+`finvizp.provisional_defaults()` for the conservative transport defaults).
 
 ## Evidence base
 

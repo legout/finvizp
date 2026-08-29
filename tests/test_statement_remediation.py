@@ -11,16 +11,18 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+from importlib import import_module
 from typing import Any
 
 import pyarrow as pa
 import pytest
 
-from finvizp import statements
-from finvizp._parsers import statements as stmt_parser
-from finvizp.client import FinvizClient
-from finvizp.errors import FinvizParseError
-from finvizp.results import ResultStatus
+statements = import_module("finvizp.statements")
+
+from finvizp._parsers import statements as stmt_parser  # noqa: E402
+from finvizp.client import FinvizClient  # noqa: E402
+from finvizp.errors import FinvizParseError  # noqa: E402
+from finvizp.results import ResultStatus  # noqa: E402
 
 FETCHED_AT = dt.datetime(2026, 8, 28, 14, 30, tzinfo=dt.UTC)
 

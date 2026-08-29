@@ -7,11 +7,14 @@ proving current access and shape only. Never replaces fixtures.
 
 from __future__ import annotations
 
+from importlib import import_module
+
 import pytest
 
-from finvizp import statements
-from finvizp.errors import FinvizError
-from finvizp.results import ResultStatus
+statements = import_module("finvizp.statements")
+
+from finvizp.errors import FinvizError  # noqa: E402
+from finvizp.results import ResultStatus  # noqa: E402
 
 pytestmark = pytest.mark.live_public
 

@@ -22,6 +22,7 @@ from finvizp._symbols import SymbolInputError, SymbolResolutionRecord, _resolve
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
+    FetchWarning,
     FinvizNotFoundError,
     FinvizParseError,
     FinvizPartialError,
@@ -72,21 +73,27 @@ def _parse_stock_page(response: ClientResponse) -> FetchResult[QuoteBundle]:
 
     News time-only displays anchor to the provider response's own date: the
     provenance timestamp's US-Eastern day, computed here so the parser keeps
-    its plain ``dt.date`` contract.
+    its plain ``dt.date`` contract. The envelope is one fetched-and-parsed
+    page, so it is always a COMPLETE single-unit success; recoverable drift
+    (missing optional regions, conversion failures) stays on the bundle as
+    PARTIAL and surfaces as typed warnings in the metadata.
     """
+    warnings: list[FetchWarning] = []
     bundle = parse_quote_page(
         response.data,
         fetched_at=response.fetched_at,
         response_date=response.fetched_at.astimezone(ZoneInfo("America/New_York")).date(),
+        on_warning=warnings.append,
     )
     return FetchResult(
         bundle,
         ResultMetadata(
             endpoint=response.endpoint,
-            status=bundle.status,
+            status=ResultStatus.COMPLETE,
             access_tier=response.access_tier,
             fetched_at=response.fetched_at,
             query=dict(response.query),
+            warnings=tuple(warnings),
             attempts=response.attempts,
             response_hash=response.response_hash,
             route_fingerprint=response.route_fingerprint,
@@ -287,6 +294,9 @@ def _bundle_result(
         if exc is not None
     )
     failed = len(unit_errors)
+    # Unit-level drift (missing_region, conversion_failed, ...) propagates to
+    # the batch envelope in unit order.
+    warnings = tuple(w for unit in succeeded for w in unit.metadata.warnings)
     return FetchResult(
         bundles,
         ResultMetadata(
@@ -296,6 +306,7 @@ def _bundle_result(
             fetched_at=first.fetched_at,
             served_at=first.served_at,
             symbols=records,
+            warnings=warnings,
             requested_units=len(bundles) + failed,
             succeeded_units=len(bundles),
             failed_units=failed,

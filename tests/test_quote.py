@@ -16,6 +16,7 @@ from fastreq.backends.base import Backend, NormalizedResponse
 
 from finvizp.client import FinvizClient
 from finvizp.errors import (
+    FetchWarning,
     FinvizBlockedError,
     FinvizEntitlementError,
     FinvizNotFoundError,
@@ -178,6 +179,35 @@ async def test_one_page_fetched_and_parsed_into_bundle_result() -> None:
     assert isinstance(result.data[0], QuoteBundle)
     assert result.data[0].snapshot is not None
     assert result.data[0].symbol == "AAPL"
+
+
+async def test_missing_optional_region_returns_recoverable_bundle() -> None:
+    # A dropped optional region is recoverable bundle drift (bundle PARTIAL),
+    # not a unit failure: the one-symbol envelope stays COMPLETE/1 succeeded,
+    # and the drift is visible as missing_region warnings.
+    fake = QuoteTransport(
+        path_overrides={
+            "/stock": _html_resp(_PAGE.replace("js-table-ratings", "js-table-ratings-x", 1))
+        }
+    )
+    result = await quote_async("AAPL", client=_client(fake))
+    assert result.data[0].status.name == "PARTIAL"
+    assert result.metadata.status is ResultStatus.COMPLETE
+    assert result.metadata.succeeded_units == 1
+    assert result.metadata.failed_units == 0
+    assert any(
+        isinstance(w, FetchWarning) and w.code == "missing_region" for w in result.metadata.warnings
+    )
+
+
+async def test_parser_conversion_warnings_reach_metadata() -> None:
+    fake = QuoteTransport(
+        path_overrides={
+            "/stock": _html_resp(_PAGE.replace("<td>Aug-17-26</td>", "<td>not-a-date</td>", 1))
+        }
+    )
+    result = await quote_async("AAPL", client=_client(fake))
+    assert any(w.code == "conversion_failed" for w in result.metadata.warnings)
 
 
 async def test_repeat_read_hits_cache_and_preserves_original_facts() -> None:

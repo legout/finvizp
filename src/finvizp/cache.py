@@ -71,11 +71,14 @@ class ResultCache:
         representation: str = "default",
         parser_version: str = "1",
         schema_version: int = 1,
+        follow_redirects: bool = True,
     ) -> str:
         """Deterministic key isolating endpoint/query, auth scope, route, and identity.
 
         Facets are joined and hashed: raw values (including any auth-scope
-        input) never appear in the returned key.
+        input) never appear in the returned key. The redirect policy is part
+        of the identity: a strict one-request op must never share a cached
+        entry or single flight with a permissive one.
         """
         parts = (
             endpoint,
@@ -87,6 +90,7 @@ class ResultCache:
             representation,
             str(parser_version),
             str(schema_version),
+            str(bool(follow_redirects)),
         )
         digest = hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
         return f"finviz-cache-v2:{digest}"

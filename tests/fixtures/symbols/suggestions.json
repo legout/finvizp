@@ -1,0 +1,12 @@
+[
+  {
+    "ticker": "AAPL",
+    "company": "Apple Inc.",
+    "exchange": "NASDAQ"
+  },
+  {
+    "ticker": "AAP",
+    "company": "Advance Auto Parts",
+    "exchange": "NYSE"
+  }
+]

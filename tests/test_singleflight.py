@@ -350,6 +350,46 @@ async def test_concurrent_identical_misses_collapse_to_one_request() -> None:
     assert sum(1 for r in results if r.metadata.cache_hit) >= 1  # losers see the winner's entry
 
 
+async def test_redirect_policy_is_part_of_cache_identity() -> None:
+    """Strict and permissive redirect policies never share entries or flights."""
+    fake = CountingTransport()
+    client = _client(fake, cache_ttl=60.0)
+    # Permissive call populates the cache; the strict op must miss and fetch.
+    await client._endpoint_op("/quote.ashx", parse=_parsed_quote)()
+    strict = await client._endpoint_op("/quote.ashx", follow_redirects=False, parse=_parsed_quote)()
+    assert strict.metadata.cache_hit is False  # policies do not share entries
+    assert fake.calls == 2
+    # Reverse order: a strict leader's entry is not a permissive cache hit.
+    await client._cached_fetch("/other.ashx", follow_redirects=False, parse=_parsed_quote)
+    permissive = await client._endpoint_op("/other.ashx", parse=_parsed_quote)()
+    assert permissive.metadata.cache_hit is False
+    assert fake.calls == 4  # every distinct policy fetched its own entry
+    # Concurrent strict + permissive misses join different flights.
+    slow = SlowTransport()
+    flight_client = _client(slow, cache_ttl=60.0)
+    first, second = await asyncio.gather(
+        flight_client._endpoint_op("/s.ashx", follow_redirects=False, parse=_parsed_quote)(),
+        flight_client._endpoint_op("/s.ashx", parse=_parsed_quote)(),
+    )
+    assert slow.calls == 2  # two policies -> two flights, never coalesced
+    assert {r.metadata.cache_hit for r in (first, second)} == {False}
+
+    # Invalidation addresses the redirect policy like any other facet.
+    await client._endpoint_op("/quote.ashx", follow_redirects=False, parse=_parsed_quote)()
+    assert (
+        client.invalidate("/quote.ashx", params={"t": "AAPL"}, follow_redirects=False) is False
+    )  # different query: nothing at that strict key yet
+    await client._endpoint_op(
+        "/quote.ashx", query={"t": "AAPL"}, follow_redirects=False, parse=_parsed_quote
+    )()
+    assert client.invalidate("/quote.ashx", params={"t": "AAPL"}, follow_redirects=False) is True
+    strict_after = await client._endpoint_op(
+        "/quote.ashx", query={"t": "AAPL"}, follow_redirects=False, parse=_parsed_quote
+    )()
+    assert strict_after.metadata.cache_hit is False  # the strict entry was really dropped
+    assert fake.calls == 6
+
+
 async def test_cancelling_one_waiter_does_not_corrupt_the_shared_operation() -> None:
     slow = SlowTransport()
     client = _client(slow, cache_ttl=60.0)

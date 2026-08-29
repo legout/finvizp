@@ -101,6 +101,18 @@ def test_key_changes_with_every_isolation_facet() -> None:
     assert _key(cache, route_fingerprint="finviz-route-v1:pool-2") != base
     assert _key(cache, browser_profile="chrome131") != base
     assert _key(cache, representation="structured") != base
+    assert (
+        cache.make_key(
+            endpoint="/quote.ashx",
+            query={"t": "AAPL"},
+            access_tier="PUBLIC",
+            auth_scope="public",
+            route_fingerprint="finviz-route-v1:direct",
+            browser_profile="chrome",
+            follow_redirects=False,
+        )
+        != base
+    )
     assert _key(cache, parser_version="2") != base
     assert _key(cache, schema_version=2) != base
 

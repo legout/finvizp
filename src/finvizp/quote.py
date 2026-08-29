@@ -147,12 +147,14 @@ async def _fetch_bundle(
         result = await _fetch_uncached_bundle(client, symbol, parser_version, schema_version)
     else:
         facets = _bundle_facets(parser_version, schema_version)
+        alternate = FALLBACK_PATH if route == CANONICAL_PATH else CANONICAL_PATH
         try:
             result = await client._endpoint_op(route, query={"t": symbol}, **facets)()
         except _NOT_FOUND_LIKE:
             # The memoized route drifted (soft 404 / parse drift): probe the
-            # fallback and update the memo so warm calls follow the same path.
-            result = await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)()
+            # alternate route — never a same-path retry — and update the memo
+            # so warm calls follow the recovered path.
+            result = await client._endpoint_op(alternate, query={"t": symbol}, **facets)()
     routes[symbol] = result.metadata.endpoint
     return result
 

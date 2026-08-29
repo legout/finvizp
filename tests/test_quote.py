@@ -307,11 +307,54 @@ async def test_route_drift_after_canonical_resolution_still_falls_back() -> None
     assert warm.metadata.endpoint == "/quote.ashx"
 
 
+async def test_fallback_drift_recovers_via_canonical_route() -> None:
+    # Mirror case of canonical drift: the fallback route is memoized (the
+    # canonical route 404'd on resolution), then the fallback itself drifts.
+    # The alternate canonical route must be probed and the memo updated on
+    # success — never a same-path retry of the drifted route.
+    fake = QuoteTransport(errors={"ZZZZZ": 1})  # one canonical 404, then healthy
+    client = _client(fake, cache_ttl=0.0)
+    first = await quote_async("ZZZZZ", client=client)  # resolved via fallback
+    assert _paths(fake) == ["/stock", "/quote.ashx"]
+    assert first.metadata.endpoint == "/quote.ashx"
+
+    fake.path_overrides["/quote.ashx"] = _html_resp(_NOT_FOUND_PAGE)  # fallback drifts
+    second = await quote_async("ZZZZZ", client=client)
+    assert _paths(fake) == ["/stock", "/quote.ashx", "/quote.ashx", "/stock"]
+    assert second.metadata.endpoint == "/stock"
+
+    warm = await quote_async("ZZZZZ", client=client)  # memo follows the recovery
+    assert _paths(fake) == ["/stock", "/quote.ashx", "/quote.ashx", "/stock", "/stock"]
+    assert warm.metadata.endpoint == "/stock"
+
+
 async def test_non_iterable_symbols_rejects_typed_before_network() -> None:
     fake = QuoteTransport()
     with pytest.raises(FinvizQueryError):
         await quote_async(123, client=_client(fake))  # type: ignore[arg-type]
     assert fake.calls == []
+
+
+async def test_fallback_drift_probes_canonical_and_recovers() -> None:
+    # The mirror case of test_route_drift_after_canonical_resolution: the
+    # fallback route is memoized (canonical 404'd on resolution), then the
+    # fallback itself drifts. The alternate canonical route must be probed and
+    # the memo updated on success — never a same-path retry of the drifted
+    # route, which would leave a healthy canonical route unreachable.
+    fake = QuoteTransport(errors={"ZZZZZ": 1})  # one canonical 404, then healthy
+    client = _client(fake, cache_ttl=0.0)
+    first = await quote_async("ZZZZZ", client=client)  # resolved via fallback
+    assert _paths(fake) == ["/stock", "/quote.ashx"]
+    assert first.metadata.endpoint == "/quote.ashx"
+
+    fake.path_overrides["/quote.ashx"] = _html_resp(_NOT_FOUND_PAGE)  # fallback drifts
+    second = await quote_async("ZZZZZ", client=client)
+    assert _paths(fake) == ["/stock", "/quote.ashx", "/quote.ashx", "/stock"]
+    assert second.metadata.endpoint == "/stock"
+
+    warm = await quote_async("ZZZZZ", client=client)  # memo follows the recovery
+    assert _paths(fake) == ["/stock", "/quote.ashx", "/quote.ashx", "/stock", "/stock"]
+    assert warm.metadata.endpoint == "/stock"
 
 
 @pytest.mark.parametrize("bad_limit", [float("nan"), "1", True, 0, -1, 1.5])

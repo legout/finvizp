@@ -291,6 +291,29 @@ async def test_safety_limit_preflight_rejects_before_network() -> None:
     assert fake.calls == []
 
 
+async def test_route_drift_after_canonical_resolution_still_falls_back() -> None:
+    # Once /stock is memoized for the client, a later not-found/parse drift on
+    # that route must still probe the fallback (and update the memo), not leak
+    # the drift to the caller.
+    fake = QuoteTransport()
+    client = _client(fake, cache_ttl=0.0)
+    await quote_async("AAPL", client=client)  # canonical resolution memoized
+    fake.path_overrides["/stock"] = _html_resp(_NOT_FOUND_PAGE)
+    result = await quote_async("AAPL", client=client)
+    assert _paths(fake) == ["/stock", "/stock", "/quote.ashx"]
+    assert result.metadata.endpoint == "/quote.ashx"
+    warm = await quote_async("AAPL", client=client)
+    assert _paths(fake) == ["/stock", "/stock", "/quote.ashx", "/quote.ashx"]
+    assert warm.metadata.endpoint == "/quote.ashx"
+
+
+async def test_non_iterable_symbols_rejects_typed_before_network() -> None:
+    fake = QuoteTransport()
+    with pytest.raises(FinvizQueryError):
+        await quote_async(123, client=_client(fake))  # type: ignore[arg-type]
+    assert fake.calls == []
+
+
 @pytest.mark.parametrize("bad_limit", [float("nan"), "1", True, 0, -1, 1.5])
 async def test_invalid_max_symbols_preflight_rejects(bad_limit: Any) -> None:
     fake = QuoteTransport()

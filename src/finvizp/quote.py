@@ -142,11 +142,19 @@ async def _fetch_bundle(
     routes = _BUNDLE_ROUTES.setdefault(client, {})
     route = routes.get(symbol)
     if route is None:
+        # Uncached path resolves canonical->fallback internally; a failure
+        # from the fallback itself (still not found) propagates as-is.
         result = await _fetch_uncached_bundle(client, symbol, parser_version, schema_version)
-        routes[symbol] = result.metadata.endpoint
-        return result
-    facets = _bundle_facets(parser_version, schema_version)
-    return await client._endpoint_op(route, query={"t": symbol}, **facets)()
+    else:
+        facets = _bundle_facets(parser_version, schema_version)
+        try:
+            result = await client._endpoint_op(route, query={"t": symbol}, **facets)()
+        except _NOT_FOUND_LIKE:
+            # The memoized route drifted (soft 404 / parse drift): probe the
+            # fallback and update the memo so warm calls follow the same path.
+            result = await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)()
+    routes[symbol] = result.metadata.endpoint
+    return result
 
 
 async def quote_async(
@@ -255,8 +263,8 @@ def _validated_symbols(
     """Normalize/dedupe input and enforce the batch safety limit pre-network."""
     try:
         canonical, records = _resolve(symbols)
-    except SymbolInputError as exc:
-        raise FinvizQueryError(str(exc)) from exc
+    except (SymbolInputError, TypeError) as exc:
+        raise FinvizQueryError(f"symbols: {exc}") from exc
     if max_symbols is not None and (
         isinstance(max_symbols, bool) or not isinstance(max_symbols, int) or max_symbols < 1
     ):

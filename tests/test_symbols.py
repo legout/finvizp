@@ -10,16 +10,23 @@ import asyncio
 import contextlib
 import datetime as dt
 import json
+
+# The curated package surface exports flat operation functions, so the
+# submodule is imported explicitly (import_module is shadowing-proof).
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
 
-from finvizp import symbols as symbols_api
-from finvizp.client import FinvizClient
-from finvizp.errors import FinvizParseError, FinvizQueryError, FinvizTransportError
-from finvizp.results import ResultStatus
+# The curated package surface exports flat operation functions, so the
+# submodule is imported explicitly (import_module is shadowing-proof).
+symbols_api = import_module("finvizp.symbols")
+
+from finvizp.client import FinvizClient  # noqa: E402
+from finvizp.errors import FinvizParseError, FinvizQueryError, FinvizTransportError  # noqa: E402
+from finvizp.results import ResultStatus  # noqa: E402
 
 BASE = "https://finviz.com"
 FIXTURES = Path(__file__).parent / "fixtures" / "symbols"

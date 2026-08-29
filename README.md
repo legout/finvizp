@@ -18,9 +18,12 @@ legacy `finvizfinance` class surface.
 
 ## Current status
 
-Research and design foundation only. The package is importable, but endpoint
-implementations will be created from a separately reviewed implementation
-plan.
+Milestone **0.1** implements the verified core surface: the symbol universe
+and search, all six public statement forms, complete quote-page bundles with
+cached relation projections, an immutable result/error contract, versioned
+Arrow schemas, and a bounded result cache with single-flight coalescing.
+Later capabilities are seeded as `planned` in the capability manifest
+(`finvizp.capabilities()`).
 
 Public 1.0 is capability-complete for the verified public Finviz surface frozen
 on 2026-08-27, including everything available through `finvizfinance` plus:
@@ -46,9 +49,66 @@ on 2026-08-27, including everything available through `finvizfinance` plus:
 Login- and Elite-only features are deferred until they can be legitimately
 verified. The public package supports Python 3.11-3.14.
 
+## Quick start
+
+```bash
+uv add finvizp  # or: pip install finvizp
+```
+
+Every operation is async-first with a sync twin, and returns an immutable
+`FetchResult` whose `.data` is an Arrow table (or a compound bundle):
+
+```python
+import asyncio
+
+import finvizp
+
+
+async def main() -> None:
+    async with finvizp.FinvizClient() as client:
+        # Symbol universe: exactly one request to the published stock manifest.
+        universe = await finvizp.symbols_async(client=client)
+
+        # Bounded ranked symbol search.
+        matches = await finvizp.search_symbols_async("APPLE", client=client)
+
+        # All six statement forms: IA/IQ/BA/BQ/CA/CQ.
+        income = await finvizp.statements_async("AAPL", statement="IA", client=client)
+
+        # Complete quote bundle; one page fetch, every relation.
+        bundle = await finvizp.quote_async("AAPL", client=client)
+        for table in bundle.data:
+            print(table.snapshot.num_rows)
+
+
+asyncio.run(main())
+```
+
+The sync twins (`finvizp.symbols()`, `finvizp.search_symbols()`,
+`finvizp.statements()`, `finvizp.statements_batch()`, `finvizp.quote()`,
+`finvizp.snapshot()`, …) reject an active event loop and otherwise behave
+identically. Cache-preserving quote projections — `snapshot()`, `ratings()`,
+`news()`, `insider()`, `peers()`, `etf_holders()` — reuse the cached page and
+perform no second request.
+
+Result envelopes carry full provenance; `strict` batching raises
+`FinvizPartialError` with the successful prefix preserved, and
+`allow_partial=True` returns a `PARTIAL` result with typed `unit_errors`.
+See [`docs/reference/results.md`](docs/reference/results.md) for the
+envelope, [`docs/reference/schemas-0.1.md`](docs/reference/schemas-0.1.md)
+for the Arrow tables, and
+[`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md) for
+proxies, caching, and caller-owned persistence.
+
 ## Documentation
 
-Start at [`docs/index.md`](docs/index.md). The research explains the complete
+Start at [`docs/index.md`](docs/index.md), which links the 0.1 user docs:
+the result-envelope reference
+([`docs/reference/results.md`](docs/reference/results.md)), the Arrow
+schema tables ([`docs/reference/schemas-0.1.md`](docs/reference/schemas-0.1.md)),
+and the proxy/cache how-to
+([`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md)).
+The research explains the complete
 Finviz surface, audits `finvizfinance`, compares overlapping Yahoo data, and
 defines what “history” means for snapshot-only statistics. The approved spec,
 confirmed decision register, and implementation plans are complete. Start with

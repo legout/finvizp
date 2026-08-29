@@ -97,6 +97,15 @@ def test_error_with_other_payload_is_parse_error() -> None:
         _parse({"error": "no data", "retry_after": 30})
 
 
+def test_unrecognized_error_envelope_message_is_fixed() -> None:
+    # Raw provider error content must never reach the public error message
+    # (spec: warnings/errors carry no sensitive raw response bodies).
+    with pytest.raises(FinvizParseError) as exc_info:
+        _parse({"error": "opaque-provider-secret-marker"})
+    assert "opaque-provider-secret-marker" not in str(exc_info.value)
+    assert "unrecognized statement error envelope" in str(exc_info.value)
+
+
 # --- finding 2: structural alignment of period arrays ----------------------------
 
 
@@ -253,6 +262,47 @@ async def test_partial_batch_exposes_unit_errors() -> None:
     unit = result.metadata.unit_errors[0]
     assert unit.symbol == "MSFT"
     assert "no statement data rows" in unit.message
+
+
+async def test_partial_batch_unit_error_carries_no_provider_content() -> None:
+    good = _good_payload()
+
+    class MarkedBackend:
+        async def request(self, config: Any, stream_callback: Any = None) -> Any:
+            from fastreq.backends.base import NormalizedResponse
+
+            if config.params["t"] == "MSFT":
+                body = json.dumps({"error": "opaque-provider-secret-marker"}).encode()
+            else:
+                body = json.dumps(good).encode()
+            return NormalizedResponse.from_backend(
+                status_code=200,
+                headers={"Content-Type": "application/json"},
+                content=body,
+                url="https://finviz.com/api/statement",
+                is_json=True,
+            )
+
+        async def close(self) -> None:
+            pass
+
+        async def __aenter__(self) -> MarkedBackend:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
+
+        def supports_http2(self) -> bool:
+            return True
+
+    client = FinvizClient(transport=MarkedBackend(), retry_attempts=0)
+    result = await statements.statements_batch_async(
+        ["AAPL", "MSFT"], statement="IA", client=client, allow_partial=True
+    )
+    assert result.metadata.status is ResultStatus.PARTIAL
+    unit = result.metadata.unit_errors[0]
+    assert unit.symbol == "MSFT"
+    assert "opaque-provider-secret-marker" not in unit.message
 
 
 async def test_strict_schema_promotes_conversion_drift_to_error() -> None:

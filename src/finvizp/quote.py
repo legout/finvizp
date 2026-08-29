@@ -14,6 +14,7 @@ import asyncio
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from typing import Any
+from weakref import WeakKeyDictionary
 from zoneinfo import ZoneInfo
 
 from finvizp._parsers.quote import parse_quote_page
@@ -93,20 +94,52 @@ def _parse_stock_page(response: ClientResponse) -> FetchResult[QuoteBundle]:
     )
 
 
-async def _fetch_bundle(
+async def _fetch_uncached_bundle(
     client: FinvizClient, symbol: str, parser_version: str, schema_version: int
 ) -> FetchResult[QuoteBundle]:
-    """One symbol -> one cached bundle via the canonical route plus fallback."""
-    facets: dict[str, Any] = {
+    """Canonical route with the documented fallback; no route in the cache key.
+
+    The caller (:func:`_fetch_bundle`) applies route-keyed caching itself, so
+    the resolved route stays an output fact rather than a cache-key input.
+    """
+    facets = _bundle_facets(parser_version, schema_version)
+    try:
+        return await client._endpoint_op(CANONICAL_PATH, query={"t": symbol}, **facets)()
+    except _NOT_FOUND_LIKE:
+        return await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)()
+
+
+_BUNDLE_ROUTES: WeakKeyDictionary[FinvizClient, dict[str, str]] = WeakKeyDictionary()
+
+
+def _bundle_facets(parser_version: str, schema_version: int) -> dict[str, Any]:
+    return {
         "representation": "bundle",
         "parser_version": parser_version,
         "schema_version": schema_version,
         "parse": _parse_stock_page,
     }
-    try:
-        return await client._endpoint_op(CANONICAL_PATH, query={"t": symbol}, **facets)()
-    except _NOT_FOUND_LIKE:
-        return await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)()
+
+
+async def _fetch_bundle(
+    client: FinvizClient, symbol: str, parser_version: str, schema_version: int
+) -> FetchResult[QuoteBundle]:
+    """One symbol -> one cached bundle, route resolved once per client.
+
+    ``FinvizClient`` keys its cache by endpoint path, so this logical
+    operation caches under a stable route-free key and remembers the route
+    that served each symbol: a warm call replays the cached bundle with zero
+    HTTP requests, even when it originally came from the fallback route.
+    Single-flight still coalesces concurrent misses on the shared key.
+    """
+    routes = _BUNDLE_ROUTES.setdefault(client, {})
+    route = routes.get(symbol)
+    if route is None:
+        result = await _fetch_uncached_bundle(client, symbol, parser_version, schema_version)
+        routes[symbol] = result.metadata.endpoint
+        return result
+    facets = _bundle_facets(parser_version, schema_version)
+    return await client._endpoint_op(route, query={"t": symbol}, **facets)()
 
 
 async def quote_async(
@@ -149,6 +182,15 @@ async def quote_async(
     succeeded: list[FetchResult[QuoteBundle]] = []
     failures: list[BaseException | None] = [None] * len(canonical)
     for position, outcome in enumerate(outcomes):
+        if isinstance(outcome, asyncio.CancelledError):
+            # A cancelled child is this batch's own cancellation surfacing
+            # (gather's return_exceptions only shields exceptions): cancel the
+            # remaining units and propagate — it must never become a unit
+            # failure (foundation contract: cancellation propagates).
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise outcome
         if isinstance(outcome, BaseException):
             failures[position] = outcome
         else:
@@ -208,6 +250,11 @@ def _validated_symbols(
         canonical, records = _resolve(symbols)
     except SymbolInputError as exc:
         raise FinvizQueryError(str(exc)) from exc
+    if max_symbols is not None and (
+        isinstance(max_symbols, bool) or not isinstance(max_symbols, int) or max_symbols < 1
+    ):
+        msg = f"max_symbols: expected a positive integer, got {max_symbols!r}"
+        raise FinvizQueryError(msg)
     limit = DEFAULT_MAX_SYMBOLS if max_symbols is None else max_symbols
     if len(canonical) > limit:
         msg = f"symbols: {len(canonical)} unique symbols exceed the safety limit of {limit}"

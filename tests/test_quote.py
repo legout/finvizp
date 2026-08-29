@@ -24,7 +24,7 @@ from finvizp.errors import (
     FinvizRateLimitError,
 )
 from finvizp.models import QuoteBundle
-from finvizp.quote import quote, quote_async
+from finvizp.quote import quote, quote_async, snapshot_async
 from finvizp.results import FetchResult, ResultStatus
 
 BASE = "https://finviz.com"
@@ -191,6 +191,17 @@ async def test_repeat_read_hits_cache_and_preserves_original_facts() -> None:
     assert second.metadata.response_hash == first.metadata.response_hash
 
 
+async def test_fallback_bundle_is_reused_with_zero_warm_requests() -> None:
+    fake = QuoteTransport(errors={"ZZZZZ": 1})
+    client = _client(fake, cache_ttl=60.0)
+    await quote_async("ZZZZZ", client=client)  # fallback route served the bundle
+    warm = await snapshot_async("ZZZZZ", client=client)
+    assert _paths(fake) == ["/stock", "/quote.ashx"]  # no canonical re-probe
+    assert warm.metadata.endpoint == "/quote.ashx"
+    assert warm.metadata.cache_hit is True
+    assert warm.metadata.projected_from == "quote"
+
+
 async def test_concurrent_identical_requests_share_one_fetch() -> None:
     fake = QuoteTransport(delay=0.03)
     client = _client(fake, cache_ttl=60.0)
@@ -250,6 +261,14 @@ async def test_safety_limit_preflight_rejects_before_network() -> None:
     assert fake.calls == []
 
 
+@pytest.mark.parametrize("bad_limit", [float("nan"), "1", True, 0, -1, 1.5])
+async def test_invalid_max_symbols_preflight_rejects(bad_limit: Any) -> None:
+    fake = QuoteTransport()
+    with pytest.raises(FinvizQueryError):
+        await quote_async(["AAPL", "MSFT", "GOOG"], client=_client(fake), max_symbols=bad_limit)
+    assert fake.calls == []
+
+
 # --- strict / partial / all-fail / cancellation ---------------------------------
 
 
@@ -291,6 +310,26 @@ async def test_cancellation_propagates_immediately() -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_child_cancellation_not_swallowed_into_partial() -> None:
+    class CancelMSFT(QuoteTransport):
+        async def request(self, config: Any, stream_callback: Any = None) -> NormalizedResponse:
+            if str((config.params or {}).get("t")) == "MSFT":
+                await asyncio.sleep(10)
+                raise AssertionError("cancelled task must never complete")
+            return await super().request(config, stream_callback=stream_callback)
+
+    fake = CancelMSFT()
+    client = _client(fake)
+    task = asyncio.ensure_future(quote_async(["AAPL", "MSFT"], client=client, allow_partial=True))
+    await asyncio.sleep(0.05)
+    children = asyncio.all_tasks() - {task, asyncio.current_task()}
+    msft = next(t for t in children if not t.done())
+    msft.cancel()  # transport cancels the MSFT unit mid-flight
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert fake.max_in_flight <= client._semaphore._value  # siblings not left running
 
 
 # --- sync wrappers ---------------------------------------------------------------

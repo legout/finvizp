@@ -9,8 +9,9 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
+import pyarrow as pa
 import pytest
-from test_quote import QuoteTransport, _client
+from test_quote import _PAGE, QuoteTransport, _client, _html_resp
 
 from finvizp.quote import (
     etf_holders,
@@ -69,6 +70,12 @@ def _registered_fields(dataset: str) -> list[str]:
     return list(fa.dataset_field_names(dataset))
 
 
+def _registered_schema(dataset: str) -> Any:
+    from finvizp import schemas
+
+    return schemas.arrow_schema(dataset)
+
+
 async def test_projection_metadata_preserves_original_provenance(cached_client: Any) -> None:
     _fake, client = cached_client
     bundle = await quote_async("AAPL", client=client)
@@ -94,6 +101,35 @@ async def test_projection_after_warm_cache_is_still_a_hit(cached_client: Any) ->
     assert first.metadata.cache_hit is False  # cold projection derives from the miss
     assert second.metadata.cache_hit is True
     assert second.metadata.projected_from == "quote"
+
+
+async def test_multi_symbol_projection_concatenates_relations_in_first_symbol_order(
+    cached_client: Any,
+) -> None:
+    _fake, client = cached_client
+    result = await snapshot_async(["MSFT", "AAPL", "MSFT"], client=client)
+    assert isinstance(result.data, pa.Table)  # one concatenated relation, not a tuple
+    assert result.data.column("symbol").to_pylist() == ["MSFT", "AAPL"]
+    ratings = await ratings_async(["MSFT", "AAPL"], client=client)
+    assert isinstance(ratings.data, pa.Table)
+    # Three ratings rows per symbol, concatenated in first-canonical symbol order.
+    assert ratings.data.column("symbol").to_pylist() == ["MSFT"] * 3 + ["AAPL"] * 3
+
+
+async def test_multi_symbol_projection_handles_absent_optional_relation() -> None:
+    class DropMSFTRatings(QuoteTransport):
+        async def request(self, config: Any, stream_callback: Any = None) -> Any:
+            if str((config.params or {}).get("t")) == "MSFT":
+                page = _PAGE.replace("js-table-ratings", "js-table-ratings-x", 1)
+                return _html_resp(page.replace("AAPL", "MSFT"), url=str(config.url))
+            return await super().request(config, stream_callback=stream_callback)
+
+    client = _client(DropMSFTRatings(), cache_ttl=60.0)
+    result = await ratings_async(["AAPL", "MSFT"], client=client)
+    assert isinstance(result.data, pa.Table)
+    # AAPL has its 3 rows; MSFT's absent relation contributes an empty typed table.
+    assert result.data.column("symbol").to_pylist() == ["AAPL"] * 3
+    assert result.data.schema == _registered_schema("quote_ratings")
 
 
 # --- sync wrappers ---------------------------------------------------------------

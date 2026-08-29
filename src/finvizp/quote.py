@@ -185,30 +185,36 @@ async def quote_async(
         asyncio.ensure_future(_fetch_bundle(client, symbol, parser_version, schema_version))
         for symbol in canonical
     ]
-    try:
-        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
-    except asyncio.CancelledError:
+    positions = {id(task): position for position, task in enumerate(tasks)}
+    failures: list[BaseException | None] = [None] * len(canonical)
+    cancelled: asyncio.CancelledError | None = None
+    pending = set(tasks)
+    while pending and cancelled is None:
+        try:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError as exc:
+            cancelled = exc  # this batch itself was cancelled (not just a child)
+            break
+        for task in done:
+            if task.cancelled():
+                # A cancelled child is this batch's own cancellation surfacing:
+                # stop waiting on unrelated units, cancel them, and propagate —
+                # it must never become a unit failure (foundation contract:
+                # cancellation propagates).
+                cancelled = asyncio.CancelledError()
+            else:
+                failures[positions[id(task)]] = task.exception()
+    if cancelled is not None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        raise
+        raise cancelled
 
     bundles: list[QuoteBundle] = []
     succeeded: list[FetchResult[QuoteBundle]] = []
-    failures: list[BaseException | None] = [None] * len(canonical)
-    for position, outcome in enumerate(outcomes):
-        if isinstance(outcome, asyncio.CancelledError):
-            # A cancelled child is this batch's own cancellation surfacing
-            # (gather's return_exceptions only shields exceptions): cancel the
-            # remaining units and propagate — it must never become a unit
-            # failure (foundation contract: cancellation propagates).
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise outcome
-        if isinstance(outcome, BaseException):
-            failures[position] = outcome
-        else:
+    for position, failure in enumerate(failures):
+        if failure is None:
+            outcome = tasks[position].result()
             succeeded.append(outcome)
             bundles.append(outcome.data)
 
@@ -351,9 +357,27 @@ def _projection_async_factory(region: str) -> Any:
             allow_partial=allow_partial,
             max_symbols=max_symbols,
         )
-        tables = [getattr(bundle, region) for bundle in quote_result.data]
+        dataset = f"quote_{region}"
+        tables = [t for bundle in quote_result.data if (t := getattr(bundle, region)) is not None]
+        import pyarrow as pa
+
+        from finvizp import schemas
+
+        schema = schemas.arrow_schema(dataset)
+        if all(table.schema == schema for table in tables):
+            if not tables:
+                # Every relation absent: an empty typed table, not bare None.
+                data: Any = pa.Table.from_arrays(
+                    [pa.array([], type=field.type) for field in schema], schema=schema
+                )
+            else:
+                # Multi-symbol calls concatenate each relation by kind
+                # (architecture contract); first-canonical row order holds.
+                data = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
+        else:
+            data = tuple(tables)  # incompatible drift: keep tables, don't guess
         return FetchResult(
-            tables[0] if len(tables) == 1 else tables,
+            data,
             replace(quote_result.metadata, projected_from="quote"),
         )
 

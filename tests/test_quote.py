@@ -385,6 +385,30 @@ async def test_child_cancellation_not_swallowed_into_partial() -> None:
     assert fake.max_in_flight <= client._semaphore._value  # siblings not left running
 
 
+async def test_child_cancellation_is_immediate_with_slow_sibling() -> None:
+    class SlowSibling(QuoteTransport):
+        async def request(self, config: Any, stream_callback: Any = None) -> Any:
+            symbol = str((config.params or {}).get("t"))
+            if symbol == "AAPL":
+                await asyncio.sleep(0.5)  # cancelled unit: interruption point
+            elif symbol == "MSFT":
+                await asyncio.sleep(10)  # slow sibling that must not be waited out
+                raise AssertionError("cancelled unit must never complete")
+            return await super().request(config, stream_callback=stream_callback)
+
+    fake = SlowSibling()
+    client = _client(fake)
+    task = asyncio.ensure_future(quote_async(["AAPL", "MSFT"], client=client, allow_partial=True))
+    await asyncio.sleep(0.05)
+    children = asyncio.all_tasks() - {task, asyncio.current_task()}
+    aapl = next(t for t in children if not t.done())  # the AAPL unit task
+    aapl.cancel()
+    _done, pending = await asyncio.wait({task}, timeout=0.30)
+    assert pending == set()  # prompt: the slow sibling's 10s sleep is not awaited
+    assert task.cancelled()
+    assert fake.in_flight == 0  # sibling transport work cancelled, nothing in flight
+
+
 # --- sync wrappers ---------------------------------------------------------------
 
 

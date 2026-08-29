@@ -75,6 +75,10 @@ class ResultMetadata:
     route_fingerprint: str | None = None
     parser_version: str | None = None
     schema_version: int | None = None
+    # Derivation provenance for projections: names the operation whose cached
+    # result this envelope was projected from (e.g. "quote"); None for direct
+    # fetch results.
+    projected_from: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.query, Mapping):

@@ -26,6 +26,7 @@ __all__ = [
     "registry",
 ]
 
+
 TYPE_VOCABULARY: frozenset[str] = frozenset(
     {"string", "int64", "float64", "date32", "timestamp_us_utc", "map_string_string"}
 )

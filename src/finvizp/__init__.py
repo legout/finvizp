@@ -1,10 +1,11 @@
 """Finviz for Python: an async, Arrow-native Finviz client.
 
-The curated public surface of the 0.1/0.2 milestones: typed results and
-errors, the classified client, the symbols/statements/quote operations, and
-the 0.2 screener (screens, signals, earnings screens). See
-``finvizp.capabilities`` for the machine-readable manifest of what is
-implemented versus planned.
+The curated public surface of the 0.1/0.2/0.3 milestones: typed results and
+errors, the classified client, the symbols/statements/quote operations, the
+0.2 screener (screens, signals, earnings screens), and the 0.3 groups,
+structured maps, global/publisher news, insider feeds, and economic
+calendar. See ``finvizp.capabilities`` for the machine-readable manifest of
+what is implemented versus planned.
 """
 
 from __future__ import annotations
@@ -36,7 +37,35 @@ from finvizp.errors import (
     FinvizTransportError,
     UnitError,
 )
-from finvizp.models import Artifact, QuoteBundle
+from finvizp.groups import (
+    GroupColumn,
+    GroupDimension,
+    GroupOrder,
+    GroupQuery,
+    GroupView,
+    group,
+    group_async,
+    spectrum,
+    spectrum_async,
+)
+from finvizp.insider import (
+    INSIDER_FEEDS,
+    fund_insider,
+    fund_insider_async,
+    global_insider,
+    global_insider_async,
+    manager_insider,
+    manager_insider_async,
+)
+from finvizp.maps import map, map_async
+from finvizp.models import Artifact, MapBundle, MapConstituent, QuoteBundle
+from finvizp.news import (
+    global_news,
+    global_news_async,
+    publisher_news,
+    publisher_news_async,
+)
+from finvizp.calendar import calendar, calendar_async, calendar_detail, calendar_detail_async
 from finvizp.quote import (
     etf_holders,
     etf_holders_async,
@@ -76,6 +105,7 @@ from finvizp.symbols import search_symbols, search_symbols_async, symbols, symbo
 __all__ = [
     "DEFAULT_MAX_PAGES",
     "DEFAULT_MAX_ROWS",
+    "INSIDER_FEEDS",
     "SCREEN_PATH",
     "STATEMENT_CODES",
     # contracts
@@ -102,6 +132,13 @@ __all__ = [
     "FinvizQueryError",
     "FinvizRateLimitError",
     "FinvizTransportError",
+    "GroupColumn",
+    "GroupDimension",
+    "GroupOrder",
+    "GroupQuery",
+    "GroupView",
+    "MapBundle",
+    "MapConstituent",
     "QuoteBundle",
     "ResultCache",
     "ResultMetadata",
@@ -111,6 +148,10 @@ __all__ = [
     # schemas / arrow
     "arrow_schema",
     "build_table",
+    "calendar",
+    "calendar_async",
+    "calendar_detail",
+    "calendar_detail_async",
     "capabilities",
     "capability",
     "classify_response",
@@ -123,13 +164,27 @@ __all__ = [
     "earnings_screen",
     "etf_holders",
     "etf_holders_async",
+    "fund_insider",
+    "fund_insider_async",
+    "global_insider",
+    "global_insider_async",
+    "global_news",
+    "global_news_async",
+    "group",
+    "group_async",
     "insider",
     "insider_async",
+    "map",
+    "map_async",
+    "manager_insider",
+    "manager_insider_async",
     "news",
     "news_async",
     "peers",
     "peers_async",
     "provisional_defaults",
+    "publisher_news",
+    "publisher_news_async",
     # quote bundle + projections
     "quote",
     "quote_async",
@@ -143,6 +198,8 @@ __all__ = [
     "signal_async",
     "snapshot",
     "snapshot_async",
+    "spectrum",
+    "spectrum_async",
     # statements
     "statements",
     "statements_async",

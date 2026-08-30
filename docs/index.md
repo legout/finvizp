@@ -54,6 +54,10 @@ The machine-readable dormant board graph is
 - [Screener](reference/screener.md) — the 0.2 screener surface: typed
   queries, fixed/custom view schemas, pagination and safety semantics,
   signals, earnings screens, and bounded live smokes.
+- [Groups, maps, and events](reference/groups-maps-events.md) — the 0.3
+  surface: typed group queries and spectrum descriptors, structured map
+  bundles, global/publisher news with typed temporal fields, insider feed
+  families, and the economic calendar with release details.
 - [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
   opt-in TTL caching with single-flight, provisional conservative
   defaults, and caller-owned persistence.

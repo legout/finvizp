@@ -268,6 +268,33 @@
         { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
         { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
       ]
+    },
+    {
+      "name": "futures_tiles",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "name", "type": "string", "unit": "text", "nullable": true },
+        { "name": "category", "type": "string", "unit": "text", "nullable": true },
+        { "name": "last", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "last_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "change", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "change_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "change_percent", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "change_percent_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "change_usd", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "change_usd_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "prev_close", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "prev_close_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "high", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "high_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "low", "type": "float64", "unit": "number", "nullable": true, "raw": true },
+        { "name": "low_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "sparkline", "type": "string", "unit": "text", "nullable": true },
+        { "name": "delay_minutes", "type": "float64", "unit": "number", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
     }
   ]
 }

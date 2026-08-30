@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -60,10 +61,22 @@ FINVIZ_URL = "https://finviz.com"
 PNG_MEDIA = "image/png"
 
 
-def _png_response(url: str, *, status: int = 200, content: bytes | None = None) -> NormalizedResponse:
+def _png_response(
+    url: str,
+    *,
+    status: int = 200,
+    content: bytes | None = None,
+    location: str | None = None,
+    declared_length: int | None = None,
+) -> NormalizedResponse:
+    headers = {"Content-Type": PNG_MEDIA if status == 200 else "text/html; charset=utf-8"}
+    if location is not None:
+        headers["Location"] = location
+    if declared_length is not None:
+        headers["Content-Length"] = str(declared_length)
     return NormalizedResponse.from_backend(
         status_code=status,
-        headers={"Content-Type": PNG_MEDIA},
+        headers=headers,
         content=PNG_BYTES if content is None else content,
         url=url,
     )
@@ -157,7 +170,7 @@ def test_descriptor_builder_fills_source_fields() -> None:
     assert isinstance(descriptor, Artifact)
     assert descriptor.symbol == "AAPL"
     assert descriptor.timeframe == "d"
-    assert descriptor.kind == "image"
+    assert descriptor.kind == "chart"  # charts (not spectra) carry kind="chart"
     assert descriptor.content_hash is None  # descriptor-only: bytes never fetched
     url = build_chart_url("aapl", timeframe="d")
     assert descriptor.source_url == url
@@ -166,7 +179,7 @@ def test_descriptor_builder_fills_source_fields() -> None:
 def test_artifact_download_state_defaults_are_immutable() -> None:
     descriptor = _descriptor("https://finviz.com/x.png")
     assert descriptor.content is None and descriptor.path is None
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         descriptor.content = PNG_BYTES  # type: ignore[misc]
 
 
@@ -196,9 +209,7 @@ async def test_download_async_writes_bounded_path_atomically(tmp_path: Path) -> 
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
     fake = ArtifactTransport({url: _png_response(url)})
     target = tmp_path / "spectrum.png"
-    descriptor = await download_artifact_async(
-        _descriptor(url), client=_client(fake), path=target
-    )
+    descriptor = await download_artifact_async(_descriptor(url), client=_client(fake), path=target)
     assert descriptor.path == target
     assert target.read_bytes() == PNG_BYTES
     assert descriptor.content_hash == PNG_HASH
@@ -228,12 +239,14 @@ def test_html_challenge_body_masquerading_as_image_is_drift() -> None:
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
     page = b"<html><head><title>Just a moment...</title></head><body>challenge</body></html>"
     fake = ArtifactTransport(
-        {url: NormalizedResponse.from_backend(
-            status_code=200,
-            headers={"Content-Type": "text/html; charset=utf-8"},
-            content=page,
-            url=url,
-        )}
+        {
+            url: NormalizedResponse.from_backend(
+                status_code=200,
+                headers={"Content-Type": "text/html; charset=utf-8"},
+                content=page,
+                url=url,
+            )
+        }
     )
     with pytest.raises(FinvizParseError):
         download_artifact(_descriptor(url), client=_client(fake))
@@ -242,12 +255,14 @@ def test_html_challenge_body_masquerading_as_image_is_drift() -> None:
 def test_image_media_type_mismatch_with_descriptor_is_drift() -> None:
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
     fake = ArtifactTransport(
-        {url: NormalizedResponse.from_backend(
-            status_code=200,
-            headers={"Content-Type": "image/jpeg"},
-            content=b"\xff\xd8\xff\xe0fake-jpeg",
-            url=url,
-        )}
+        {
+            url: NormalizedResponse.from_backend(
+                status_code=200,
+                headers={"Content-Type": "image/jpeg"},
+                content=b"\xff\xd8\xff\xe0fake-jpeg",
+                url=url,
+            )
+        }
     )
     with pytest.raises(FinvizParseError, match="media"):
         download_artifact(_descriptor(url), client=_client(fake))
@@ -255,13 +270,16 @@ def test_image_media_type_mismatch_with_descriptor_is_drift() -> None:
 
 def test_magic_byte_sniffing_catches_lying_content_type(tmp_path: Path) -> None:
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
+    # image/* label + non-image bytes: only magic-byte sniffing catches it.
     fake = ArtifactTransport(
-        {url: NormalizedResponse.from_backend(
-            status_code=200,
-            headers={"Content-Type": "application/octet-stream"},
-            content=b"<html>definitely not an image</html>",
-            url=url,
-        )}
+        {
+            url: NormalizedResponse.from_backend(
+                status_code=200,
+                headers={"Content-Type": "image/png"},
+                content=b"<html>definitely not an image</html>",
+                url=url,
+            )
+        }
     )
     with pytest.raises(FinvizParseError, match="magic"):
         download_artifact(_descriptor(url), client=_client(fake))
@@ -269,7 +287,9 @@ def test_magic_byte_sniffing_catches_lying_content_type(tmp_path: Path) -> None:
 
 def test_truncated_png_body_is_drift(tmp_path: Path) -> None:
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
-    fake = ArtifactTransport({url: _png_response(url, content=PNG_BYTES[:20])})
+    fake = ArtifactTransport(
+        {url: _png_response(url, content=PNG_BYTES[:20], declared_length=len(PNG_BYTES))}
+    )
     with pytest.raises(FinvizParseError, match="truncated"):
         download_artifact(_descriptor(url), client=_client(fake))
 
@@ -278,12 +298,14 @@ def test_wrong_media_kind_response_is_drift() -> None:
     # JSON served where an image descriptor points: never fabricate an artifact.
     url = f"{FINVIZ_URL}/grp_image?spectrum_sector.png"
     fake = ArtifactTransport(
-        {url: NormalizedResponse.from_backend(
-            status_code=200,
-            headers={"Content-Type": "application/json"},
-            content=json.dumps({"error": "not an image"}).encode(),
-            url=url,
-        )}
+        {
+            url: NormalizedResponse.from_backend(
+                status_code=200,
+                headers={"Content-Type": "application/json"},
+                content=json.dumps({"error": "not an image"}).encode(),
+                url=url,
+            )
+        }
     )
     with pytest.raises(FinvizParseError, match="image"):
         download_artifact(_descriptor(url), client=_client(fake))
@@ -294,7 +316,15 @@ def test_wrong_media_kind_response_is_drift() -> None:
 
 def test_elite_login_redirect_is_entitlement_error() -> None:
     url = f"{FINVIZ_URL}/chart?t=AAPL&p=d"
-    fake = ArtifactTransport({url: _png_response("https://finviz.com/login.aspx", status=302)})
+    fake = ArtifactTransport(
+        {
+            url: _png_response(
+                "https://finviz.com/login.aspx",
+                status=302,
+                location="https://finviz.com/login.aspx",
+            )
+        }
+    )
     with pytest.raises(FinvizEntitlementError):
         download_artifact(_descriptor(url), client=_client(fake))
 
@@ -305,8 +335,8 @@ async def test_cross_origin_redirect_is_transport_drift() -> None:
     bounce = "https://evil.example.com/chart?w=466&h=219&t=AAPL"
     fake = ArtifactTransport(
         {
-            url: _png_response(hop, status=302),
-            hop: _png_response(bounce, status=302),
+            url: _png_response(hop, status=302, location=hop),
+            hop: _png_response(bounce, status=302, location=bounce),
         }
     )
     with pytest.raises(FinvizTransportError, match="origin"):
@@ -317,7 +347,9 @@ async def test_same_provider_node_redirect_chain_downloads(tmp_path: Path) -> No
     # Live-verified chain: /chart 30x -> charts2-node.finviz.com -> PNG bytes.
     url = f"{FINVIZ_URL}/chart?t=AAPL&p=d"
     hop = "https://charts2-node.finviz.com/chart?w=466&h=219&t=AAPL&tf=d"
-    fake = ArtifactTransport({url: _png_response(hop, status=302), hop: _png_response(hop)})
+    fake = ArtifactTransport(
+        {url: _png_response(hop, status=302, location=hop), hop: _png_response(hop)}
+    )
     descriptor = await download_artifact_async(_descriptor(url), client=_client(fake))
     assert descriptor.content == PNG_BYTES
     assert descriptor.content_hash == PNG_HASH
@@ -327,7 +359,12 @@ async def test_same_provider_node_redirect_chain_downloads(tmp_path: Path) -> No
 async def test_bounded_redirect_loop_surfaces_as_drift() -> None:
     url = f"{FINVIZ_URL}/chart?t=AAPL&p=d"
     hop = "https://charts2-node.finviz.com/chart?w=466&h=219&t=AAPL&tf=d"
-    fake = ArtifactTransport({url: _png_response(hop, status=302), hop: _png_response(hop, status=301)})
+    fake = ArtifactTransport(
+        {
+            url: _png_response(hop, status=302, location=hop),
+            hop: _png_response(hop, status=301, location=hop),
+        }
+    )
     with pytest.raises(FinvizTransportError, match="redirect"):
         await download_artifact_async(_descriptor(url), client=_client(fake))
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -16,7 +17,15 @@ __all__ = ["Artifact", "MapBundle", "MapConstituent", "QuoteBundle"]
 
 @dataclass(frozen=True, slots=True)
 class Artifact:
-    """Immutable descriptor for a chart/spectrum artifact (bytes fetched separately)."""
+    """Immutable descriptor for a chart/spectrum artifact (bytes fetched separately).
+
+    Descriptor fields describe the artifact without downloading it. The
+    explicit :func:`finvizp.artifacts.download_artifact` returns a derived
+    descriptor carrying the download state: ``content`` holds the raw bytes
+    in memory, or ``path`` the filesystem target they were written to.
+    ``content`` is excluded from ``repr``/``eq`` so a downloaded descriptor
+    compares like the descriptor it came from and never renders bytes.
+    """
 
     source_url: str
     kind: str
@@ -28,6 +37,8 @@ class Artifact:
     chart_type: str | None = None
     content_hash: str | None = None
     content_length: int | None = None
+    content: bytes | None = field(default=None, compare=False, repr=False)
+    path: Path | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

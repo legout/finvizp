@@ -180,8 +180,88 @@ def test_verified_0_2_operations_are_the_implemented_ones() -> None:
         "insider.fund_manager",
         "calendar.economic",
         "calendar.details",
+        # 0.4: chart/spectrum artifacts, forex, crypto, current futures tiles.
+        "charts.descriptor",
+        "forex.structured",
+        "crypto.structured",
+        "futures.tile",
     }
     assert implemented_ids == expected
+
+
+def test_charts_capability_entry_links_the_artifact_surface() -> None:
+    charts = capability("charts.descriptor")
+    assert charts.operation == "finvizp.artifacts:chart_descriptor"
+    assert charts.output_kind == "artifact"
+    assert charts.representation == "image"
+    assert charts.access_tier == "PUBLIC"
+    assert charts.fixture == "tests/fixtures/artifacts/sample.png"
+    assert charts.tests == "tests/test_artifacts.py"
+    assert charts.docs == "docs/reference/markets-and-artifacts.md"
+
+    from finvizp import artifacts as artifacts_module
+
+    assert callable(artifacts_module.build_chart_url)
+    assert callable(artifacts_module.build_spectrum_url)
+    assert callable(artifacts_module.download_artifact)
+    assert callable(artifacts_module.download_artifact_async)
+
+
+def test_markets_capability_entries_link_the_merged_surface() -> None:
+    forex = capability("forex.structured")
+    assert forex.operation == "finvizp.forex:tiles"
+    assert forex.output_kind == "structured_data"
+    assert forex.representation == "embedded_json"
+    assert forex.fixture == "tests/fixtures/markets/forex-tiles.html"
+    assert forex.tests == "tests/test_forex.py"
+    assert forex.docs == "docs/reference/markets-and-artifacts.md"
+
+    crypto = capability("crypto.structured")
+    assert crypto.operation == "finvizp.crypto:tiles"
+    assert crypto.output_kind == "structured_data"
+    assert crypto.representation == "embedded_json"
+    assert crypto.fixture == "tests/fixtures/markets/crypto-tiles.html"
+    assert crypto.tests == "tests/test_crypto.py"
+    assert crypto.docs == "docs/reference/markets-and-artifacts.md"
+
+    # The performance tables and chart galleries ride the same modules.
+    from finvizp import crypto as crypto_module
+    from finvizp import forex as forex_module
+
+    assert callable(forex_module.performance_async)
+    assert callable(forex_module.chart_async)
+    assert callable(crypto_module.performance_async)
+    assert callable(crypto_module.chart_async)
+
+    futures = capability("futures.tile")
+    assert futures.operation == "finvizp.futures:futures"
+    assert futures.output_kind == "arrow_table"
+    assert futures.representation == "embedded_json"
+    # Current embedded tiles, never the legacy empty-table model.
+    assert isinstance(futures.replaced, str)
+    assert futures.replaced.startswith("finvizfinance futures performance")
+    assert futures.schema == ("futures_tiles",)
+    assert futures.fixture == "tests/fixtures/futures/current-tiles.html"
+    assert futures.tests == "tests/test_futures.py"
+    assert futures.docs == "docs/reference/markets-and-artifacts.md"
+
+
+def test_0_4_markets_surface_exports_and_honest_temporal_semantics() -> None:
+    # The curated top-level surface carries the artifact helpers; the market
+    # families stay module-level (their names would clash at top level).
+    names = set(finvizp.__all__)
+    for name in ("Artifact", "chart_descriptor", "download_artifact", "download_artifact_async"):
+        assert name in names, name
+
+    from finvizp._parsers.markets import TileRow
+
+    # No history is ever inferred from sparkline points.
+    assert TileRow.__dataclass_fields__["sparkline_timestamps"].default is None
+    assert TileRow.__dataclass_fields__["sparkline_interval_seconds"].default is None
+
+    from finvizp.schemas import dataset_names
+
+    assert "futures_tiles" in dataset_names()
 
 
 def test_groups_capability_entries_link_the_merged_surface() -> None:
@@ -450,6 +530,7 @@ class TestDocs:
             "docs/reference/schemas-0.1.md",
             "docs/reference/screener.md",
             "docs/reference/groups-maps-events.md",
+            "docs/reference/markets-and-artifacts.md",
             "docs/how-to/proxies-and-cache.md",
         ):
             assert (REPO_ROOT / relative).exists(), relative
@@ -461,6 +542,7 @@ class TestDocs:
             "reference/schemas-0.1.md",
             "reference/screener.md",
             "reference/groups-maps-events.md",
+            "reference/markets-and-artifacts.md",
             "how-to/proxies-and-cache.md",
         ):
             assert fragment in text, fragment

@@ -18,6 +18,7 @@ from importlib import resources
 from pathlib import Path
 
 import pytest
+
 from finvizp import arrow as fa
 from finvizp import schemas
 from finvizp.errors import FinvizDataError
@@ -100,8 +101,10 @@ def test_complete_partial_empty_share_registered_schema(dataset_name: str) -> No
     for name in key_names:
         assert d[name][0] == "AAPL" if name == "symbol" else d[name][0], dataset_name
     for field in ds.fields:
-        if field.nullable and field.unit not in ("map", "raw") and not field.name.endswith(
-            ("_raw", "_status")
+        if (
+            field.nullable
+            and field.unit not in ("map", "raw")
+            and not field.name.endswith(("_raw", "_status"))
         ):
             assert d[field.name][0] is None, (dataset_name, field.name)
 

@@ -201,6 +201,19 @@
         { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
         { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
       ]
+    },
+    {
+      "name": "earnings_screen",
+      "version": 1,
+      "fields": [
+        { "name": "rank", "type": "int64", "unit": "count", "nullable": false },
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "earnings_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "earnings_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "earnings_session", "type": "string", "unit": "text", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
     }
   ]
 }

@@ -390,6 +390,37 @@ def test_sync_wrapper_rejects_active_loop() -> None:
 # --- representation contract ------------------------------------------------------------------
 
 
+async def test_row_display_shortfall_is_typed_drift_not_stopiteration() -> None:
+    # Live 2026-08-30 drift: custom-view rows can render every cell as an
+    # anchor (the parser consumes the display as the ticker), leaving no
+    # display for a requested column. Structural drift must surface as
+    # FinvizParseError, never an untyped StopIteration.
+    from tests.fixtures.screener._build import _head
+
+    # Rows whose every cell is an anchor (no data-boxover ticker attribute,
+    # no display cells): mirrors the live 2026-08-30 custom-view drift.
+    anchor = '<a href="stock?t=S{0:02d}X&amp;ty=c&amp;p=d">{1}</a>'
+    rows_html = "".join(
+        "<tr>"
+        f'<td height="10" align="right">{anchor.format(rank, rank)}</td>'
+        f'<td height="10" align="right">{anchor.format(rank, "10.10")}</td>'
+        "</tr>"
+        for rank in range(1, 21)
+    )
+    page = (
+        _head(20, 1)
+        + '<table class="styled-table-new is-rounded is-tabular-nums w-full screener_table">'
+        '<thead><tr align="center"><th>No.</th><th>Price</th></tr></thead>'
+        f"{rows_html}</table></div></body></html>"
+    )
+    fake = ScreenTransport(default=page, total=20)
+    with pytest.raises(FinvizParseError, match="no display for column"):
+        await screen_async(
+            ScreenerQuery(view="custom", columns=CustomColumns(names=["No.", "Ticker", "Price"])),
+            client=_client(fake),
+        )
+
+
 async def test_anonymous_elite_export_is_never_the_representation() -> None:
     # The collector speaks public HTML only: every request targets screener.ashx.
     fake = ScreenTransport(total=588, pages={581: FINAL})

@@ -217,7 +217,14 @@ def _table_from_page(page: ScreenerPage, fetched_at: Any) -> pa.Table:
             if label in {"No.", "Ticker"}:
                 continue
             name = _field_name(label)
-            values[name].append(_convert(label, next(displays)))
+            display = next(displays, None)
+            if display is None:
+                # A row whose cells the header contract already consumed
+                # (arity matched) but whose displays ran short is structural
+                # drift, not a crash: classify it as a typed parse error.
+                msg = f"screener row {row.rank} ({row.symbol}) has no display for column {label!r}"
+                raise FinvizParseError(msg, context={"endpoint": "screener"})
+            values[name].append(_convert(label, display))
     arrays = [
         pa.array(ranks, type=schema.field("rank").type),
         pa.array(symbols, type=schema.field("symbol").type),

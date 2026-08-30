@@ -410,6 +410,10 @@ def _typed(field: schemas.Field, text: str, anchor_date: dt.date | None) -> tupl
             raise ValueError(msg)
         return coefficient, None
     if field.unit == "compact":
+        # Macro-release displays are percent-denominated ("0.2%") but are
+        # conventionally typed as percent points, not fractions: strip the
+        # marker without dividing (percent unit does the /100 division).
+        cleaned = _PERCENT.sub("", cleaned)
         if not _COMPACT.match(cleaned):
             return _finite(float(cleaned), text), None
         suffix = _COMPACT_SUFFIX.search(cleaned)

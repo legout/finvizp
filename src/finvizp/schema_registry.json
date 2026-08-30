@@ -214,6 +214,60 @@
         { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
         { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
       ]
+    },
+    {
+      "name": "economic_calendar",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "event", "type": "string", "unit": "text", "nullable": false },
+        { "name": "category", "type": "string", "unit": "text", "nullable": true },
+        { "name": "release_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "release_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "release_time", "type": "string", "unit": "text", "nullable": true },
+        { "name": "release_timestamp", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": true, "temporal": true, "raw": true },
+        { "name": "release_timestamp_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "release_timestamp_status", "type": "string", "unit": "text", "nullable": true },
+        { "name": "importance", "type": "int64", "unit": "count", "nullable": true },
+        { "name": "reference_period", "type": "string", "unit": "text", "nullable": true },
+        { "name": "reference_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "reference_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "actual", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "actual_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "forecast", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "forecast_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "previous", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "previous_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
+    },
+    {
+      "name": "economic_details",
+      "version": 1,
+      "fields": [
+        { "name": "symbol", "type": "string", "unit": "text", "nullable": false, "key": true },
+        { "name": "event", "type": "string", "unit": "text", "nullable": false },
+        { "name": "category", "type": "string", "unit": "text", "nullable": true },
+        { "name": "release_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "release_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "release_time", "type": "string", "unit": "text", "nullable": true },
+        { "name": "release_timestamp", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": true, "temporal": true, "raw": true },
+        { "name": "release_timestamp_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "release_timestamp_status", "type": "string", "unit": "text", "nullable": true },
+        { "name": "importance", "type": "int64", "unit": "count", "nullable": true },
+        { "name": "reference_period", "type": "string", "unit": "text", "nullable": true },
+        { "name": "reference_date", "type": "date32", "unit": "date", "nullable": true, "temporal": true, "raw": true },
+        { "name": "reference_date_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "actual", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "actual_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "forecast", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "forecast_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "previous", "type": "float64", "unit": "compact", "nullable": true, "raw": true },
+        { "name": "previous_raw", "type": "string", "unit": "raw", "nullable": true },
+        { "name": "extra_fields", "type": "map_string_string", "unit": "map", "nullable": true },
+        { "name": "fetched_at", "type": "timestamp_us_utc", "unit": "timestamp", "nullable": false, "temporal": true }
+      ]
     }
   ]
 }

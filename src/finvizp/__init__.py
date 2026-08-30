@@ -1,11 +1,13 @@
 """Finviz for Python: an async, Arrow-native Finviz client.
 
-The curated public surface of the 0.1/0.2/0.3 milestones: typed results and
-errors, the classified client, the symbols/statements/quote operations, the
-0.2 screener (screens, signals, earnings screens), and the 0.3 groups,
-structured maps, global/publisher news, insider feeds, and economic
-calendar. See ``finvizp.capabilities`` for the machine-readable manifest of
-what is implemented versus planned.
+The curated public surface of the 0.1/0.2/0.3/0.4 milestones: typed results
+and errors, the classified client, the symbols/statements/quote operations,
+the 0.2 screener (screens, signals, earnings screens), the 0.3 groups,
+structured maps, global/publisher news, insider feeds, and economic calendar,
+and the 0.4 chart/spectrum artifacts with explicit bounded downloads plus the
+module-level forex/crypto/futures market families. See
+``finvizp.capabilities`` for the machine-readable manifest of what is
+implemented versus planned.
 """
 
 from __future__ import annotations
@@ -13,6 +15,11 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 from finvizp.arrow import build_table, dataset_field_names
+from finvizp.artifacts import (
+    chart_descriptor,
+    download_artifact,
+    download_artifact_async,
+)
 from finvizp.cache import CacheEntry, ResultCache
 from finvizp.calendar import calendar, calendar_async, calendar_detail, calendar_detail_async
 from finvizp.capabilities import (
@@ -38,6 +45,7 @@ from finvizp.errors import (
     FinvizTransportError,
     UnitError,
 )
+from finvizp.futures import futures, futures_async
 from finvizp.groups import (
     GroupColumn,
     GroupDimension,
@@ -154,10 +162,14 @@ __all__ = [
     "calendar_detail_async",
     "capabilities",
     "capability",
+    "chart_descriptor",
     "classify_response",
     "dataset",
     "dataset_field_names",
     "dataset_names",
+    # explicit artifact downloads (0.4)
+    "download_artifact",
+    "download_artifact_async",
     "earnings",
     "earnings_async",
     "earnings_options",
@@ -166,6 +178,9 @@ __all__ = [
     "etf_holders_async",
     "fund_insider",
     "fund_insider_async",
+    # current futures tiles (0.4)
+    "futures",
+    "futures_async",
     "global_insider",
     "global_insider_async",
     "global_news",

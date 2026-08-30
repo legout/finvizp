@@ -58,6 +58,10 @@ The machine-readable dormant board graph is
   surface: typed group queries and spectrum descriptors, structured map
   bundles, global/publisher news with typed temporal fields, insider feed
   families, and the economic calendar with release details.
+- [Markets and artifacts](reference/markets-and-artifacts.md) — the 0.4
+  surface: immutable chart/spectrum descriptors with explicit bounded
+  downloads, module-level forex/crypto structured tiles and performance
+  tables, and current futures tile data with honest temporal semantics.
 - [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
   opt-in TTL caching with single-flight, provisional conservative
   defaults, and caller-owned persistence.

@@ -438,7 +438,7 @@
       "replaced": null,
       "output_kind": "arrow_table",
       "access_tier": "PUBLIC",
-      "representation": "html_tables",
+      "representation": "embedded_json",
       "schema": ["economic_details"],
       "status": "implemented",
       "fixture": "tests/fixtures/calendar/detail.html",

@@ -110,7 +110,11 @@ for the Arrow tables,
 surface, [`docs/reference/groups-maps-events.md`](docs/reference/groups-maps-events.md)
 for the 0.3 families, and
 [`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md) for
-proxies, caching, and caller-owned persistence.
+proxies, caching, and caller-owned persistence. The full implemented/planned
+capability ledger is
+[`docs/reference/capability-matrix.md`](docs/reference/capability-matrix.md),
+and the `finvizfinance` migration guide is
+[`docs/how-to/migrate-from-finvizfinance.md`](docs/how-to/migrate-from-finvizfinance.md).
 
 ## Documentation
 
@@ -121,6 +125,10 @@ schema tables ([`docs/reference/schemas-0.1.md`](docs/reference/schemas-0.1.md))
 the screener surface ([`docs/reference/screener.md`](docs/reference/screener.md)),
 the 0.3 groups/maps/events families
 ([`docs/reference/groups-maps-events.md`](docs/reference/groups-maps-events.md)),
+the capability matrix
+([`docs/reference/capability-matrix.md`](docs/reference/capability-matrix.md)),
+the migration guide
+([`docs/how-to/migrate-from-finvizfinance.md`](docs/how-to/migrate-from-finvizfinance.md)),
 and the proxy/cache how-to
 ([`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md)).
 The research explains the complete

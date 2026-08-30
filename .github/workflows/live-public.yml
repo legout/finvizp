@@ -1,0 +1,52 @@
+name: Live public drift matrix
+
+# Weekly bounded smoke of the public surface: one sequential request per
+# public family (tests/live, marker live_public). Never gates pull requests;
+# failures are triaged by the typed buckets in tests/live/_smoke.py:
+# access/network and block/challenge skips are expected variability, parse
+# drift and assertion failures are review items. No secrets, no proxies, no
+# telemetry, no Elite/authenticated routes.
+
+on:
+  schedule:
+    - cron: "23 6 * * 1" # Mondays 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-public
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Bounded public family smokes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.14
+        run: uv python install 3.14
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-groups --python 3.14
+
+      - name: Run bounded public smokes
+        run: uv run pytest -q tests/live -m live_public -r s --junitxml=live-report.xml
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-public-report
+          path: live-report.xml
+          retention-days: 30
+          if-no-files-found: warn

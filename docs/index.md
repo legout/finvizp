@@ -51,6 +51,9 @@ The machine-readable dormant board graph is
   the typed error hierarchy.
 - [Arrow schemas in 0.1](reference/schemas-0.1.md) — every registered
   dataset, units, `_raw` companions, and the versioning contract.
+- [Screener](reference/screener.md) — the 0.2 screener surface: typed
+  queries, fixed/custom view schemas, pagination and safety semantics,
+  signals, earnings screens, and bounded live smokes.
 - [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
   opt-in TTL caching with single-flight, provisional conservative
   defaults, and caller-owned persistence.

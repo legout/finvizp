@@ -318,3 +318,10 @@ def earnings_screen(
             on_progress=on_progress,
         )
     )
+
+
+# Every public async operation carries a sync twin with the async suffix
+# stripped (curated-export contract); ``earnings_screen`` is the descriptive
+# spelling of the same wrapper, ``earnings`` its pair-form name.
+earnings = earnings_screen
+__all__ = [*__all__, "earnings"]

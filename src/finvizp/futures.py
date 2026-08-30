@@ -20,6 +20,7 @@ retries, and provenance are the shared client's own.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from finvizp import arrow as fa
@@ -41,10 +42,13 @@ _PARSER_VERSION = "1"
 
 # Tile fields whose provider values feed registered columns. The raw value
 # kept in each ``*_raw`` companion is the provider's own JSON payload text.
+# The tile ``change`` is the percent change (verified evidence), so it feeds
+# only ``change_percent``; the provider supplies no absolute-change value,
+# so the dataset has no ``change`` column (cross-dataset convention: absolute
+# change vs percent are distinct columns — see quote_snapshot).
 _TILE_TO_ROW = {
     "label": "name",
     "last": "last",
-    "change": "change_percent",
     "change_usd": "change_usd",
     "prev_close": "prev_close",
     "high": "high",
@@ -66,8 +70,13 @@ def _parse_futures(response: ClientResponse, *, strict_schema: bool = False) -> 
             "symbol": ticker,
             "name": tile.get("label"),
             "category": records.groups.get(ticker),
-            "change": tile.get("change"),
+            "change_percent": tile.get("change"),
             "sparkline": tile.get("sparkline"),
+            # Provider payload decoration, kept as verbatim text like sparkline:
+            # projected so a populated map can never vanish silently.
+            "sparkline_date_changes": json.dumps(
+                tile.get("sparkline_date_changes", {}), separators=(",", ":")
+            ),
             "delay_minutes": records.delay_minutes,
         }
         for tile_name, row_name in _TILE_TO_ROW.items():
@@ -156,6 +165,8 @@ async def futures_async(
     provider's verbatim payload text — the payload carries no timestamps, so
     it is never presented as provider history. ``refresh`` bypasses and
     replaces any cached entry; ``cache=False`` bypasses it without storing.
+    ``strict_schema`` stays a parser-level seam (not exposed): futures rows
+    are fully registry-typed with no client-side display parsing.
     """
     return await _futures_op(client, refresh=refresh, cache=cache)()
 

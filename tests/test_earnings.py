@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from pathlib import Path
 
 import pytest
 
 from finvizp._queries.screener import screener_registry
 from finvizp.earnings import earnings_async, earnings_options, earnings_screen
-from finvizp.errors import FinvizQueryError
+from finvizp.errors import FinvizParseError, FinvizQueryError
 from finvizp.results import ResultStatus
 from finvizp.screener import SCREEN_PATH
 from tests.test_screener import ScreenTransport, _client, _rs
@@ -152,6 +153,68 @@ async def test_unparseable_date_display_preserves_raw_and_raises_strict() -> Non
         await earnings_async(when="Today", client=_client(fake))
 
 
+# --- live 2026-08-30 drift: no-ticker grid + compact session suffixes -------------------------
+
+
+async def test_earnings_query_requests_the_ticker_column() -> None:
+    # The provider renders exactly the requested custom columns: without
+    # ``Ticker`` the grid has no ticker cell, so the parser consumes the
+    # earnings display (``Aug 26/a``) as the symbol and the header contract
+    # runs short — the live failure on clean main.
+    fake = ScreenTransport(default=DATE_PAGE, total=2)
+    await earnings_async(when="This Week", client=_client(fake))
+    assert fake.calls[0]["c"] == "0,1,68"
+
+
+async def test_no_ticker_grid_is_typed_drift_not_stopiteration() -> None:
+    # The drift fixture mirrors the live c=0,68 grid (rank + Earnings, no
+    # ticker cell): the parser consumes the display as the symbol and the
+    # header contract runs short. Strict mode surfaces this as a typed
+    # FinvizParseError, never an untyped StopIteration.
+    fake = ScreenTransport(default=NO_TICKER_PAGE, total=5)
+    with pytest.raises(FinvizParseError, match="no display for column"):
+        await earnings_async(when="This Week", client=_client(fake))
+
+
+async def test_live_shaped_grid_parses_and_projects_sessions() -> None:
+    # Regression for the live earnings-screen failure on clean main: with the
+    # Ticker column now requested, the live-shaped c=0,1,68 page (headers
+    # No./Ticker/Earnings, compact displays) parses and projects fully.
+    fake = ScreenTransport(default=EARNINGS_GRID_PAGE, total=5)
+    result = await earnings_async(when="This Week", client=_client(fake))
+    table = result.table
+    assert table.num_rows == 5
+    assert table.column("symbol").to_pylist() == ["S01X", "S02X", "S03X", "S04X", "S05X"]
+    assert table.column("earnings_session").to_pylist() == [
+        "AMC",
+        "AMC",
+        "AMC",
+        "BMO",
+        "BMO",
+    ]
+
+
+async def test_compact_session_suffixes_split_into_dates_and_sessions() -> None:
+    # Compact grid displays: ``/a`` = AMC, ``/b`` = BMO (quote-page-verified).
+    fake = ScreenTransport(default=EARNINGS_GRID_PAGE, total=5)
+    table = (await earnings_async(when="This Week", client=_client(fake))).table
+    dates = table.column("earnings_date").to_pylist()
+    assert dates == [
+        dt.date(2026, 8, 26),
+        dt.date(2026, 8, 27),
+        dt.date(2026, 8, 27),
+        dt.date(2026, 8, 24),
+        dt.date(2026, 8, 26),
+    ]
+    assert table.column("earnings_date_raw").to_pylist() == [
+        "Aug 26/a",
+        "Aug 27/a",
+        "Aug 27/a",
+        "Aug 24/b",
+        "Aug 26/b",
+    ]
+
+
 # --- shared collector / provenance -----------------------------------------------------------
 
 
@@ -214,6 +277,20 @@ def _date_page(rows: list[tuple[str, str]]) -> str:
     return _head(len(rows), 1) + body + "</div></body></html>"
 
 
+def _no_ticker_page() -> str:
+    """The checked-in live-shaped no-ticker fixture as a transport body."""
+    return (Path(__file__).parent / "fixtures" / "screener" / "no-ticker-columns.html").read_text(
+        "utf-8"
+    )
+
+
+def _earnings_grid_page() -> str:
+    """The checked-in live-shaped c=0,1,68 grid fixture as a transport body."""
+    return (Path(__file__).parent / "fixtures" / "screener" / "earnings-grid.html").read_text(
+        "utf-8"
+    )
+
+
 DATE_PAGE = _date_page(
     [
         ("AAPL", "Nov 12 BMO"),
@@ -227,3 +304,5 @@ DATE_ONLY_PAGE = _date_page(
     ]
 )
 BAD_DATE_PAGE = _date_page([("AAPL", "not a date")])
+NO_TICKER_PAGE = _no_ticker_page()
+EARNINGS_GRID_PAGE = _earnings_grid_page()

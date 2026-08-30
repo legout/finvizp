@@ -31,17 +31,20 @@ from finvizp._sync import run_sync
 from finvizp.client import FinvizClient
 from finvizp.errors import FinvizParseError, FinvizQueryError
 from finvizp.results import FetchResult, ResultStatus
-from finvizp.screener import ProgressCallback, screen_async
+from finvizp.screener import ProgressCallback, _field_name, screen_async
 
 __all__ = ["earnings_async", "earnings_options", "earnings_screen"]
 
 _EARNINGS_DATE_LABEL = "Earnings Date"
+# The provider's grid header for custom-column code 68 is ``Earnings``, while
+# the registry/contract name is ``Earnings Date`` (code identical).
+_EARNINGS_GRID_LABELS = ("Earnings Date", "Earnings")
 _WHEN_DAY_WINDOWS = ("Today", "Tomorrow", "Yesterday")
 _WHEN_WINDOWS = (*_WHEN_DAY_WINDOWS, "This Week", "Next Week", "This Month")
 _SESSIONS = {"Before Market Open": "BMO", "After Market Close": "AMC"}
 _DATE_DISPLAY = re.compile(
     r"^(?P<month>[A-Za-z]{3,})\s+(?P<day>\d{1,2})(?:,?\s*(?P<year>\d{4}))?"
-    r"(?:\s+(?P<session>BMO|AMC))?$"
+    r"(?:\s+(?P<session>BMO|AMC)|/(?P<compact_session>[ab]))?$"
 )
 _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -117,7 +120,9 @@ def _earnings_query(
     """Build the validated screener query for one earnings screen.
 
     ``None`` when no date window is requested (names-only screens carry no
-    ``Earnings Date`` filter).
+    ``Earnings Date`` filter). ``Ticker`` is always requested: the provider
+    renders exactly the requested custom columns, and without a ticker cell
+    the grid's positional contract cannot name a row.
     """
     if when is None and session is None:
         return None
@@ -129,7 +134,7 @@ def _earnings_query(
         view="custom",
         filters=(earnings_filter, *(filters or ())),
         order=order,
-        columns=CustomColumns((_EARNINGS_DATE_LABEL,)),
+        columns=CustomColumns(("Ticker", _EARNINGS_DATE_LABEL)),
     )
 
 
@@ -142,6 +147,27 @@ def _normalize_names(names: str | list[str] | tuple[str, ...] | None) -> str | N
         return names[0]
     msg = "earnings queries take one ticker; pass a string or a one-name sequence"
     raise FinvizQueryError(msg)
+
+
+def _session_of(raw: str) -> str | None:
+    """``BMO``/``AMC`` only when the provider display says so.
+
+    Two provider shapes carry a session: the verbose ``Nov 12 BMO`` suffix and
+    the compact grid suffix ``Aug 26/a`` / ``Aug 26/b`` (``/a`` = AMC, ``/b``
+    = BMO, verified against quote pages 2026-08-30). A display with neither
+    suffix leaves the session null — sessions are never invented from clock
+    time.
+    """
+    match = _DATE_DISPLAY.match(raw)
+    if match is None:
+        return None
+    if match["session"]:
+        return match["session"]
+    if match["compact_session"] == "a":
+        return "AMC"
+    if match["compact_session"] == "b":
+        return "BMO"
+    return None
 
 
 def _normalize_date(raw: str, *, row_key: str) -> dt.date:
@@ -171,27 +197,41 @@ def _normalize_date(raw: str, *, row_key: str) -> dt.date:
 def _earnings_table(combined: Any) -> Any:
     """Project the combined screen table into the session-aware earnings schema."""
     source_names = combined.column_names
-    missing = [name for name in ("rank", "symbol", "earnings_date") if name not in source_names]
+    # The date column rides under the contract field name (``earnings_date``,
+    # from the registry label) or the provider's own grid label (``Earnings``).
+    date_field = next(
+        (
+            _field_name(label)
+            for label in _EARNINGS_GRID_LABELS
+            if _field_name(label) in source_names
+        ),
+        None,
+    )
+    missing = [
+        name
+        for name in ("rank", "symbol", date_field or _EARNINGS_DATE_LABEL)
+        if name not in source_names
+    ]
     if missing:
         msg = f"earnings screen table is missing columns: {', '.join(missing)}"
         raise FinvizParseError(msg, context={"endpoint": "screener"})
     ranks = combined.column("rank").to_pylist()
     symbols = combined.column("symbol").to_pylist()
-    raws = combined.column("earnings_date").to_pylist()
+    raws = combined.column(date_field).to_pylist()
     dates: list[dt.date | None] = []
     raw_values: list[str] = []
     sessions: list[str | None] = []
     for rank, symbol, raw in zip(ranks, symbols, raws, strict=True):
         raw_text = raw if isinstance(raw, str) else ""
         raw_values.append(raw_text)
-        sessions.append(raw_text[-3:] if raw_text[-3:] in ("BMO", "AMC") else None)
+        sessions.append(_session_of(raw_text))
         dates.append(
             None if raw_text == "" else _normalize_date(raw_text, row_key=f"rank {rank} ({symbol})")
         )
     carried = [
         field
         for field in combined.schema
-        if field.name not in ("rank", "symbol", "earnings_date", "fetched_at", "extra_fields")
+        if field.name not in ("rank", "symbol", date_field, "fetched_at", "extra_fields")
     ]
     schema = pa.schema(
         [
@@ -261,7 +301,7 @@ async def earnings_async(
             view="custom",
             filters=tuple(filters) if isinstance(filters, (list, tuple)) else (),
             order=order,
-            columns=CustomColumns((_EARNINGS_DATE_LABEL,)),
+            columns=CustomColumns(("Ticker", _EARNINGS_DATE_LABEL)),
         )
     ticker = _normalize_names(names)
     if ticker is not None:

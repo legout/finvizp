@@ -157,6 +157,68 @@ def header_drift_page() -> str:
     )
 
 
+def no_ticker_page() -> str:
+    """Live 2026-08-30 drift: custom view without a Ticker column.
+
+    The provider renders exactly the requested columns: ``c=0,68`` (rank +
+    Earnings) yields two-cell rows whose second cell is the earnings display
+    itself (``Aug 26/a``) — no ticker cell anywhere. The parser's positional
+    ticker assumption then consumes the display as the symbol (``AUG 26/A``)
+    and the header contract runs one display short.
+    """
+    heads = "<th>No.</th><th>Earnings</th>"
+    anchor = '<a href="stock?t=S{0:02d}X&amp;ty=c&amp;p=d">{1}</a>'
+    body = "".join(
+        "<tr>"
+        f'<td height="10" align="right">{anchor.format(rank, rank)}</td>'
+        f'<td height="10" align="right">{anchor.format(rank, display)}</td>'
+        "</tr>"
+        for rank, display in enumerate(TICKERLESS_ROWS, start=1)
+    )
+    return (
+        _head(len(TICKERLESS_ROWS), 1)
+        + '<table class="styled-table-new is-rounded is-tabular-nums w-full screener_table">'
+        f'<thead><tr align="center">{heads}</tr></thead>{body}</table></div></body></html>'
+    )
+
+
+def earnings_grid_page() -> str:
+    """Live-shaped ``c=0,1,68`` grid: No. + Ticker + ``Earnings`` headers.
+
+    The provider labels custom-column code 68 ``Earnings`` (not the registry
+    name ``Earnings Date``) and renders compact displays ``Aug 26/a``.
+    """
+    heads = "<th>No.</th><th>Ticker</th><th>Earnings</th>"
+    tickers = ("S01X", "S02X", "S03X", "S04X", "S05X")
+    link = '<a href="stock?t={0}&amp;ty=c&amp;p=d">{1}</a>'
+    body = "".join(
+        "<tr>"
+        f'<td height="10" align="right">{link.format(ticker, rank)}</td>'
+        f'<td height="10" align="left" data-boxover-ticker="{ticker}">'
+        f'<a href="stock?t={ticker}" class="tab-link">{ticker}</a></td>'
+        f'<td height="10" align="right">{link.format(ticker, display)}</td>'
+        "</tr>"
+        for rank, ticker, (display,) in zip(
+            range(1, 6), tickers, ([d] for _, d in TICKERLESS_ROWS), strict=True
+        )
+    )
+    return (
+        _head(len(TICKERLESS_ROWS), 1)
+        + '<table class="styled-table-new is-rounded is-tabular-nums w-full screener_table">'
+        f'<thead><tr align="center">{heads}</tr></thead>{body}</table></div></body></html>'
+    )
+
+
+# Compact grid displays: ``/a`` = after market close (AMC), ``/b`` = before
+# market open (BMO) — verified per-ticker against quote pages 2026-08-30.
+TICKERLESS_ROWS: list[tuple[int, str]] = [
+    (rank, display)
+    for rank, display in enumerate(
+        ("Aug 26/a", "Aug 27/a", "Aug 27/a", "Aug 24/b", "Aug 26/b"), start=1
+    )
+]
+
+
 def write_fixtures() -> dict[str, Path]:
     out: dict[str, Path] = {}
 
@@ -169,6 +231,8 @@ def write_fixtures() -> dict[str, Path]:
     emit("overview-final-page.html", overview_page(rows=FINAL_ROWS, total=588, start=581))
     emit("custom-columns.html", custom_page())
     emit("no-results.html", no_results_page())
+    emit("no-ticker-columns.html", no_ticker_page())
+    emit("earnings-grid.html", earnings_grid_page())
     emit("_drift-malformed-row.html", malformed_page())
     emit("_drift-header.html", header_drift_page())
     return out

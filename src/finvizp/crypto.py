@@ -13,16 +13,18 @@ from __future__ import annotations
 from typing import Any
 
 from finvizp._parsers import markets
+from finvizp._parsers.markets import TileBundle, TileRow  # re-exported in __all__
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import FinvizQueryError
+from finvizp.models import Artifact
 from finvizp.results import FetchResult, ResultMetadata, ResultStatus
 
 __all__ = [
     "CRYPTO_CHARTS_PATH",
     "CRYPTO_PERFORMANCE_PATH",
-    "CRYPTO_TILE_EVENT",
     "CRYPTO_TILES_PATH",
+    "CRYPTO_TILE_EVENT",
     "Artifact",
     "TileBundle",
     "TileRow",
@@ -201,9 +203,7 @@ def chart(
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`chart_async`; rejects an active event loop."""
     return run_sync(
-        chart_async(
-            symbol=symbol, timeframe=timeframe, client=client, cache=cache, refresh=refresh
-        )
+        chart_async(symbol=symbol, timeframe=timeframe, client=client, cache=cache, refresh=refresh)
     )
 
 

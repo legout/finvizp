@@ -28,17 +28,18 @@ from typing import Any
 import pyarrow as pa
 
 from finvizp._parsers import markets
+from finvizp._parsers.markets import TileBundle, TileRow  # re-exported in __all__
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
-from finvizp.errors import FinvizParseError, FinvizQueryError
+from finvizp.errors import FinvizQueryError
 from finvizp.models import Artifact
 from finvizp.results import FetchResult, ResultMetadata, ResultStatus
 
 __all__ = [
     "FOREX_CHARTS_PATH",
     "FOREX_PERFORMANCE_PATH",
-    "FOREX_TILE_EVENT",
     "FOREX_TILES_PATH",
+    "FOREX_TILE_EVENT",
     "Artifact",
     "TileBundle",
     "TileRow",
@@ -113,9 +114,7 @@ def _parse_tiles(response: ClientResponse) -> FetchResult[Any]:
 
 def _validate_timeframe(timeframe: str) -> str:
     if timeframe not in _TIMEFRAMES:
-        msg = (
-            f"timeframe must be one of {sorted(_TIMEFRAMES)}, got {timeframe!r}"
-        )
+        msg = f"timeframe must be one of {sorted(_TIMEFRAMES)}, got {timeframe!r}"
         raise FinvizQueryError(msg)
     return timeframe
 
@@ -125,27 +124,6 @@ def _validate_symbol(symbol: str) -> str:
         msg = f"symbol must be a non-empty string, got {symbol!r}"
         raise FinvizQueryError(msg)
     return symbol.strip()
-
-
-def _chart_result(
-    descriptor: Artifact, *, query: dict[str, Any]
-) -> FetchResult[Any]:
-    return FetchResult(
-        descriptor,
-        ResultMetadata(
-            endpoint=FOREX_CHARTS_PATH,
-            status=ResultStatus.COMPLETE,
-            access_tier=descriptor.access_tier,
-            fetched_at=descriptor.fetched_at,
-            query=dict(query),
-            attempts=1,
-            parser_version=_PARSER_VERSION,
-            schema_version=_SCHEMA_VERSION,
-            requested_units=1,
-            succeeded_units=1,
-            failed_units=0,
-        ),
-    )
 
 
 async def performance_async(
@@ -187,9 +165,7 @@ def performance(
     refresh: bool = False,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`performance_async`; rejects an active event loop."""
-    return run_sync(
-        performance_async(client=client, change=change, cache=cache, refresh=refresh)
-    )
+    return run_sync(performance_async(client=client, change=change, cache=cache, refresh=refresh))
 
 
 async def tiles_async(
@@ -268,9 +244,7 @@ def chart(
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`chart_async`; rejects an active event loop."""
     return run_sync(
-        chart_async(
-            symbol=symbol, timeframe=timeframe, client=client, cache=cache, refresh=refresh
-        )
+        chart_async(symbol=symbol, timeframe=timeframe, client=client, cache=cache, refresh=refresh)
     )
 
 

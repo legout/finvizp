@@ -207,9 +207,7 @@ async def test_forex_tiles_unknown_field_lands_in_extra_fields() -> None:
     from finvizp._parsers.markets import parse_market_tiles
     from finvizp.forex import FOREX_TILE_EVENT
 
-    body = _TILES.replace(
-        '"prevClose":0.71925', '"prevClose":0.71925,"newField":"x"'
-    )
+    body = _TILES.replace('"prevClose":0.71925', '"prevClose":0.71925,"newField":"x"')
     rows = parse_market_tiles(body, tile_event=FOREX_TILE_EVENT)
     assert rows[0].extra_fields == {"newField": "x"}
 
@@ -419,9 +417,8 @@ def test_forex_sync_rejects_active_loop() -> None:
 
 def test_forex_tile_fixture_json_parses() -> None:
     """The scrubbed fixture embeds exactly the verified tile shape."""
-    from finvizp.forex import FOREX_TILE_EVENT
-
     from finvizp._parsers.markets import _tile_payload
+    from finvizp.forex import FOREX_TILE_EVENT
 
     payload = _tile_payload(_TILES, tile_event=FOREX_TILE_EVENT)
     first = next(iter(payload.values()))

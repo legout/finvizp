@@ -145,7 +145,9 @@ def parse_market_performance(html: str, *, family: str) -> MarketPerformancePage
     return MarketPerformancePage(columns=tuple(heads), rows=tuple(rows), is_empty=not rows)
 
 
-def performance_table(page: MarketPerformancePage, fetched_at: datetime, *, family: str) -> pa.Table:
+def performance_table(
+    page: MarketPerformancePage, fetched_at: datetime, *, family: str
+) -> pa.Table:
     """Project one parsed performance page into a deterministic wide table.
 
     Percent displays become decimal fractions; PIPS-view displays (plain
@@ -328,17 +330,24 @@ def parse_market_tiles(html: str, *, tile_event: str) -> tuple[TileRow, ...]:
         ):
             msg = f"tile {ticker!r} sparkline is not a numeric array"
             raise FinvizParseError(msg, context={"endpoint": family})
+        numbers: dict[str, int | float | str] = {}
+        for key in ("last", "change", "changeUsd", "prevClose", "high", "low"):
+            value = known[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                msg = f"tile {ticker!r} carries a non-numeric value for {key!r}"
+                raise FinvizParseError(msg, context={"endpoint": family})
+            numbers[key] = value
         try:
             rows.append(
                 TileRow(
                     ticker=str(known["ticker"]),
                     label=str(known["label"]),
-                    last=float(known["last"]),
-                    change=float(known["change"]) / 100.0,
-                    change_usd=float(known["changeUsd"]),
-                    prev_close=float(known["prevClose"]),
-                    high=float(known["high"]),
-                    low=float(known["low"]),
+                    last=float(numbers["last"]),
+                    change=float(numbers["change"]) / 100.0,
+                    change_usd=float(numbers["changeUsd"]),
+                    prev_close=float(numbers["prevClose"]),
+                    high=float(numbers["high"]),
+                    low=float(numbers["low"]),
                     sparkline=list(float(point) for point in sparkline),
                     extra_fields=extra,
                 )

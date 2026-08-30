@@ -86,6 +86,40 @@ def test_quarterly_periodicity_and_lengths() -> None:
     assert days["2025Q4"] is None  # no earlier parsed end
 
 
+def test_cashflow_annual_fixture_is_exercised() -> None:
+    """The manifest's statements.ca/cq fixture parses like every statement code.
+
+    Guards the hygiene contract: a manifest-referenced fixture can never sit
+    unexercised (statements.ca and statements.cq both point at this file).
+    """
+    records = _parse(_fixture("cashflow-annual.json"), symbol="AAPL", statement="CA")
+    assert records.currency == "USD"
+    metrics = {r["metric"] for r in records.rows}
+    assert metrics == {
+        "Net Operating Cash Flow",
+        "Capital Expenditures",
+        "Dividends Paid",
+        "Free Cash Flow",
+    }
+    labels = [r["period_label"] for r in records.rows if r["metric"] == "Free Cash Flow"]
+    assert labels == ["TTM", "2025FY", "2024FY"]
+    ttm = [r for r in records.rows if r["period_label"] == "TTM"]
+    for row in ttm:
+        assert row["period_end_date"] is None
+        assert row["period_length_days"] is None
+    fy = {
+        r["period_label"]: r["period_length_days"]
+        for r in records.rows
+        if r["metric"] == "Net Operating Cash Flow"
+    }
+    assert fy["2025FY"] == 365  # 9/30/2025 -> 9/30/2024
+    # Verbatim value displays survive (the builder owns conversion).
+    values = {
+        r["period_label"]: r["value"] for r in records.rows if r["metric"] == "Capital Expenditures"
+    }
+    assert values["2024FY"] == "-9,700.00"
+
+
 def test_values_pass_through_verbatim() -> None:
     """Commas, signs, blanks, and decimals survive exactly (builder converts)."""
     records = _parse(_fixture("income-annual.json"), symbol="AAPL", statement="IA")

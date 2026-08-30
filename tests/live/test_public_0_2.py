@@ -16,33 +16,22 @@ import pytest
 import finvizp
 from finvizp import (
     FinvizClient,
-    FinvizError,
-    FinvizParseError,
     ResultStatus,
     earnings_async,
     screen_async,
     signal_async,
 )
 from finvizp._queries.screener import ScreenerQuery
+from tests.live._smoke import fetch
 
 pytestmark = pytest.mark.live_public
-
-
-async def _fetch(coro_factory, *, skip_parse_drift: bool = False):
-    """Run one smoke request, classifying failures per the smoke contract."""
-    try:
-        return await coro_factory()
-    except FinvizError as exc:
-        if skip_parse_drift and isinstance(exc, FinvizParseError):
-            pytest.skip(f"live parse drift, route for review: {exc}")
-        pytest.skip(f"live access unavailable (network/transport): {exc}")
 
 
 async def test_live_screen_one_bounded_page() -> None:
     # max_pages=1 is the smoke's own safety stop: the truncated walk is the
     # expected COMPLETE-with-warning outcome, not a failure.
     async with FinvizClient() as client:
-        result = await _fetch(
+        result = await fetch(
             lambda: screen_async(
                 ScreenerQuery(view="overview"), client=client, max_pages=1, allow_partial=True
             )
@@ -56,9 +45,9 @@ async def test_live_screen_one_bounded_page() -> None:
 
 async def test_live_signal_screen_bounded() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(
+        result = await fetch(
             lambda: signal_async("Most Active", client=client, max_pages=1, allow_partial=True),
-            skip_parse_drift=True,
+            skip_drift=True,
         )
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.PARTIAL}
     if result.metadata.status is not ResultStatus.EMPTY:
@@ -68,11 +57,11 @@ async def test_live_signal_screen_bounded() -> None:
 
 async def test_live_earnings_screen_bounded() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(
+        result = await fetch(
             lambda: earnings_async(
                 when="This Week", client=client, max_pages=1, allow_partial=True
             ),
-            skip_parse_drift=True,
+            skip_drift=True,
         )
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.PARTIAL}
     if result.metadata.status is not ResultStatus.EMPTY:

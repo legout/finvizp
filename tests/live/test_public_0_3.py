@@ -17,8 +17,6 @@ import pytest
 import finvizp
 from finvizp import (
     FinvizClient,
-    FinvizError,
-    FinvizParseError,
     ResultStatus,
     calendar_async,
     global_insider_async,
@@ -27,28 +25,19 @@ from finvizp import (
     map_async,
 )
 from finvizp._queries.groups import GroupDimension, GroupQuery, GroupView
+from tests.live._smoke import fetch
 
 pytestmark = pytest.mark.live_public
 
 
-async def _fetch(coro_factory, *, skip_parse_drift: bool = False):
-    """Run one smoke request, classifying failures per the smoke contract."""
-    try:
-        return await coro_factory()
-    except FinvizError as exc:
-        if skip_parse_drift and isinstance(exc, FinvizParseError):
-            pytest.skip(f"live parse drift, route for review: {exc}")
-        pytest.skip(f"live access unavailable (network/transport): {exc}")
-
-
 async def test_live_groups_overview_table() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(
+        result = await fetch(
             lambda: group_async(
                 GroupQuery(dimension=GroupDimension.SECTOR, view=GroupView.OVERVIEW),
                 client=client,
             ),
-            skip_parse_drift=True,
+            skip_drift=True,
         )
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
@@ -58,7 +47,7 @@ async def test_live_groups_overview_table() -> None:
 
 async def test_live_map_bundle_bounded() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: map_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: map_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         bundle = result.data
@@ -69,7 +58,7 @@ async def test_live_map_bundle_bounded() -> None:
 
 async def test_live_global_news_tables() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: global_news_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: global_news_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         tables = result.data
@@ -80,7 +69,7 @@ async def test_live_global_news_tables() -> None:
 
 async def test_live_global_insider_single_window() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: global_insider_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: global_insider_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         table = result.table
@@ -91,7 +80,7 @@ async def test_live_global_insider_single_window() -> None:
 
 async def test_live_calendar_current_table() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: calendar_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: calendar_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         table = result.table

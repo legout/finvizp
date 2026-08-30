@@ -19,8 +19,6 @@ import pytest
 import finvizp
 from finvizp import (
     FinvizClient,
-    FinvizError,
-    FinvizParseError,
     ResultStatus,
     chart_descriptor,
     download_artifact_async,
@@ -29,23 +27,14 @@ from finvizp import (
 from finvizp.artifacts import DOWNLOAD_LIMIT
 from finvizp.crypto import tiles_async as crypto_tiles_async
 from finvizp.forex import tiles_async as forex_tiles_async
+from tests.live._smoke import fetch
 
 pytestmark = pytest.mark.live_public
 
 
-async def _fetch(coro_factory, *, skip_parse_drift: bool = False):
-    """Run one smoke request, classifying failures per the smoke contract."""
-    try:
-        return await coro_factory()
-    except FinvizError as exc:
-        if skip_parse_drift and isinstance(exc, FinvizParseError):
-            pytest.skip(f"live parse drift, route for review: {exc}")
-        pytest.skip(f"live access unavailable (network/transport): {exc}")
-
-
 async def test_live_forex_tiles_bundle() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: forex_tiles_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: forex_tiles_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         bundle = result.data
@@ -59,7 +48,7 @@ async def test_live_forex_tiles_bundle() -> None:
 
 async def test_live_crypto_tiles_bundle() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: crypto_tiles_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: crypto_tiles_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         bundle = result.data
@@ -69,7 +58,7 @@ async def test_live_crypto_tiles_bundle() -> None:
 
 async def test_live_futures_tiles_table() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(lambda: futures_async(client=client), skip_parse_drift=True)
+        result = await fetch(lambda: futures_async(client=client), skip_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         table = result.table
@@ -87,9 +76,9 @@ async def test_live_chart_artifact_download_is_bounded() -> None:
     assert descriptor.content is None
     assert descriptor.path is None
     async with FinvizClient() as client:
-        downloaded = await _fetch(
+        downloaded = await fetch(
             lambda: download_artifact_async(descriptor, client=client),
-            skip_parse_drift=True,
+            skip_drift=True,
         )
     # Explicit download stamps the immutable descriptor with bounded bytes.
     assert downloaded.source_url == descriptor.source_url

@@ -404,6 +404,8 @@ def test_futures_sync_wrapper_rejects_active_loop() -> None:
 
 @pytest.mark.live_public
 async def test_live_futures_smoke() -> None:
+    # Env-var opt-in on top of the marker: avoids a duplicate live request
+    # when both the futures suite and tests/live run in one invocation.
     import os
 
     if not os.environ.get("FINVIZP_LIVE_SMOKE"):

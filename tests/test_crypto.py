@@ -200,7 +200,7 @@ async def test_crypto_tiles_malformed_embedded_json_is_typed_drift() -> None:
 
     with pytest.raises(FinvizParseError, match="tile"):
         parse_market_tiles(
-            _TILES.replace("window.FinvizInitCrypto(", "window.Nope("),
+            _TILES.replace('"last":128.16', '"last":broken'),
             tile_event=CRYPTO_TILE_EVENT,
         )
 

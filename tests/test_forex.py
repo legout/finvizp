@@ -210,9 +210,8 @@ async def test_forex_tiles_unknown_field_lands_in_extra_fields() -> None:
     body = _TILES.replace(
         '"prevClose":0.71925', '"prevClose":0.71925,"newField":"x"'
     )
-    data = parse_market_tiles(body, tile_event=FOREX_TILE_EVENT)
-    row = data.rows[0]
-    assert row.extra_fields == {"newField": "x"}
+    rows = parse_market_tiles(body, tile_event=FOREX_TILE_EVENT)
+    assert rows[0].extra_fields == {"newField": "x"}
 
 
 async def test_forex_tiles_malformed_embedded_json_is_typed_drift() -> None:
@@ -221,7 +220,7 @@ async def test_forex_tiles_malformed_embedded_json_is_typed_drift() -> None:
 
     with pytest.raises(FinvizParseError, match="tile"):
         parse_market_tiles(
-            _TILES.replace("window.FinvizInitForex(", "window.Nope("),
+            _TILES.replace('"last":0.71591', '"last":broken'),
             tile_event=FOREX_TILE_EVENT,
         )
 

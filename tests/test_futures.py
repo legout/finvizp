@@ -250,13 +250,20 @@ async def test_futures_returns_registered_arrow_table() -> None:
     assert es["name"] == "S&P 500"
     assert es["category"] == "Indices"
     assert es["last"] == pytest.approx(7724.75)
-    assert es["change"] == pytest.approx(-0.26)
-    assert es["change_percent"] == pytest.approx(-0.26)
+    # Percent unit stores fractions house-wide (-0.26%% display -> -0.0026);
+    # the raw companion keeps the provider's percent-point payload text.
+    assert es["change_percent"] == pytest.approx(-0.0026)
     assert es["change_usd"] == pytest.approx(-20.5)
     assert es["prev_close"] == pytest.approx(7742.5)
     assert es["high"] == pytest.approx(7782.5)
     assert es["low"] == pytest.approx(7711.75)
     assert es["sparkline"] == "[]"
+    # Provider payload decoration kept as verbatim text (never interpreted).
+    assert es["sparkline_date_changes"] == "{}"
+    # Tile ``change`` is a percent: no absolute-change column exists, and the
+    # raw companion carries the provider's exact payload text.
+    assert "change" not in table.schema.names
+    assert es["change_percent_raw"] == "-0.26"
     # last_raw keeps the provider's exact numeric payload text.
     assert es["last_raw"] == "7724.75"
     assert es["prev_close_raw"] == "7742.5"
@@ -292,7 +299,7 @@ async def test_futures_value_fields_convert_with_raw_companions() -> None:
 
     client = _client({FUTURES_PATH: CURRENT_PAGE})
     table = (await futures_async(client=client)).table
-    for name in ("last", "change", "change_percent", "change_usd", "prev_close", "high", "low"):
+    for name in ("last", "change_percent", "change_usd", "prev_close", "high", "low"):
         assert table.schema.field(name).type == pa.float64(), name
         assert table.schema.field(f"{name}_raw").type == pa.string(), name
     assert table.schema.field("delay_minutes").type == pa.float64()

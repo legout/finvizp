@@ -31,7 +31,7 @@ import pyarrow as pa
 
 from finvizp._parsers import _displays
 from finvizp._parsers.screener import ScreenerPage, parse_screener_page
-from finvizp._queries.screener import ScreenerQuery, screener_registry
+from finvizp._queries.screener import CustomColumns, ScreenerQuery, Signal, screener_registry
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
@@ -43,7 +43,16 @@ from finvizp.errors import (
 )
 from finvizp.results import AccessTier, FetchResult, ResultMetadata, ResultStatus
 
-__all__ = ["DEFAULT_MAX_PAGES", "DEFAULT_MAX_ROWS", "SCREEN_PATH", "screen", "screen_async"]
+__all__ = [
+    "DEFAULT_MAX_PAGES",
+    "DEFAULT_MAX_ROWS",
+    "SCREEN_PATH",
+    "SIGNAL_COLUMNS",
+    "screen",
+    "screen_async",
+    "signal",
+    "signal_async",
+]
 
 SCREEN_PATH = "/screener.ashx"
 _PARSER_VERSION = "1"
@@ -466,6 +475,72 @@ def _client_or_transient(client: FinvizClient):
     from finvizp.symbols import _client_or_transient as _ctx
 
     return _ctx(client)
+
+
+# Signal screens ride the same collector: the custom view requests a fixed
+# minimal column set (registry-validated), so every signal resolves through
+# the shared query model with a stable schema.
+SIGNAL_COLUMNS: tuple[str, ...] = ("No.", "Ticker", "Company", "Market Cap.", "Price", "Change")
+
+
+def signal_async(
+    name: str,
+    *,
+    client: FinvizClient,
+    allow_partial: bool = False,
+    max_pages: int | None = None,
+    max_rows: int | None = None,
+    refresh: bool = False,
+    cache: bool = True,
+    on_progress: ProgressCallback | None = None,
+) -> Any:
+    """Fetch one named signal screen through :func:`screen_async`'s collector.
+
+    ``name`` must be a checked-in registry signal; the query (custom view,
+    signal, fixed columns) is validated before any network I/O. Provenance
+    (query JSON, rank/page facts) is the shared collector's own.
+    """
+    query = ScreenerQuery(
+        view="custom",
+        signal=Signal(name),
+        columns=CustomColumns(SIGNAL_COLUMNS),
+    )
+    return screen_async(
+        query,
+        client=client,
+        allow_partial=allow_partial,
+        max_pages=max_pages,
+        max_rows=max_rows,
+        refresh=refresh,
+        cache=cache,
+        on_progress=on_progress,
+    )
+
+
+def signal(
+    name: str,
+    *,
+    client: FinvizClient,
+    allow_partial: bool = False,
+    max_pages: int | None = None,
+    max_rows: int | None = None,
+    refresh: bool = False,
+    cache: bool = True,
+    on_progress: ProgressCallback | None = None,
+) -> FetchResult[Any]:
+    """Sync wrapper for :func:`signal_async`; rejects an active event loop."""
+    return run_sync(
+        signal_async(
+            name,
+            client=client,
+            allow_partial=allow_partial,
+            max_pages=max_pages,
+            max_rows=max_rows,
+            refresh=refresh,
+            cache=cache,
+            on_progress=on_progress,
+        )
+    )
 
 
 def screen(

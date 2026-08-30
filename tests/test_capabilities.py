@@ -269,7 +269,7 @@ def test_calendar_capability_entries_link_the_merged_surface() -> None:
 
     details = capability("calendar.details")
     assert details.operation == "finvizp.calendar:calendar_detail"
-    assert details.representation == "html_tables"
+    assert details.representation == "embedded_json"
     assert details.schema == ("economic_details",)
     assert details.fixture == "tests/fixtures/calendar/detail.html"
 

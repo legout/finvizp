@@ -427,6 +427,29 @@ async def test_detail_and_calendar_have_distinct_cache_keys() -> None:
     assert len(client._transport.calls) == 2
 
 
+async def test_calendar_cache_false_requests_without_storing() -> None:
+    client = _client({CALENDAR_PATH: CURRENT_PAGE})
+    client._cache_ttl = 60.0
+    await calendar_async(client=client, cache=False)
+    await calendar_async(client=client, cache=False)
+    assert len(client._transport.calls) == 2
+    # cache=False left nothing in the cache: a default call re-fetches.
+    third = await calendar_async(client=client)
+    assert third.metadata.cache_hit is False
+    assert len(client._transport.calls) == 3
+
+
+async def test_detail_cache_false_requests_without_storing() -> None:
+    client = _client({DETAIL_PREFIX + "USACPI": DETAIL_PAGE})
+    client._cache_ttl = 60.0
+    await calendar_detail_async("USACPI", client=client, cache=False)
+    await calendar_detail_async("USACPI", client=client, cache=False)
+    assert len(client._transport.calls) == 2
+    third = await calendar_detail_async("USACPI", client=client)
+    assert third.metadata.cache_hit is False
+    assert len(client._transport.calls) == 3
+
+
 # --- sync wrapper ------------------------------------------------------------------------------
 
 

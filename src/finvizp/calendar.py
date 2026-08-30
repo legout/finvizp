@@ -153,8 +153,10 @@ def _complete_result(
     )
 
 
-def _calendar_op(client: FinvizClient, *, refresh: bool = False, strict_schema: bool = False):
-    """Bind one cached current-calendar endpoint operation.
+def _calendar_op(
+    client: FinvizClient, *, refresh: bool = False, strict_schema: bool = False, cache: bool = True
+):
+    """Bind one current-calendar endpoint operation.
 
     ``strict_schema`` changes parse behavior, so it joins the cache identity
     through the representation facet (mirrors the statements contract).
@@ -165,20 +167,27 @@ def _calendar_op(client: FinvizClient, *, refresh: bool = False, strict_schema: 
         parser_version=_PARSER_VERSION,
         schema_version=1,
         refresh=refresh,
+        cache=cache,
         parse=lambda response: _parse_calendar(response, strict_schema=strict_schema),
     )
 
 
 def _detail_op(
-    client: FinvizClient, release: str, *, refresh: bool = False, strict_schema: bool = False
+    client: FinvizClient,
+    release: str,
+    *,
+    refresh: bool = False,
+    strict_schema: bool = False,
+    cache: bool = True,
 ):
-    """Bind one cached release-detail endpoint operation for an explicit slug."""
+    """Bind one release-detail endpoint operation for an explicit slug."""
     return client._endpoint_op(
         f"{DETAIL_PREFIX}{release}",
         representation="embedded_json+strict" if strict_schema else "embedded_json",
         parser_version=_PARSER_VERSION,
         schema_version=1,
         refresh=refresh,
+        cache=cache,
         parse=lambda response: _parse_detail(response, strict_schema=strict_schema),
     )
 
@@ -188,15 +197,17 @@ async def calendar_async(
     client: FinvizClient,
     refresh: bool = False,
     strict_schema: bool = False,
+    cache: bool = True,
 ) -> FetchResult[Any]:
     """Fetch the current economic calendar; Arrow ``economic_calendar`` table.
 
     One request to ``/calendar.ashx``; the embedded payload is the complete
     representation, so there is no HTML fallback. Recognized zero-entry
     payloads return ``EMPTY`` with the registered schema; structurally broken
-    payloads raise :class:`FinvizParseError`.
+    payloads raise :class:`FinvizParseError`. ``refresh`` bypasses and
+    replaces any cached entry; ``cache=False`` bypasses it without storing.
     """
-    return await _calendar_op(client, refresh=refresh, strict_schema=strict_schema)()
+    return await _calendar_op(client, refresh=refresh, strict_schema=strict_schema, cache=cache)()
 
 
 async def calendar_detail_async(
@@ -205,15 +216,19 @@ async def calendar_detail_async(
     client: FinvizClient,
     refresh: bool = False,
     strict_schema: bool = False,
+    cache: bool = True,
 ) -> FetchResult[Any]:
     """Fetch one explicitly named release's history; ``economic_details`` table.
 
     ``release`` is the provider's URL slug (``/calendar/economic/detail/<slug>``),
     validated pre-network. Exactly one request for exactly one caller-chosen
-    release — the detail sitemap is never enumerated.
+    release — the detail sitemap is never enumerated. ``refresh`` bypasses and
+    replaces any cached entry; ``cache=False`` bypasses it without storing.
     """
     release = _validate_release(release)
-    return await _detail_op(client, release, refresh=refresh, strict_schema=strict_schema)()
+    return await _detail_op(
+        client, release, refresh=refresh, strict_schema=strict_schema, cache=cache
+    )()
 
 
 def calendar(
@@ -221,9 +236,12 @@ def calendar(
     client: FinvizClient,
     refresh: bool = False,
     strict_schema: bool = False,
+    cache: bool = True,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`calendar_async`; rejects an active event loop."""
-    return run_sync(calendar_async(client=client, refresh=refresh, strict_schema=strict_schema))
+    return run_sync(
+        calendar_async(client=client, refresh=refresh, strict_schema=strict_schema, cache=cache)
+    )
 
 
 def calendar_detail(
@@ -232,8 +250,11 @@ def calendar_detail(
     client: FinvizClient,
     refresh: bool = False,
     strict_schema: bool = False,
+    cache: bool = True,
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`calendar_detail_async`; rejects an active event loop."""
     return run_sync(
-        calendar_detail_async(release, client=client, refresh=refresh, strict_schema=strict_schema)
+        calendar_detail_async(
+            release, client=client, refresh=refresh, strict_schema=strict_schema, cache=cache
+        )
     )

@@ -149,7 +149,7 @@ def test_frozen_inventory_families_are_all_represented() -> None:
     assert not missing, f"families missing from the manifest: {sorted(missing)}"
 
 
-def test_verified_0_1_operations_are_the_implemented_ones() -> None:
+def test_verified_0_2_operations_are_the_implemented_ones() -> None:
     implemented_ids = {entry.id for entry in capabilities() if entry.status == "implemented"}
     expected = {
         "symbols.universe",
@@ -167,8 +167,50 @@ def test_verified_0_1_operations_are_the_implemented_ones() -> None:
         "quote.insider",
         "quote.peers",
         "quote.etf_holders",
+        # 0.2: the merged screener surface (views+filters, signals, earnings).
+        "screener.views",
+        "screener.signals",
+        "earnings.screen",
     }
     assert implemented_ids == expected
+
+
+def test_screener_capability_entries_link_the_merged_surface() -> None:
+    views = capability("screener.views")
+    assert views.operation == "finvizp.screener:screen"
+    assert views.access_tier == "PUBLIC"
+    assert views.representation == "html_tables"
+    assert views.docs == "docs/reference/screener.md"
+
+    signals = capability("screener.signals")
+    assert signals.operation == "finvizp.screener:signal"
+    assert signals.family == "screener_views"
+
+    earnings = capability("earnings.screen")
+    assert earnings.operation == "finvizp.earnings:earnings_screen"
+    assert earnings.schema == ("earnings_screen",)
+
+    # Anonymous Elite export stays planned: it is never a public representation.
+    elite = capability("screener.export")
+    assert elite.status == "planned"
+    assert elite.access_tier == "ELITE"
+
+
+def test_earnings_screen_dataset_is_registered_and_deterministic() -> None:
+    from finvizp.schemas import arrow_schema, dataset, dataset_names
+
+    assert "earnings_screen" in dataset_names()
+    contract = dataset("earnings_screen")
+    assert contract.field_names == (
+        "rank",
+        "symbol",
+        "earnings_date",
+        "earnings_date_raw",
+        "earnings_session",
+        "extra_fields",
+        "fetched_at",
+    )
+    assert arrow_schema("earnings_screen") == arrow_schema("earnings_screen")
 
 
 def test_capability_lookup_roundtrip() -> None:
@@ -228,6 +270,9 @@ class TestCuratedExports:
             "insider_async",
             "peers_async",
             "etf_holders_async",
+            "screen_async",
+            "signal_async",
+            "earnings_async",
         } <= set(async_ops)
         for name in async_ops:
             assert name[: -len("_async")] in names, name
@@ -274,6 +319,7 @@ class TestDocs:
             "README.md",
             "docs/reference/results.md",
             "docs/reference/schemas-0.1.md",
+            "docs/reference/screener.md",
             "docs/how-to/proxies-and-cache.md",
         ):
             assert (REPO_ROOT / relative).exists(), relative
@@ -283,6 +329,7 @@ class TestDocs:
         for fragment in (
             "reference/results.md",
             "reference/schemas-0.1.md",
+            "reference/screener.md",
             "how-to/proxies-and-cache.md",
         ):
             assert fragment in text, fragment

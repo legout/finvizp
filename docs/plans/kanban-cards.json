@@ -21,7 +21,7 @@
     ],
     "implementation_rules": [
       "Fetch origin and ensure the worktree branch starts from current origin/main.",
-      "Use strict vertical RED-GREEN-REFACTOR TDD; record the exact expected RED and actual GREEN commands.",
+      "Use strict vertical RED-GREEN-REFACTOR TDD; record the exact expected RED and actual GREEN commands. Commit incrementally after each green gate; never leave owned files untracked across exploration (git stash does not save untracked files).",
       "Keep changes within the listed ownership scope; do not edit central manifests/exports unless the card owns them.",
       "Commit, push the unique branch, open a PR, then call kanban_request_review with reviewer=reviewer and structured evidence.",
       "Reviewer requests changes on the same card or merges the PR and verifies merged main/CI before kanban_complete."

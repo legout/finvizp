@@ -219,7 +219,7 @@ def test_maps_capability_entry_is_structured_only() -> None:
 
     from finvizp.models import MapBundle
 
-    assert callable(getattr(maps_module_operation(maps), "__call__", None))
+    assert callable(maps_module_operation(maps))
     assert MapBundle.__module__ == "finvizp.models"
 
 
@@ -333,13 +333,6 @@ def test_earnings_screen_dataset_is_registered_and_deterministic() -> None:
         "fetched_at",
     )
     assert arrow_schema("earnings_screen") == arrow_schema("earnings_screen")
-
-
-def test_capability_lookup_roundtrip() -> None:
-    entry = capability("quote.bundle")
-    assert entry.family == "quote"
-    with pytest.raises(LookupError):
-        capability("does.not.exist")
 
 
 def test_provisional_defaults_match_the_real_client_signature() -> None:

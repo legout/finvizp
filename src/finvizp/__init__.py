@@ -14,6 +14,7 @@ __version__ = "0.1.0"
 
 from finvizp.arrow import build_table, dataset_field_names
 from finvizp.cache import CacheEntry, ResultCache
+from finvizp.calendar import calendar, calendar_async, calendar_detail, calendar_detail_async
 from finvizp.capabilities import (
     Capability,
     capabilities,
@@ -65,7 +66,6 @@ from finvizp.news import (
     publisher_news,
     publisher_news_async,
 )
-from finvizp.calendar import calendar, calendar_async, calendar_detail, calendar_detail_async
 from finvizp.quote import (
     etf_holders,
     etf_holders_async,
@@ -174,10 +174,10 @@ __all__ = [
     "group_async",
     "insider",
     "insider_async",
-    "map",
-    "map_async",
     "manager_insider",
     "manager_insider_async",
+    "map",
+    "map_async",
     "news",
     "news_async",
     "peers",

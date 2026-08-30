@@ -69,9 +69,7 @@ async def test_live_map_bundle_bounded() -> None:
 
 async def test_live_global_news_tables() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(
-            lambda: global_news_async(client=client), skip_parse_drift=True
-        )
+        result = await _fetch(lambda: global_news_async(client=client), skip_parse_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         tables = result.data
@@ -82,9 +80,7 @@ async def test_live_global_news_tables() -> None:
 
 async def test_live_global_insider_single_window() -> None:
     async with FinvizClient() as client:
-        result = await _fetch(
-            lambda: global_insider_async(client=client), skip_parse_drift=True
-        )
+        result = await _fetch(lambda: global_insider_async(client=client), skip_parse_drift=True)
     assert result.metadata.status in {ResultStatus.COMPLETE, ResultStatus.EMPTY}
     if result.metadata.status is ResultStatus.COMPLETE:
         table = result.table

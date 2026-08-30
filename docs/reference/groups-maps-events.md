@@ -16,6 +16,7 @@ import asyncio
 from finvizp import FinvizClient, calendar_async, group_async
 from finvizp._queries.groups import GroupDimension, GroupQuery, GroupView
 
+
 async def main() -> None:
     async with FinvizClient() as client:
         # Group aggregates: typed query, wide Arrow table.
@@ -26,6 +27,7 @@ async def main() -> None:
         # Economic calendar: embedded-JSON events, registered schema.
         events = await calendar_async(client=client)
         print(groups.table.num_rows, events.table.num_rows)
+
 
 asyncio.run(main())
 ```

@@ -394,7 +394,11 @@ def test_detail_sync_wrapper_matches_async() -> None:
 
 def test_calendar_has_no_enumeration_surface() -> None:
     """Detail takes one explicit release; the module exposes no list-all API."""
-    import finvizp.calendar as cal
+    # ``finvizp.calendar`` the curated export shadows the module attribute, so
+    # resolve the module through sys.modules (shadowing-proof, as in test_news).
+    import importlib
+
+    cal = importlib.import_module("finvizp.calendar")
 
     public = {name for name in cal.__all__ if not name.endswith(("_async",))}
     assert {"calendar", "calendar_detail"}.issubset(public)

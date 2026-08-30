@@ -34,10 +34,13 @@ __all__ = [
     "INSIDER_FEEDS",
     "fund_async",
     "fund_insider",
+    "fund_insider_async",
     "global_async",
     "global_insider",
+    "global_insider_async",
     "manager_async",
     "manager_insider",
+    "manager_insider_async",
 ]
 
 _FEED_PATH = "/insidertrading.ashx"
@@ -255,6 +258,24 @@ def global_insider(
     )
 
 
+async def global_insider_async(
+    *,
+    feed: str = "latest",
+    client: FinvizClient,
+    refresh: bool = False,
+    cache: bool = True,
+    strict_schema: bool = False,
+) -> FetchResult[Any]:
+    """Async-form alias of :func:`global_async` (curated export pair name)."""
+    return await global_async(
+        feed=feed,
+        client=client,
+        refresh=refresh,
+        cache=cache,
+        strict_schema=strict_schema,
+    )
+
+
 def fund_insider(
     slug: str, *, client: FinvizClient, refresh: bool = False, cache: bool = True
 ) -> FetchResult[Any]:
@@ -262,8 +283,22 @@ def fund_insider(
     return run_sync(fund_async(slug, client=client, refresh=refresh, cache=cache))
 
 
+async def fund_insider_async(
+    slug: str, *, client: FinvizClient, refresh: bool = False, cache: bool = True
+) -> FetchResult[Any]:
+    """Async-form alias of :func:`fund_async` (curated export pair name)."""
+    return await fund_async(slug, client=client, refresh=refresh, cache=cache)
+
+
 def manager_insider(
     slug: str, *, client: FinvizClient, refresh: bool = False, cache: bool = True
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`manager_async`; rejects an active event loop."""
     return run_sync(manager_async(slug, client=client, refresh=refresh, cache=cache))
+
+
+async def manager_insider_async(
+    slug: str, *, client: FinvizClient, refresh: bool = False, cache: bool = True
+) -> FetchResult[Any]:
+    """Async-form alias of :func:`manager_async` (curated export pair name)."""
+    return await manager_async(slug, client=client, refresh=refresh, cache=cache)

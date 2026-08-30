@@ -171,8 +171,130 @@ def test_verified_0_2_operations_are_the_implemented_ones() -> None:
         "screener.views",
         "screener.signals",
         "earnings.screen",
+        # 0.3: groups, structured maps, news, insider feeds, calendar.
+        "groups.views",
+        "maps.structured",
+        "news.global",
+        "news.publisher",
+        "insider.global",
+        "insider.fund_manager",
+        "calendar.economic",
+        "calendar.details",
     }
     assert implemented_ids == expected
+
+
+def test_groups_capability_entries_link_the_merged_surface() -> None:
+    views = capability("groups.views")
+    assert views.operation == "finvizp.groups:group"
+    assert views.access_tier == "PUBLIC"
+    assert views.representation == "html_tables"
+    assert views.docs == "docs/reference/groups-maps-events.md"
+    assert views.fixture == "tests/fixtures/groups/overview.html"
+    assert views.tests == "tests/test_groups.py"
+
+    # The typed registry/collector modules are the capability surface; the
+    # spectrum descriptor rides the same operation family via `spectrum`.
+    from finvizp import groups as groups_module
+
+    assert callable(groups_module.group_async)
+    assert callable(groups_module.spectrum_async)
+
+    # Anonymous Elite export stays planned: it is never a public representation.
+    elite = capability("groups.export")
+    assert elite.status == "planned"
+    assert elite.access_tier == "ELITE"
+
+
+def test_maps_capability_entry_is_structured_only() -> None:
+    maps = capability("maps.structured")
+    assert maps.operation == "finvizp.maps:map"
+    assert maps.output_kind == "structured_data"
+    assert maps.representation == "embedded_json"
+    assert maps.fixture == "tests/fixtures/maps/sp500-embedded.html"
+    assert maps.tests == "tests/test_maps.py"
+    assert maps.docs == "docs/reference/groups-maps-events.md"
+    # Structured data, never a renderer: no canvas/image output.
+    assert maps.output_kind != "artifact"
+
+    from finvizp.models import MapBundle
+
+    assert callable(maps_module_operation(maps))
+    assert MapBundle.__module__ == "finvizp.models"
+
+
+def maps_module_operation(entry: Capability):
+    import importlib
+
+    module_name, _, attribute = entry.operation.partition(":")
+    return getattr(importlib.import_module(module_name), attribute)
+
+
+def test_news_capability_entries_link_the_merged_surface() -> None:
+    global_news = capability("news.global")
+    assert global_news.operation == "finvizp.news:global_news"
+    assert global_news.representation == "html_tables"
+    assert global_news.fixture == "tests/fixtures/news/global.html"
+    assert global_news.tests == "tests/test_news.py"
+
+    publisher = capability("news.publisher")
+    assert publisher.operation == "finvizp.news:publisher_news"
+    assert publisher.family == "publisher_news"
+    # Explicit caller identifiers only: the publisher sitemap is never enumerated.
+    assert publisher.fixture == "tests/fixtures/news/publisher.html"
+
+
+def test_insider_capability_entries_link_the_merged_surface() -> None:
+    insider_global = capability("insider.global")
+    assert insider_global.operation == "finvizp.insider:global_insider"
+    assert insider_global.representation == "html_tables"
+    # Rows normalize into the registered quote_insider contract.
+    assert insider_global.schema == ("quote_insider",)
+    assert insider_global.fixture == "tests/fixtures/insider/global.html"
+    assert insider_global.tests == "tests/test_insider.py"
+
+    fund_manager = capability("insider.fund_manager")
+    assert fund_manager.operation == "finvizp.insider:fund_insider"
+    assert fund_manager.family == "fund_manager_insider"
+    assert fund_manager.fixture == "tests/fixtures/insider/fund.html"
+
+
+def test_calendar_capability_entries_link_the_merged_surface() -> None:
+    calendar = capability("calendar.economic")
+    assert calendar.operation == "finvizp.calendar:calendar"
+    assert calendar.representation == "embedded_json"
+    assert calendar.schema == ("economic_calendar",)
+    assert calendar.fixture == "tests/fixtures/calendar/current-embedded.html"
+    assert calendar.tests == "tests/test_calendar.py"
+
+    details = capability("calendar.details")
+    assert details.operation == "finvizp.calendar:calendar_detail"
+    assert details.representation == "html_tables"
+    assert details.schema == ("economic_details",)
+    assert details.fixture == "tests/fixtures/calendar/detail.html"
+
+
+def test_0_3_datasets_are_registered_and_deterministic() -> None:
+    from finvizp.schemas import arrow_schema, dataset, dataset_names
+
+    names = set(dataset_names())
+    assert {"economic_calendar", "economic_details"} <= names
+
+    calendar = dataset("economic_calendar")
+    assert calendar.field_names[:4] == ("symbol", "event", "category", "release_date")
+    assert "release_timestamp_status" in calendar.field_names
+    assert arrow_schema("economic_calendar") == arrow_schema("economic_calendar")
+
+    details = dataset("economic_details")
+    assert details.field_names[:4] == ("symbol", "event", "category", "release_date")
+    assert arrow_schema("economic_details") == arrow_schema("economic_details")
+
+
+def test_capability_lookup_roundtrip() -> None:
+    entry = capability("quote.bundle")
+    assert entry.family == "quote"
+    with pytest.raises(LookupError):
+        capability("does.not.exist")
 
 
 def test_screener_capability_entries_link_the_merged_surface() -> None:
@@ -211,13 +333,6 @@ def test_earnings_screen_dataset_is_registered_and_deterministic() -> None:
         "fetched_at",
     )
     assert arrow_schema("earnings_screen") == arrow_schema("earnings_screen")
-
-
-def test_capability_lookup_roundtrip() -> None:
-    entry = capability("quote.bundle")
-    assert entry.family == "quote"
-    with pytest.raises(LookupError):
-        capability("does.not.exist")
 
 
 def test_provisional_defaults_match_the_real_client_signature() -> None:
@@ -273,6 +388,17 @@ class TestCuratedExports:
             "screen_async",
             "signal_async",
             "earnings_async",
+            # 0.3
+            "group_async",
+            "spectrum_async",
+            "map_async",
+            "global_news_async",
+            "publisher_news_async",
+            "global_insider_async",
+            "fund_insider_async",
+            "manager_insider_async",
+            "calendar_async",
+            "calendar_detail_async",
         } <= set(async_ops)
         for name in async_ops:
             assert name[: -len("_async")] in names, name
@@ -293,6 +419,9 @@ class TestCuratedExports:
             "FinvizPartialError",
             "capabilities",
             "capability",
+            # 0.3 structured contracts
+            "MapBundle",
+            "MapConstituent",
         ):
             assert name in names, name
 
@@ -320,6 +449,7 @@ class TestDocs:
             "docs/reference/results.md",
             "docs/reference/schemas-0.1.md",
             "docs/reference/screener.md",
+            "docs/reference/groups-maps-events.md",
             "docs/how-to/proxies-and-cache.md",
         ):
             assert (REPO_ROOT / relative).exists(), relative
@@ -330,6 +460,7 @@ class TestDocs:
             "reference/results.md",
             "reference/schemas-0.1.md",
             "reference/screener.md",
+            "reference/groups-maps-events.md",
             "how-to/proxies-and-cache.md",
         ):
             assert fragment in text, fragment

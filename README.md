@@ -91,21 +91,36 @@ identically. Cache-preserving quote projections — `snapshot()`, `ratings()`,
 `news()`, `insider()`, `peers()`, `etf_holders()` — reuse the cached page and
 perform no second request.
 
+The 0.2/0.3 surface works the same way: `screen_async`/`signal_async`/
+`earnings_async` for the screener, `group_async`/`spectrum_async` for group
+aggregates and spectrum descriptors, `map_async` for the structured S&P 500
+map bundle, `global_news_async`/`publisher_news_async` for news metadata,
+`global_insider_async`/`fund_insider_async`/`manager_insider_async` for the
+insider feeds, and `calendar_async`/`calendar_detail_async` for the economic
+calendar. Publisher, fund, manager, and release operations take one explicit
+caller identifier and never enumerate their sitemaps.
+
 Result envelopes carry full provenance; `strict` batching raises
 `FinvizPartialError` with the successful prefix preserved, and
 `allow_partial=True` returns a `PARTIAL` result with typed `unit_errors`.
 See [`docs/reference/results.md`](docs/reference/results.md) for the
 envelope, [`docs/reference/schemas-0.1.md`](docs/reference/schemas-0.1.md)
-for the Arrow tables, and
+for the Arrow tables,
+[`docs/reference/screener.md`](docs/reference/screener.md) for the screener
+surface, [`docs/reference/groups-maps-events.md`](docs/reference/groups-maps-events.md)
+for the 0.3 families, and
 [`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md) for
 proxies, caching, and caller-owned persistence.
 
 ## Documentation
 
-Start at [`docs/index.md`](docs/index.md), which links the 0.1 user docs:
-the result-envelope reference
+Start at [`docs/index.md`](docs/index.md), which links the user docs: the
+result-envelope reference
 ([`docs/reference/results.md`](docs/reference/results.md)), the Arrow
 schema tables ([`docs/reference/schemas-0.1.md`](docs/reference/schemas-0.1.md)),
+the screener surface ([`docs/reference/screener.md`](docs/reference/screener.md)),
+the 0.3 groups/maps/events families
+([`docs/reference/groups-maps-events.md`](docs/reference/groups-maps-events.md)),
 and the proxy/cache how-to
 ([`docs/how-to/proxies-and-cache.md`](docs/how-to/proxies-and-cache.md)).
 The research explains the complete

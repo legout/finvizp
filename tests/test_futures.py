@@ -29,8 +29,9 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
+from fastreq.backends.base import Backend
 
-from finvizp.errors import FinvizNotFoundError, FinvizParseError, FinvizQueryError
+from finvizp.errors import FinvizNotFoundError, FinvizParseError
 from finvizp.results import FetchResult, ResultStatus
 
 FIXTURES = Path(__file__).parent / "fixtures" / "futures"
@@ -47,8 +48,12 @@ CURRENT_PAGE = _fixture("current-tiles.html")
 EMPTY_PAGE = _fixture("_empty-tiles.html")
 
 
-class PageTransport:
+class PageTransport(Backend):
     """Transport double serving one scripted body per requested path."""
+
+    @property
+    def name(self) -> str:
+        return "futures-fake"
 
     def __init__(self, pages: dict[str, str | Exception]) -> None:
         self.pages = pages
@@ -186,8 +191,8 @@ def test_parse_futures_page_sparkline_is_payload_not_history() -> None:
     from finvizp._parsers.futures import parse_futures_page
 
     records = parse_futures_page(CURRENT_PAGE, fetched_at=FETCHED_AT, on_warning=lambda w: None)
-    # Verified empty on the live page: kept as payload evidence only.
-    assert records.tiles["ES"]["sparkline"] == []
+    # Verified empty on the live page: kept as payload text evidence only.
+    assert records.tiles["ES"]["sparkline"] == "[]"
     assert records.tiles["ES"]["sparkline_date_changes"] == {}
     # The parser exposes no sparkline-history surface at all.
     assert not any("history" in name or "bars" in name for name in dir(records))
@@ -255,8 +260,8 @@ async def test_futures_returns_registered_arrow_table() -> None:
     # last_raw keeps the provider's exact numeric payload text.
     assert es["last_raw"] == "7724.75"
     assert es["prev_close_raw"] == "7742.5"
-    # Unknown provider field lands in extra_fields.
-    assert es["extra_fields"] == {"someFutureField": "future-value"}
+    # Unknown provider field lands in extra_fields (Arrow map -> pair list).
+    assert es["extra_fields"] == [("someFutureField", "future-value")]
     # The page's own delay statement rides every row.
     assert rows["CL"]["delay_minutes"] == pytest.approx(15.0)
     # Contract-only tile (no group entry) still yields a row, category null.
@@ -268,9 +273,10 @@ async def test_futures_row_contract_only_tile_has_null_category() -> None:
     from finvizp.futures import futures_async
 
     page = CURRENT_PAGE.replace(" var tiles = ", " var unused = ").replace(
-        ' var unused = {"ES"', ' var tiles = {"ORPHAN":{"label":"Orphan","ticker":"ORPHAN"'
+        ' var unused = {"ES"',
+        ' var tiles = {"ORPHAN":{"label":"Orphan","ticker":"ORPHAN"'
         ',"last":1.0,"change":0.0,"changeUsd":0.0,"prevClose":1.0,"high":1.0,"low":1.0'
-        ',"sparkline":[],"sparklineDateChanges":{}},"ES"'
+        ',"sparkline":[],"sparklineDateChanges":{}},"ES"',
     )
     client = _client({FUTURES_PATH: page})
     table = (await futures_async(client=client)).table
@@ -384,6 +390,24 @@ def test_futures_sync_wrapper_rejects_active_loop() -> None:
             futures(client=client)
 
     asyncio.run(inside())
+
+
+# --- one-page smoke (opt-in, bounded) -----------------------------------------------------------
+
+
+@pytest.mark.live_public
+async def test_live_futures_smoke() -> None:
+    import os
+
+    if not os.environ.get("FINVIZP_LIVE_SMOKE"):
+        pytest.skip("FINVIZP_LIVE_SMOKE not set")
+    from finvizp.client import FinvizClient
+    from finvizp.futures import futures_async
+
+    async with FinvizClient() as client:
+        result = await futures_async(client=client)
+    assert result.metadata.status is ResultStatus.COMPLETE
+    assert result.table.num_rows >= 0
 
 
 # --- surface hygiene ---------------------------------------------------------------------------

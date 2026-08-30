@@ -128,7 +128,7 @@ def _page(tiles_json: str) -> str:
     """SPA shell whose one inline futures script carries groups + tiles."""
     groups_json = json.dumps(GROUPS, separators=(",", ":"))
     return (
-        "<!DOCTYPE html><html lang=\"en\"><head>"
+        '<!DOCTYPE html><html lang="en"><head>'
         "<title>Futures Prices - Finviz</title></head>"
         '<body><div id="futures"></div>'
         f"<style>.sparkline {{ vertical-align: middle; }}</style>"

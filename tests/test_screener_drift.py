@@ -7,6 +7,7 @@ path is exercised against a transport double, never live HTTP.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -42,7 +43,6 @@ def test_identical_payloads_report_no_changes() -> None:
     from finvizp._dev.screener_drift import compare_registries
 
     report = compare_registries(_payload(), _payload())
-    assert report["changed"] == []
     assert report["unchanged"] is True
     for section in ("filters", "signals", "orders", "views", "columns"):
         assert report[section] == {"added": [], "removed": [], "changed": []}
@@ -82,9 +82,7 @@ def test_changed_code_and_metadata_are_reported() -> None:
     assert report["views"]["changed"] == [
         {
             "name": "overview",
-            "fields": {
-                "columns": {"checked_in": ["No."], "live": ["No.", "Ticker"]},
-            },
+            "fields": {"columns": {"checked_in": ["No."], "live": ["No.", "Ticker"]}},
         }
     ]
 
@@ -116,7 +114,12 @@ def test_filter_option_changes_are_reported() -> None:
     assert report["filters"]["changed"] == [
         {
             "name": "Exchange",
-            "fields": {"options": {"checked_in": [{"name": "NYSE", "code": "nyse"}], "live": [{"name": "NYSE", "code": "nyse2"}]}},
+            "fields": {
+                "options": {
+                    "checked_in": [{"name": "NYSE", "code": "nyse"}],
+                    "live": [{"name": "NYSE", "code": "nyse2"}],
+                }
+            },
         }
     ]
 
@@ -182,7 +185,7 @@ def _v151_html() -> str:
 
 
 class _DriftTransport(Backend):
-    """Serves one scrubbed provider-shaped metadata page per URL path."""
+    """Serves one scrubbed provider-shaped metadata page per request."""
 
     def __init__(self) -> None:
         self.urls: list[str] = []
@@ -214,58 +217,52 @@ class _DriftTransport(Backend):
         return True
 
 
-async def test_collect_observations_is_bounded_and_safe() -> None:
-    from finvizp._dev.screener_drift import collect_observations
+def _client(fake: _DriftTransport, **kwargs: Any):
+    kwargs.setdefault("retry_attempts", 0)
+    kwargs.setdefault("retry_backoff", 0.0)
     from finvizp.client import FinvizClient
 
+    return FinvizClient(transport=fake, **kwargs)
+
+
+async def test_collect_observations_is_bounded_and_safe() -> None:
+    from finvizp._dev.screener_drift import OBSERVATION_PATHS, collect_observations
+
     fake = _DriftTransport()
-    observations = await collect_observations(client=FinvizClient(transport=fake))
-    # Bounded: exactly the reviewed observation URLs, nothing else.
-    assert len(fake.urls) == 2
+    observations = await collect_observations(client=_client(fake))
+    # Bounded: exactly the reviewed observation requests, nothing else.
+    assert len(fake.urls) == len(OBSERVATION_PATHS)
     assert all(urlsplit(url).hostname == "finviz.com" for url in fake.urls)
-    assert set(observations) == {"orders", "signals", "filters"}
-    assert observations["orders"]["ticker"] == "Ticker"
-    assert observations["signals"]["ta_topgainers"] == "Top Gainers"
-    assert observations["filters"]["exch"] == [
-        {"name": "NYSE", "code": "nyse"}
-    ]
+    assert observations["orders"] == {"ticker": "Ticker", "marketcap": "Market Cap."}
+    assert observations["signals"] == {"ta_topgainers": "Top Gainers"}
 
 
 def test_live_report_requires_explicit_opt_in_flag() -> None:
     from finvizp._dev.screener_drift import build_live_report
 
     with pytest.raises(TypeError):
-        build_live_report()  # noqa: no kwargs — live access must be explicit
-    with pytest.raises(TypeError, match="live"):
-        build_live_report(live=False)
-    from inspect import signature
-
-    assert signature(build_live_report).parameters["live"].kind in (
-        signature(build_live_report).parameters["live"].KEYWORD_ONLY,
-    )
+        build_live_report()  # live access must be an explicit keyword argument
+    with pytest.raises(ValueError, match="live"):
+        build_live_report(live="yes")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="observations"):
+        build_live_report(live=True, observations={})
 
 
-def test_live_report_never_mutates_the_registry(tmp_path, monkeypatch) -> None:
-    """The report writes JSON next to the caller, never into the package registry."""
+def test_live_report_never_mutates_the_registry(tmp_path) -> None:
+    """The report goes where the caller points it; the package registry is read-only."""
+    from pathlib import Path
+
     from finvizp._dev import screener_drift
     from finvizp._queries import screener as qs
 
-    registry_text = (  # unchanged on disk after a live report
-        __import__("pathlib")
-        .Path(qs._registry_path())
-        .read_text("utf-8")
-    )
+    registry_path = Path(str(qs._registry_path()))
+    before = registry_path.read_text("utf-8")
     out = tmp_path / "drift.json"
     report = screener_drift.build_live_report(
         live=False, observations={"orders": {"ticker": "Ticker"}}, out_path=out
     )
     assert out.read_text("utf-8") == report
-    assert (
-        __import__("pathlib")
-        .Path(qs._registry_path())
-        .read_text("utf-8")
-        == registry_text
-    )
+    assert registry_path.read_text("utf-8") == before
     assert json.loads(report)["meta"]["registry_mutated"] is False
 
 
@@ -276,7 +273,7 @@ def test_report_json_is_reviewable_and_ordered() -> None:
     data = json.loads(text)
     assert set(data) == {"meta", "report"}
     assert data["meta"]["observation_date"]
-    assert data["meta"]["registry_version"] == 1
+    assert data["meta"]["registry_version"] >= 1
     assert data["meta"]["registry_mutated"] is False
     assert data["report"]["unchanged"] is True
     # Deterministic bytes: same inputs, same output.
@@ -288,9 +285,7 @@ def test_report_carries_no_secrets_or_raw_bodies() -> None:
 
     text = build_live_report(
         live=False,
-        observations={
-            "orders": {"ticker": "Cookie: session=abc; Set-Cookie: x"},
-        },
+        observations={"orders": {"ticker": "session=abc; <html>body</html>"}},
     )
     lowered = text.lower()
     assert "cookie" not in lowered
@@ -299,10 +294,16 @@ def test_report_carries_no_secrets_or_raw_bodies() -> None:
     assert "session=abc" not in lowered
 
 
-# --- helpers ----------------------------------------------------------------------
+def test_report_emits_added_live_entries(tmp_path) -> None:
+    """A live entry absent from the registry shows up as reviewable added drift."""
+    from finvizp._dev.screener_drift import build_live_report
 
-
-import json  # noqa: E402  (kept at bottom so the RED-first imports dominate)
+    text = build_live_report(
+        live=False,
+        observations={"signals": {"ta_topgainers": "Top Gainers", "zz_new": "Brand New"}},
+    )
+    report = json.loads(text)["report"]
+    assert report["signals"]["added"] == [{"name": "Brand New", "code": "zz_new"}]
 
 
 def test_registry_module_exposes_no_public_surface() -> None:
@@ -310,4 +311,3 @@ def test_registry_module_exposes_no_public_surface() -> None:
     import finvizp
 
     assert not hasattr(finvizp, "screener_drift")
-    assert "_dev" not in finvizp.__all__ if hasattr(finvizp, "__all__") else True

@@ -73,8 +73,6 @@ PERF: dict[str, float] = {
 
 
 def _perf_json() -> str:
-    import json
-
     nodes = ",".join(f'"{sym}":{perf:g}' for sym, perf in PERF.items())
     return (
         '{"nodes":{' + nodes + '},"additional":{},"subtype":"d1","version":15,'
@@ -101,20 +99,20 @@ CHUNK_NAME = "mapbase.v1.0f1xTURE.js"
 def map_page() -> str:
     """The public map page: embedded initialPerf + hierarchy preload link."""
     return (
-        "<!DOCTYPE html><html lang=\"en\" class=\"is-map dark\"><head>"
+        '<!DOCTYPE html><html lang="en" class="is-map dark"><head>'
         "<title>S&amp;P 500 Map</title>"
         f'<link rel="preload" as="script" href="/assets/dist/{CHUNK_NAME}" '
         'data-chunk-id="map_base_sec"></head>'
         '<body class="m-0 has-map"><div class="content map">'
         '<div class="fv-container "><div id="root"></div>'
-        "<script type=\"text/javascript\">\n"
+        '<script type="text/javascript">\n'
         "window.addEventListener('Finviz:FinvizInitCanvas', () => window.FinvizInitCanvas({\n"
         "            initData: undefined,\n"
         f"            initialPerf: {_perf_json()},\n"
         "            generate: false,\n"
         "        }), {once: true});\n"
         "</script></div></div>"
-        "<div class=\"footer\" style=\"margin-top: 15px;padding-bottom: 115px\">"
+        '<div class="footer" style="margin-top: 15px;padding-bottom: 115px">'
         "Stock quotes delayed by 1 minute. Futures and options delayed by 15 minutes."
         "</div></body></html>"
     )

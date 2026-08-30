@@ -64,11 +64,15 @@ def test_map_page_yields_typed_perf_payload_and_preload_url() -> None:
 
 def test_map_page_no_data_script_is_recognized_empty_not_drift() -> None:
     page = parse_map_page(
-        '<html><head><title>S&amp;P 500 Map</title></head><body><div id="root"></div></body></html>'
+        "<html><head><title>S&amp;P 500 Map</title></head><body>"
+        '<div id="root"></div>'
+        "Stock quotes delayed by 1 minute. Futures and options delayed by 15 minutes."
+        "</body></html>"
     )
     assert page.perf == {}
     assert page.subtype is None
     assert page.hierarchy_url is None
+    assert page.delay_minutes == 1.0
 
 
 def test_map_page_missing_preload_with_perf_is_incomplete_drift() -> None:

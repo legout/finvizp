@@ -33,6 +33,9 @@ __all__ = ["HierarchyNode", "MapPage", "parse_hierarchy_asset", "parse_map_page"
 
 _PERF_KEY = "initialPerf"
 _HIERARCHY_CHUNK_ID = "map_base_sec"
+# Delay provenance: the page footer's own statement, required on every page
+# fetch (verified 2026-08-30: "Stock quotes delayed by 1 minute.").
+_DELAY_DISPLAY = re.compile(r"Stock quotes delayed by (\d+) minute")
 # Unquoted JS object keys in the data module (verified shape: name/children/
 # description/value). String values are double-quoted JSON strings; the literal
 # carries no comments/escapes beyond JSON's own, so quoting keys makes it JSON.
@@ -48,17 +51,39 @@ class MapPage:
     version: int | None
     payload_hash: str | None
     hierarchy_url: str | None
+    delay_minutes: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class HierarchyNode:
-    """One hierarchy node: sector, industry, or symbol leaf."""
+    """One hierarchy node: sector, industry, or symbol leaf.
+
+    ``perf`` is typed on every node but carries a value only on symbol leaves
+    after the endpoint module joins the page's embedded perf payload (the
+    parser itself is transport-free and leaves it ``None``).
+    """
 
     name: str
     description: str | None = None
     value: float | None = None
     parent: HierarchyNode | None = None
     children: tuple[HierarchyNode, ...] = ()
+    perf: float | None = None
+
+    def __eq__(self, other: object) -> bool:
+        # parent is excluded: it would recurse through the child->parent cycle.
+        if not isinstance(other, HierarchyNode):
+            return NotImplemented
+        return (self.name, self.description, self.value, self.children, self.perf) == (
+            other.name,
+            other.description,
+            other.value,
+            other.children,
+            other.perf,
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.description, self.value, self.perf))
 
 
 def parse_map_page(html: str) -> MapPage:
@@ -73,6 +98,13 @@ def parse_map_page(html: str) -> MapPage:
     document = lxml_html.fromstring(html)
     hierarchy_url = _hierarchy_preload(document)
     payload = _embedded_perf(document)
+    delay_match = _DELAY_DISPLAY.search(html)
+    if delay_match is None:
+        # The footer's delay statement is the page's own access/delay
+        # provenance; a page without it is not the reviewed representation.
+        msg = "map page carries no stock-quote delay statement (unrecognized representation)"
+        raise FinvizParseError(msg, context={"endpoint": "/map.ashx"})
+    delay_minutes = float(delay_match.group(1))
     if payload is None:
         # No canvas data at all: recognized empty page (e.g. data-asset variant
         # of the surface), not drift.
@@ -82,6 +114,7 @@ def parse_map_page(html: str) -> MapPage:
             version=None,
             payload_hash=None,
             hierarchy_url=hierarchy_url,
+            delay_minutes=delay_minutes,
         )
     nodes = payload.get("nodes")
     if not isinstance(nodes, dict):
@@ -115,6 +148,7 @@ def parse_map_page(html: str) -> MapPage:
         version=version,
         payload_hash=payload_hash if isinstance(payload_hash, str) else None,
         hierarchy_url=hierarchy_url,
+        delay_minutes=delay_minutes,
     )
 
 

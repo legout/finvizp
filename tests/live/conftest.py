@@ -2,7 +2,7 @@
 
 The foundation spec (``docs/superpowers/specs/2026-08-27-finvizp-foundation-design.md``)
 requires hermetic ordinary tests with live smokes separately gated. Default
-``pytest``/CI deselects every test in this directory; the marker expression
+``pytest``/CI skips every test under ``tests/live``; the marker expression
 ``-m live_public`` is the explicit opt-in.
 """
 
@@ -16,4 +16,5 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         return
     skip = pytest.mark.skip(reason="live smoke: run explicitly with -m live_public")
     for item in items:
-        item.add_marker(skip)
+        if "tests/live" in str(item.fspath):
+            item.add_marker(skip)

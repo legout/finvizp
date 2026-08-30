@@ -36,7 +36,8 @@ table = result.table  # or result.data for bundle operations
 
 # The provenance that makes repeated captures comparable:
 record = {
-    "fetched_at": result.metadata.fetched_at,      # provider-observed time
+    # fetched_at is the provider-observed time provenance stamp
+    "fetched_at": result.metadata.fetched_at,
     "response_hash": result.metadata.response_hash,
     "schema_version": result.metadata.schema_version,
     "parser_version": result.metadata.parser_version,

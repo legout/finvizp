@@ -405,6 +405,9 @@ AUDUSD_SPARK = [
 ]
 
 FOREX_TILES = [
+    # Live /forex.ashx also embeds SI/GC/CL (silver/gold/WTI) tiles alongside
+    # the FX pairs (13 entries on 2026-08-30); the fixture keeps 3 scrubbed
+    # forex rows — the parser is family-agnostic and 0.4-C owns futures.
     _tile("AUDUSD", "AUD/USD", 0.71591, -0.46, -0.0033, 0.71925, 0.72079, 0.71554, AUDUSD_SPARK),
     _tile(
         "EURUSD",

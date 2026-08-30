@@ -56,9 +56,7 @@ def _norm_entries(entries: list[dict[str, Any]] | None) -> dict[str, dict[str, A
     indexed: dict[str, dict[str, Any]] = {}
     for entry in entries or []:
         if isinstance(entry, dict) and isinstance(entry.get("name"), str):
-            indexed[entry["name"]] = {
-                key: value for key, value in entry.items() if key != "name"
-            }
+            indexed[entry["name"]] = {key: value for key, value in entry.items() if key != "name"}
     return indexed
 
 
@@ -178,7 +176,7 @@ async def collect_observations(*, client: Any) -> dict[str, Any]:
 # Report strings are reviewer-facing: any string carrying markup or shell-ish
 # characters is replaced wholesale so cookies, proxies, or raw HTML fragments
 # can never reach the JSON report.
-_UNSAFE_CHARS = frozenset('<>";\'`{}\\')
+_UNSAFE_CHARS = frozenset("<>\";'`{}\\")
 
 
 def _scrub(value: Any) -> Any:

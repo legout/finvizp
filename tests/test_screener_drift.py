@@ -144,9 +144,7 @@ def test_comparison_is_deterministic_and_order_insensitive() -> None:
     assert one == two
     names = [entry["name"] for entry in one["signals"]["added"]]
     assert names == sorted(names)
-    assert compare_registries(_payload(), _payload()) == compare_registries(
-        _payload(), _payload()
-    )
+    assert compare_registries(_payload(), _payload()) == compare_registries(_payload(), _payload())
 
 
 def test_filter_grammar_violations_are_reported_not_raised() -> None:

@@ -11,7 +11,7 @@ from typing import Any
 from finvizp.errors import FinvizDataError
 from finvizp.results import AccessTier, ResultStatus, _freeze
 
-__all__ = ["Artifact", "QuoteBundle"]
+__all__ = ["Artifact", "MapBundle", "MapConstituent", "QuoteBundle"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,3 +88,59 @@ class QuoteBundle:
             value = getattr(self, name)
             if isinstance(value, (Mapping, list, tuple, set, frozenset)):
                 object.__setattr__(self, name, _freeze(value))
+
+
+@dataclass(frozen=True, slots=True)
+class MapConstituent:
+    """One map symbol leaf flattened with its hierarchy path and perf."""
+
+    symbol: str
+    sector: str
+    industry: str
+    description: str | None
+    value: float
+    perf: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class MapBundle:
+    """One coherent public map: hierarchy tree plus flat constituents.
+
+    ``root`` carries the provider's own Root -> sectors -> industries ->
+    symbol-leaf tree (leaves join the embedded perf payload by ticker).
+    ``constituents`` is the same leaf set in hierarchy order, flattened with
+    sector/industry context. ``unmapped_perf`` records perf-only share-class
+    symbols the hierarchy does not carry (verified FOX/GOOG/NWS drift): the
+    renderer folds them into their class leaves locally, so the bundle reports
+    them instead of guessing a placement. ``delay_minutes`` is the page's own
+    delay statement; ``symbol`` names the map (``SP500`` for the public
+    ``/map.ashx`` surface).
+    """
+
+    symbol: str
+    fetched_at: datetime
+    root: Any | None = None
+    constituents: tuple[MapConstituent, ...] = ()
+    perf: Mapping[str, float] = field(default_factory=lambda: MappingProxyType({}))
+    unmapped_perf: tuple[str, ...] = ()
+    subtype: str | None = None
+    version: int | None = None
+    payload_hash: str | None = None
+    hierarchy_url: str | None = None
+    delay_minutes: float | None = None
+    access_tier: AccessTier = AccessTier.UNKNOWN
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.access_tier, AccessTier):
+            msg = f"access_tier must be an AccessTier, got {type(self.access_tier).__name__}"
+            raise FinvizDataError(msg)
+        if not isinstance(self.perf, Mapping):
+            msg = f"perf must be a Mapping, got {type(self.perf).__name__}"
+            raise FinvizDataError(msg)
+        constituents = tuple(self.constituents)
+        for element in constituents:
+            if not isinstance(element, MapConstituent):
+                msg = f"constituents elements must be MapConstituent, got {type(element).__name__}"
+                raise FinvizDataError(msg)
+        object.__setattr__(self, "constituents", constituents)
+        object.__setattr__(self, "perf", _freeze(self.perf))

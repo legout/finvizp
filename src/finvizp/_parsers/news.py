@@ -73,8 +73,10 @@ def _classify_when(raw: str) -> str:
     if _RELATIVE.match(raw):
         return RELATIVE
     if (
-        match := _DATE_ONLY.match(raw)
-    ) and match[1].lower() in _MONTHS and 1 <= int(match[2]) <= 31:
+        (match := _DATE_ONLY.match(raw))
+        and match[1].lower() in _MONTHS
+        and 1 <= int(match[2]) <= 31
+    ):
         return DATE_ONLY
     msg = f"cannot parse news temporal display {raw!r}"
     raise FinvizParseError(msg, context={"endpoint": "news"})

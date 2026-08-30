@@ -131,9 +131,7 @@ def _table(
     arrays = [
         pa.array(titles, type=_TABLE_SCHEMA.field("title").type),
         pa.array(urls, type=_TABLE_SCHEMA.field("url").type),
-        pa.array(
-            [item.publisher for item in items], type=_TABLE_SCHEMA.field("publisher").type
-        ),
+        pa.array([item.publisher for item in items], type=_TABLE_SCHEMA.field("publisher").type),
         pa.array(typed, type=_TABLE_SCHEMA.field("published_at").type),
         pa.array(
             [item.when_raw for item in items], type=_TABLE_SCHEMA.field("published_at_raw").type

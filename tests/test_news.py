@@ -139,7 +139,9 @@ async def test_global_rows_carry_urls_and_fetched_at() -> None:
     fake = NewsTransport()
     tables = (await news_api.global_news_async(client=_client(fake))).data
     row = tables["news"].to_pylist()[0]
-    assert row["url"] == "https://www.bloomberg.com/news/articles/2026-08-30/markets-brace-quiet-week"
+    assert (
+        row["url"] == "https://www.bloomberg.com/news/articles/2026-08-30/markets-brace-quiet-week"
+    )
     stamps = tables["news"].column("fetched_at").to_pylist()
     assert all(ts.tzinfo is not None for ts in stamps)
 
@@ -239,11 +241,11 @@ async def test_publisher_never_requests_related_ticker_badges() -> None:
 async def test_global_empty_categories_are_recognized_empty() -> None:
     fake = NewsTransport(
         global_body=(
-            "<html><body><div id=\"news\"><table class=\"news_time-table\" width=\"100%\">"
-            "<tr><td><span class=\"news-calendar_heading\">News</span></td>"
-            "<td><span class=\"news-calendar_heading mb-0\">Blogs</span></td></tr>"
-            "<tr><td><table class=\"styled-table-new table-fixed\"></table></td>"
-            "<td><table class=\"styled-table-new table-fixed\"></table></td></tr>"
+            '<html><body><div id="news"><table class="news_time-table" width="100%">'
+            '<tr><td><span class="news-calendar_heading">News</span></td>'
+            '<td><span class="news-calendar_heading mb-0">Blogs</span></td></tr>'
+            '<tr><td><table class="styled-table-new table-fixed"></table></td>'
+            '<td><table class="styled-table-new table-fixed"></table></td></tr>'
             "</table></div></body></html>"
         )
     )

@@ -82,17 +82,26 @@ def global_page() -> str:
                 "https://www.bloomberg.com/news/articles/2026-08-30/markets-brace-quiet-week",
             ),
             _global_row(
-                "wsj", "12:21AM", "Sample headline number two", "https://www.wsj.com/articles/sample-two"
+                "wsj",
+                "12:21AM",
+                "Sample headline number two",
+                "https://www.wsj.com/articles/sample-two",
             ),
             _global_row(
-                "reuters", "Aug-29", "Wire item from yesterday", "https://www.reuters.com/article/sample-three"
+                "reuters",
+                "Aug-29",
+                "Wire item from yesterday",
+                "https://www.reuters.com/article/sample-three",
             ),
         ]
     )
     blog_rows = "".join(
         [
             _global_row(
-                "zero-hedge", "10:30AM", "Blog post one", "https://www.zerohedge.com/markets/blog-one"
+                "zero-hedge",
+                "10:30AM",
+                "Blog post one",
+                "https://www.zerohedge.com/markets/blog-one",
             ),
             _global_row(
                 "the-bear-cave",
@@ -123,7 +132,7 @@ def global_page() -> str:
         '<a class="fv-button is-border is-chip-transparent is-small is-active" href="news">Time</a>'
         '<a class="fv-button is-border is-chip-transparent is-small" href="news?v=2">Source</a>'
         "</div></td></tr>"
-        "<tr><td align=\"center\" valign=\"top\">"
+        '<tr><td align="center" valign="top">'
         + category_table(news_rows)
         + "</td>"
         + '<td align="center" valign="top">'
@@ -167,8 +176,8 @@ def empty_global_page() -> str:
     return (
         "<!DOCTYPE html><html><head><title>Stock Market News & Blogs</title></head><body>"
         '<div id="news"><table class="news_time-table" width="100%">'
-        "<tr><td><span class=\"news-calendar_heading\">News</span></td>"
-        "<td><span class=\"news-calendar_heading mb-0\">Blogs</span></td></tr>"
+        '<tr><td><span class="news-calendar_heading">News</span></td>'
+        '<td><span class="news-calendar_heading mb-0">Blogs</span></td></tr>'
         f"<tr><td>{empty}</td><td>{empty}</td></tr></table></div></body></html>"
     )
 
@@ -176,7 +185,7 @@ def empty_global_page() -> str:
 def empty_publisher_page() -> str:
     """Recognized empty: the publisher table is present with zero items."""
     return (
-        '<!DOCTYPE html><html><head><title>Latest News From Zacks</title></head><body>'
+        "<!DOCTYPE html><html><head><title>Latest News From Zacks</title></head><body>"
         '<table border="0" cellpadding="2" cellspacing="0" width="100%" '
         'class="styled-table-new is-rounded table-fixed"></table></body></html>'
     )

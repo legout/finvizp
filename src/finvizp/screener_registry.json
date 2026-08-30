@@ -1,0 +1,7893 @@
+{
+  "version": 1,
+  "observation_date": "2026-08-30",
+  "page_size": 20,
+  "filters": [
+    {
+      "name": "Exchange",
+      "code": "exch",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "AMEX",
+          "code": "amex"
+        },
+        {
+          "name": "NASDAQ",
+          "code": "nasd"
+        },
+        {
+          "name": "NYSE",
+          "code": "nyse"
+        }
+      ]
+    },
+    {
+      "name": "Index",
+      "code": "idx",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "S&P 500",
+          "code": "sp500"
+        },
+        {
+          "name": "NASDAQ 100",
+          "code": "ndx"
+        },
+        {
+          "name": "DJIA",
+          "code": "dji"
+        },
+        {
+          "name": "RUSSELL 2000",
+          "code": "rut"
+        }
+      ]
+    },
+    {
+      "name": "Sector",
+      "code": "sec",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Basic Materials",
+          "code": "basicmaterials"
+        },
+        {
+          "name": "Communication Services",
+          "code": "communicationservices"
+        },
+        {
+          "name": "Consumer Cyclical",
+          "code": "consumercyclical"
+        },
+        {
+          "name": "Consumer Defensive",
+          "code": "consumerdefensive"
+        },
+        {
+          "name": "Energy",
+          "code": "energy"
+        },
+        {
+          "name": "Financial",
+          "code": "financial"
+        },
+        {
+          "name": "Healthcare",
+          "code": "healthcare"
+        },
+        {
+          "name": "Industrials",
+          "code": "industrials"
+        },
+        {
+          "name": "Real Estate",
+          "code": "realestate"
+        },
+        {
+          "name": "Technology",
+          "code": "technology"
+        },
+        {
+          "name": "Utilities",
+          "code": "utilities"
+        }
+      ]
+    },
+    {
+      "name": "Industry",
+      "code": "ind",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Stocks only (ex-Funds)",
+          "code": "stocksonly"
+        },
+        {
+          "name": "Exchange Traded Fund",
+          "code": "exchangetradedfund"
+        },
+        {
+          "name": "Advertising Agencies",
+          "code": "advertisingagencies"
+        },
+        {
+          "name": "Aerospace & Defense",
+          "code": "aerospacedefense"
+        },
+        {
+          "name": "Agricultural Inputs",
+          "code": "agriculturalinputs"
+        },
+        {
+          "name": "Airlines",
+          "code": "airlines"
+        },
+        {
+          "name": "Airports & Air Services",
+          "code": "airportsairservices"
+        },
+        {
+          "name": "Aluminum",
+          "code": "aluminum"
+        },
+        {
+          "name": "Apparel Manufacturing",
+          "code": "apparelmanufacturing"
+        },
+        {
+          "name": "Apparel Retail",
+          "code": "apparelretail"
+        },
+        {
+          "name": "Asset Management",
+          "code": "assetmanagement"
+        },
+        {
+          "name": "Auto Manufacturers",
+          "code": "automanufacturers"
+        },
+        {
+          "name": "Auto Parts",
+          "code": "autoparts"
+        },
+        {
+          "name": "Auto & Truck Dealerships",
+          "code": "autotruckdealerships"
+        },
+        {
+          "name": "Banks - Diversified",
+          "code": "banksdiversified"
+        },
+        {
+          "name": "Banks - Regional",
+          "code": "banksregional"
+        },
+        {
+          "name": "Beverages - Brewers",
+          "code": "beveragesbrewers"
+        },
+        {
+          "name": "Beverages - Non-Alcoholic",
+          "code": "beveragesnonalcoholic"
+        },
+        {
+          "name": "Beverages - Wineries & Distilleries",
+          "code": "beverageswineriesdistilleries"
+        },
+        {
+          "name": "Biotechnology",
+          "code": "biotechnology"
+        },
+        {
+          "name": "Broadcasting",
+          "code": "broadcasting"
+        },
+        {
+          "name": "Building Materials",
+          "code": "buildingmaterials"
+        },
+        {
+          "name": "Building Products & Equipment",
+          "code": "buildingproductsequipment"
+        },
+        {
+          "name": "Business Equipment & Supplies",
+          "code": "businessequipmentsupplies"
+        },
+        {
+          "name": "Capital Markets",
+          "code": "capitalmarkets"
+        },
+        {
+          "name": "Chemicals",
+          "code": "chemicals"
+        },
+        {
+          "name": "Closed-End Fund - Debt",
+          "code": "closedendfunddebt"
+        },
+        {
+          "name": "Closed-End Fund - Equity",
+          "code": "closedendfundequity"
+        },
+        {
+          "name": "Closed-End Fund - Foreign",
+          "code": "closedendfundforeign"
+        },
+        {
+          "name": "Coking Coal",
+          "code": "cokingcoal"
+        },
+        {
+          "name": "Communication Equipment",
+          "code": "communicationequipment"
+        },
+        {
+          "name": "Computer Hardware",
+          "code": "computerhardware"
+        },
+        {
+          "name": "Confectioners",
+          "code": "confectioners"
+        },
+        {
+          "name": "Conglomerates",
+          "code": "conglomerates"
+        },
+        {
+          "name": "Consulting Services",
+          "code": "consultingservices"
+        },
+        {
+          "name": "Consumer Electronics",
+          "code": "consumerelectronics"
+        },
+        {
+          "name": "Copper",
+          "code": "copper"
+        },
+        {
+          "name": "Credit Services",
+          "code": "creditservices"
+        },
+        {
+          "name": "Department Stores",
+          "code": "departmentstores"
+        },
+        {
+          "name": "Diagnostics & Research",
+          "code": "diagnosticsresearch"
+        },
+        {
+          "name": "Discount Stores",
+          "code": "discountstores"
+        },
+        {
+          "name": "Drug Manufacturers - General",
+          "code": "drugmanufacturersgeneral"
+        },
+        {
+          "name": "Drug Manufacturers - Specialty & Generic",
+          "code": "drugmanufacturersspecialtygeneric"
+        },
+        {
+          "name": "Education & Training Services",
+          "code": "educationtrainingservices"
+        },
+        {
+          "name": "Electrical Equipment & Parts",
+          "code": "electricalequipmentparts"
+        },
+        {
+          "name": "Electronic Components",
+          "code": "electroniccomponents"
+        },
+        {
+          "name": "Electronic Gaming & Multimedia",
+          "code": "electronicgamingmultimedia"
+        },
+        {
+          "name": "Electronics & Computer Distribution",
+          "code": "electronicscomputerdistribution"
+        },
+        {
+          "name": "Engineering & Construction",
+          "code": "engineeringconstruction"
+        },
+        {
+          "name": "Entertainment",
+          "code": "entertainment"
+        },
+        {
+          "name": "Farm & Heavy Construction Machinery",
+          "code": "farmheavyconstructionmachinery"
+        },
+        {
+          "name": "Farm Products",
+          "code": "farmproducts"
+        },
+        {
+          "name": "Financial Conglomerates",
+          "code": "financialconglomerates"
+        },
+        {
+          "name": "Financial Data & Stock Exchanges",
+          "code": "financialdatastockexchanges"
+        },
+        {
+          "name": "Food Distribution",
+          "code": "fooddistribution"
+        },
+        {
+          "name": "Footwear & Accessories",
+          "code": "footwearaccessories"
+        },
+        {
+          "name": "Furnishings, Fixtures & Appliances",
+          "code": "furnishingsfixturesappliances"
+        },
+        {
+          "name": "Gambling",
+          "code": "gambling"
+        },
+        {
+          "name": "Gold",
+          "code": "gold"
+        },
+        {
+          "name": "Grocery Stores",
+          "code": "grocerystores"
+        },
+        {
+          "name": "Healthcare Plans",
+          "code": "healthcareplans"
+        },
+        {
+          "name": "Health Information Services",
+          "code": "healthinformationservices"
+        },
+        {
+          "name": "Home Improvement Retail",
+          "code": "homeimprovementretail"
+        },
+        {
+          "name": "Household & Personal Products",
+          "code": "householdpersonalproducts"
+        },
+        {
+          "name": "Industrial Distribution",
+          "code": "industrialdistribution"
+        },
+        {
+          "name": "Information Technology Services",
+          "code": "informationtechnologyservices"
+        },
+        {
+          "name": "Infrastructure Operations",
+          "code": "infrastructureoperations"
+        },
+        {
+          "name": "Insurance Brokers",
+          "code": "insurancebrokers"
+        },
+        {
+          "name": "Insurance - Diversified",
+          "code": "insurancediversified"
+        },
+        {
+          "name": "Insurance - Life",
+          "code": "insurancelife"
+        },
+        {
+          "name": "Insurance - Property & Casualty",
+          "code": "insurancepropertycasualty"
+        },
+        {
+          "name": "Insurance - Reinsurance",
+          "code": "insurancereinsurance"
+        },
+        {
+          "name": "Insurance - Specialty",
+          "code": "insurancespecialty"
+        },
+        {
+          "name": "Integrated Freight & Logistics",
+          "code": "integratedfreightlogistics"
+        },
+        {
+          "name": "Internet Content & Information",
+          "code": "internetcontentinformation"
+        },
+        {
+          "name": "Internet Retail",
+          "code": "internetretail"
+        },
+        {
+          "name": "Leisure",
+          "code": "leisure"
+        },
+        {
+          "name": "Lodging",
+          "code": "lodging"
+        },
+        {
+          "name": "Lumber & Wood Production",
+          "code": "lumberwoodproduction"
+        },
+        {
+          "name": "Luxury Goods",
+          "code": "luxurygoods"
+        },
+        {
+          "name": "Marine Shipping",
+          "code": "marineshipping"
+        },
+        {
+          "name": "Medical Care Facilities",
+          "code": "medicalcarefacilities"
+        },
+        {
+          "name": "Medical Devices",
+          "code": "medicaldevices"
+        },
+        {
+          "name": "Medical Distribution",
+          "code": "medicaldistribution"
+        },
+        {
+          "name": "Medical Instruments & Supplies",
+          "code": "medicalinstrumentssupplies"
+        },
+        {
+          "name": "Metal Fabrication",
+          "code": "metalfabrication"
+        },
+        {
+          "name": "Mortgage Finance",
+          "code": "mortgagefinance"
+        },
+        {
+          "name": "Oil & Gas Drilling",
+          "code": "oilgasdrilling"
+        },
+        {
+          "name": "Oil & Gas E&P",
+          "code": "oilgasep"
+        },
+        {
+          "name": "Oil & Gas Equipment & Services",
+          "code": "oilgasequipmentservices"
+        },
+        {
+          "name": "Oil & Gas Integrated",
+          "code": "oilgasintegrated"
+        },
+        {
+          "name": "Oil & Gas Midstream",
+          "code": "oilgasmidstream"
+        },
+        {
+          "name": "Oil & Gas Refining & Marketing",
+          "code": "oilgasrefiningmarketing"
+        },
+        {
+          "name": "Other Industrial Metals & Mining",
+          "code": "otherindustrialmetalsmining"
+        },
+        {
+          "name": "Other Precious Metals & Mining",
+          "code": "otherpreciousmetalsmining"
+        },
+        {
+          "name": "Packaged Foods",
+          "code": "packagedfoods"
+        },
+        {
+          "name": "Packaging & Containers",
+          "code": "packagingcontainers"
+        },
+        {
+          "name": "Paper & Paper Products",
+          "code": "paperpaperproducts"
+        },
+        {
+          "name": "Personal Services",
+          "code": "personalservices"
+        },
+        {
+          "name": "Pharmaceutical Retailers",
+          "code": "pharmaceuticalretailers"
+        },
+        {
+          "name": "Pollution & Treatment Controls",
+          "code": "pollutiontreatmentcontrols"
+        },
+        {
+          "name": "Publishing",
+          "code": "publishing"
+        },
+        {
+          "name": "Railroads",
+          "code": "railroads"
+        },
+        {
+          "name": "Real Estate - Development",
+          "code": "realestatedevelopment"
+        },
+        {
+          "name": "Real Estate - Diversified",
+          "code": "realestatediversified"
+        },
+        {
+          "name": "Real Estate Services",
+          "code": "realestateservices"
+        },
+        {
+          "name": "Recreational Vehicles",
+          "code": "recreationalvehicles"
+        },
+        {
+          "name": "REIT - Diversified",
+          "code": "reitdiversified"
+        },
+        {
+          "name": "REIT - Healthcare Facilities",
+          "code": "reithealthcarefacilities"
+        },
+        {
+          "name": "REIT - Hotel & Motel",
+          "code": "reithotelmotel"
+        },
+        {
+          "name": "REIT - Industrial",
+          "code": "reitindustrial"
+        },
+        {
+          "name": "REIT - Mortgage",
+          "code": "reitmortgage"
+        },
+        {
+          "name": "REIT - Office",
+          "code": "reitoffice"
+        },
+        {
+          "name": "REIT - Residential",
+          "code": "reitresidential"
+        },
+        {
+          "name": "REIT - Retail",
+          "code": "reitretail"
+        },
+        {
+          "name": "REIT - Specialty",
+          "code": "reitspecialty"
+        },
+        {
+          "name": "Rental & Leasing Services",
+          "code": "rentalleasingservices"
+        },
+        {
+          "name": "Residential Construction",
+          "code": "residentialconstruction"
+        },
+        {
+          "name": "Resorts & Casinos",
+          "code": "resortscasinos"
+        },
+        {
+          "name": "Restaurants",
+          "code": "restaurants"
+        },
+        {
+          "name": "Scientific & Technical Instruments",
+          "code": "scientifictechnicalinstruments"
+        },
+        {
+          "name": "Security & Protection Services",
+          "code": "securityprotectionservices"
+        },
+        {
+          "name": "Semiconductor Equipment & Materials",
+          "code": "semiconductorequipmentmaterials"
+        },
+        {
+          "name": "Semiconductors",
+          "code": "semiconductors"
+        },
+        {
+          "name": "Shell Companies",
+          "code": "shellcompanies"
+        },
+        {
+          "name": "Silver",
+          "code": "silver"
+        },
+        {
+          "name": "Software - Application",
+          "code": "softwareapplication"
+        },
+        {
+          "name": "Software - Infrastructure",
+          "code": "softwareinfrastructure"
+        },
+        {
+          "name": "Solar",
+          "code": "solar"
+        },
+        {
+          "name": "Specialty Business Services",
+          "code": "specialtybusinessservices"
+        },
+        {
+          "name": "Specialty Chemicals",
+          "code": "specialtychemicals"
+        },
+        {
+          "name": "Specialty Industrial Machinery",
+          "code": "specialtyindustrialmachinery"
+        },
+        {
+          "name": "Specialty Retail",
+          "code": "specialtyretail"
+        },
+        {
+          "name": "Staffing & Employment Services",
+          "code": "staffingemploymentservices"
+        },
+        {
+          "name": "Steel",
+          "code": "steel"
+        },
+        {
+          "name": "Telecom Services",
+          "code": "telecomservices"
+        },
+        {
+          "name": "Textile Manufacturing",
+          "code": "textilemanufacturing"
+        },
+        {
+          "name": "Thermal Coal",
+          "code": "thermalcoal"
+        },
+        {
+          "name": "Tobacco",
+          "code": "tobacco"
+        },
+        {
+          "name": "Tools & Accessories",
+          "code": "toolsaccessories"
+        },
+        {
+          "name": "Travel Services",
+          "code": "travelservices"
+        },
+        {
+          "name": "Trucking",
+          "code": "trucking"
+        },
+        {
+          "name": "Uranium",
+          "code": "uranium"
+        },
+        {
+          "name": "Utilities - Diversified",
+          "code": "utilitiesdiversified"
+        },
+        {
+          "name": "Utilities - Independent Power Producers",
+          "code": "utilitiesindependentpowerproducers"
+        },
+        {
+          "name": "Utilities - Regulated Electric",
+          "code": "utilitiesregulatedelectric"
+        },
+        {
+          "name": "Utilities - Regulated Gas",
+          "code": "utilitiesregulatedgas"
+        },
+        {
+          "name": "Utilities - Regulated Water",
+          "code": "utilitiesregulatedwater"
+        },
+        {
+          "name": "Utilities - Renewable",
+          "code": "utilitiesrenewable"
+        },
+        {
+          "name": "Waste Management",
+          "code": "wastemanagement"
+        }
+      ]
+    },
+    {
+      "name": "Country",
+      "code": "geo",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "USA",
+          "code": "usa"
+        },
+        {
+          "name": "Foreign (ex-USA)",
+          "code": "notusa"
+        },
+        {
+          "name": "Asia",
+          "code": "asia"
+        },
+        {
+          "name": "Europe",
+          "code": "europe"
+        },
+        {
+          "name": "Latin America",
+          "code": "latinamerica"
+        },
+        {
+          "name": "BRIC",
+          "code": "bric"
+        },
+        {
+          "name": "Argentina",
+          "code": "argentina"
+        },
+        {
+          "name": "Australia",
+          "code": "australia"
+        },
+        {
+          "name": "Bahamas",
+          "code": "bahamas"
+        },
+        {
+          "name": "Belgium",
+          "code": "belgium"
+        },
+        {
+          "name": "BeNeLux",
+          "code": "benelux"
+        },
+        {
+          "name": "Bermuda",
+          "code": "bermuda"
+        },
+        {
+          "name": "Brazil",
+          "code": "brazil"
+        },
+        {
+          "name": "Canada",
+          "code": "canada"
+        },
+        {
+          "name": "Cayman Islands",
+          "code": "caymanislands"
+        },
+        {
+          "name": "Chile",
+          "code": "chile"
+        },
+        {
+          "name": "China",
+          "code": "china"
+        },
+        {
+          "name": "China & Hong Kong",
+          "code": "chinahongkong"
+        },
+        {
+          "name": "Colombia",
+          "code": "colombia"
+        },
+        {
+          "name": "Cyprus",
+          "code": "cyprus"
+        },
+        {
+          "name": "Denmark",
+          "code": "denmark"
+        },
+        {
+          "name": "Finland",
+          "code": "finland"
+        },
+        {
+          "name": "France",
+          "code": "france"
+        },
+        {
+          "name": "Germany",
+          "code": "germany"
+        },
+        {
+          "name": "Greece",
+          "code": "greece"
+        },
+        {
+          "name": "Hong Kong",
+          "code": "hongkong"
+        },
+        {
+          "name": "Hungary",
+          "code": "hungary"
+        },
+        {
+          "name": "Iceland",
+          "code": "iceland"
+        },
+        {
+          "name": "India",
+          "code": "india"
+        },
+        {
+          "name": "Indonesia",
+          "code": "indonesia"
+        },
+        {
+          "name": "Ireland",
+          "code": "ireland"
+        },
+        {
+          "name": "Israel",
+          "code": "israel"
+        },
+        {
+          "name": "Italy",
+          "code": "italy"
+        },
+        {
+          "name": "Japan",
+          "code": "japan"
+        },
+        {
+          "name": "Kazakhstan",
+          "code": "kazakhstan"
+        },
+        {
+          "name": "Luxembourg",
+          "code": "luxembourg"
+        },
+        {
+          "name": "Malaysia",
+          "code": "malaysia"
+        },
+        {
+          "name": "Malta",
+          "code": "malta"
+        },
+        {
+          "name": "Mexico",
+          "code": "mexico"
+        },
+        {
+          "name": "Monaco",
+          "code": "monaco"
+        },
+        {
+          "name": "Netherlands",
+          "code": "netherlands"
+        },
+        {
+          "name": "New Zealand",
+          "code": "newzealand"
+        },
+        {
+          "name": "Norway",
+          "code": "norway"
+        },
+        {
+          "name": "Panama",
+          "code": "panama"
+        },
+        {
+          "name": "Peru",
+          "code": "peru"
+        },
+        {
+          "name": "Philippines",
+          "code": "philippines"
+        },
+        {
+          "name": "Portugal",
+          "code": "portugal"
+        },
+        {
+          "name": "Russia",
+          "code": "russia"
+        },
+        {
+          "name": "Singapore",
+          "code": "singapore"
+        },
+        {
+          "name": "South Africa",
+          "code": "southafrica"
+        },
+        {
+          "name": "South Korea",
+          "code": "southkorea"
+        },
+        {
+          "name": "Spain",
+          "code": "spain"
+        },
+        {
+          "name": "Sweden",
+          "code": "sweden"
+        },
+        {
+          "name": "Switzerland",
+          "code": "switzerland"
+        },
+        {
+          "name": "Taiwan",
+          "code": "taiwan"
+        },
+        {
+          "name": "Turkey",
+          "code": "turkey"
+        },
+        {
+          "name": "United Arab Emirates",
+          "code": "unitedarabemirates"
+        },
+        {
+          "name": "United Kingdom",
+          "code": "unitedkingdom"
+        },
+        {
+          "name": "Uruguay",
+          "code": "uruguay"
+        }
+      ]
+    },
+    {
+      "name": "Market Cap.",
+      "code": "cap",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Mega ($200bln and more)",
+          "code": "mega"
+        },
+        {
+          "name": "Large ($10bln to $200bln)",
+          "code": "large"
+        },
+        {
+          "name": "Mid ($2bln to $10bln)",
+          "code": "mid"
+        },
+        {
+          "name": "Small ($300mln to $2bln)",
+          "code": "small"
+        },
+        {
+          "name": "Micro ($50mln to $300mln)",
+          "code": "micro"
+        },
+        {
+          "name": "Nano (under $50mln)",
+          "code": "nano"
+        },
+        {
+          "name": "+Large (over $10bln)",
+          "code": "largeover"
+        },
+        {
+          "name": "+Mid (over $2bln)",
+          "code": "midover"
+        },
+        {
+          "name": "+Small (over $300mln)",
+          "code": "smallover"
+        },
+        {
+          "name": "+Micro (over $50mln)",
+          "code": "microover"
+        },
+        {
+          "name": "-Large (under $200bln)",
+          "code": "largeunder"
+        },
+        {
+          "name": "-Mid (under $10bln)",
+          "code": "midunder"
+        },
+        {
+          "name": "-Small (under $2bln)",
+          "code": "smallunder"
+        },
+        {
+          "name": "-Micro (under $300mln)",
+          "code": "microunder"
+        }
+      ]
+    },
+    {
+      "name": "P/E",
+      "code": "fa_pe",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<15)",
+          "code": "low"
+        },
+        {
+          "name": "Profitable (>0)",
+          "code": "profitable"
+        },
+        {
+          "name": "High (>50)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30",
+          "code": "u30"
+        },
+        {
+          "name": "Under 35",
+          "code": "u35"
+        },
+        {
+          "name": "Under 40",
+          "code": "u40"
+        },
+        {
+          "name": "Under 45",
+          "code": "u45"
+        },
+        {
+          "name": "Under 50",
+          "code": "u50"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Forward P/E",
+      "code": "fa_fpe",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<15)",
+          "code": "low"
+        },
+        {
+          "name": "Profitable (>0)",
+          "code": "profitable"
+        },
+        {
+          "name": "High (>50)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30",
+          "code": "u30"
+        },
+        {
+          "name": "Under 35",
+          "code": "u35"
+        },
+        {
+          "name": "Under 40",
+          "code": "u40"
+        },
+        {
+          "name": "Under 45",
+          "code": "u45"
+        },
+        {
+          "name": "Under 50",
+          "code": "u50"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "PEG",
+      "code": "fa_peg",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<1)",
+          "code": "low"
+        },
+        {
+          "name": "High (>2)",
+          "code": "high"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 3",
+          "code": "u3"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        }
+      ]
+    },
+    {
+      "name": "P/S",
+      "code": "fa_ps",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<1)",
+          "code": "low"
+        },
+        {
+          "name": "High (>10)",
+          "code": "high"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 3",
+          "code": "u3"
+        },
+        {
+          "name": "Under 4",
+          "code": "u4"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 6",
+          "code": "u6"
+        },
+        {
+          "name": "Under 7",
+          "code": "u7"
+        },
+        {
+          "name": "Under 8",
+          "code": "u8"
+        },
+        {
+          "name": "Under 9",
+          "code": "u9"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 6",
+          "code": "o6"
+        },
+        {
+          "name": "Over 7",
+          "code": "o7"
+        },
+        {
+          "name": "Over 8",
+          "code": "o8"
+        },
+        {
+          "name": "Over 9",
+          "code": "o9"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        }
+      ]
+    },
+    {
+      "name": "P/B",
+      "code": "fa_pb",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<1)",
+          "code": "low"
+        },
+        {
+          "name": "High (>5)",
+          "code": "high"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 3",
+          "code": "u3"
+        },
+        {
+          "name": "Under 4",
+          "code": "u4"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 6",
+          "code": "u6"
+        },
+        {
+          "name": "Under 7",
+          "code": "u7"
+        },
+        {
+          "name": "Under 8",
+          "code": "u8"
+        },
+        {
+          "name": "Under 9",
+          "code": "u9"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 6",
+          "code": "o6"
+        },
+        {
+          "name": "Over 7",
+          "code": "o7"
+        },
+        {
+          "name": "Over 8",
+          "code": "o8"
+        },
+        {
+          "name": "Over 9",
+          "code": "o9"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        }
+      ]
+    },
+    {
+      "name": "Price/Cash",
+      "code": "fa_pc",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<3)",
+          "code": "low"
+        },
+        {
+          "name": "High (>50)",
+          "code": "high"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 3",
+          "code": "u3"
+        },
+        {
+          "name": "Under 4",
+          "code": "u4"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 6",
+          "code": "u6"
+        },
+        {
+          "name": "Under 7",
+          "code": "u7"
+        },
+        {
+          "name": "Under 8",
+          "code": "u8"
+        },
+        {
+          "name": "Under 9",
+          "code": "u9"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 6",
+          "code": "o6"
+        },
+        {
+          "name": "Over 7",
+          "code": "o7"
+        },
+        {
+          "name": "Over 8",
+          "code": "o8"
+        },
+        {
+          "name": "Over 9",
+          "code": "o9"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20",
+          "code": "o20"
+        },
+        {
+          "name": "Over 30",
+          "code": "o30"
+        },
+        {
+          "name": "Over 40",
+          "code": "o40"
+        },
+        {
+          "name": "Over 50",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Price/Free Cash Flow",
+      "code": "fa_pfcf",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<15)",
+          "code": "low"
+        },
+        {
+          "name": "High (>50)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30",
+          "code": "u30"
+        },
+        {
+          "name": "Under 35",
+          "code": "u35"
+        },
+        {
+          "name": "Under 40",
+          "code": "u40"
+        },
+        {
+          "name": "Under 45",
+          "code": "u45"
+        },
+        {
+          "name": "Under 50",
+          "code": "u50"
+        },
+        {
+          "name": "Under 60",
+          "code": "u60"
+        },
+        {
+          "name": "Under 70",
+          "code": "u70"
+        },
+        {
+          "name": "Under 80",
+          "code": "u80"
+        },
+        {
+          "name": "Under 90",
+          "code": "u90"
+        },
+        {
+          "name": "Under 100",
+          "code": "u100"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90",
+          "code": "o90"
+        },
+        {
+          "name": "Over 100",
+          "code": "o100"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth This Year",
+      "code": "fa_epsyoy",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth Next Year",
+      "code": "fa_epsyoy1",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth Past 5 Years",
+      "code": "fa_eps5years",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth Next 5 Years",
+      "code": "fa_estltgrowth",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (<10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "Sales Growth Past 5 Years",
+      "code": "fa_sales5years",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth TTM",
+      "code": "fa_epsyoyttm",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "EPS Growth Qtr over Qtr",
+      "code": "fa_epsqoq",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "Sales Growth Qtr over Qtr",
+      "code": "fa_salesqoq",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Positive Low (0-10%)",
+          "code": "poslow"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "Dividend Yield",
+      "code": "fa_div",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "None (0%)",
+          "code": "none"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "High (>5%)",
+          "code": "high"
+        },
+        {
+          "name": "Very High (>10%)",
+          "code": "veryhigh"
+        },
+        {
+          "name": "Over 1%",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2%",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3%",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4%",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 6%",
+          "code": "o6"
+        },
+        {
+          "name": "Over 7%",
+          "code": "o7"
+        },
+        {
+          "name": "Over 8%",
+          "code": "o8"
+        },
+        {
+          "name": "Over 9%",
+          "code": "o9"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        }
+      ]
+    },
+    {
+      "name": "Return on Assets",
+      "code": "fa_roa",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Very Positive (>15%)",
+          "code": "verypos"
+        },
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -45%",
+          "code": "u-45"
+        },
+        {
+          "name": "Under -40%",
+          "code": "u-40"
+        },
+        {
+          "name": "Under -35%",
+          "code": "u-35"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -25%",
+          "code": "u-25"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -15%",
+          "code": "u-15"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -5%",
+          "code": "u-5"
+        },
+        {
+          "name": "Over +5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over +10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over +15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over +20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over +25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over +30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over +35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over +40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over +45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over +50%",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Return on Equity",
+      "code": "fa_roe",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Very Positive (>30%)",
+          "code": "verypos"
+        },
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -45%",
+          "code": "u-45"
+        },
+        {
+          "name": "Under -40%",
+          "code": "u-40"
+        },
+        {
+          "name": "Under -35%",
+          "code": "u-35"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -25%",
+          "code": "u-25"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -15%",
+          "code": "u-15"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -5%",
+          "code": "u-5"
+        },
+        {
+          "name": "Over +5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over +10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over +15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over +20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over +25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over +30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over +35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over +40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over +45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over +50%",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Return on Investment",
+      "code": "fa_roi",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Very Positive (>25%)",
+          "code": "verypos"
+        },
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -45%",
+          "code": "u-45"
+        },
+        {
+          "name": "Under -40%",
+          "code": "u-40"
+        },
+        {
+          "name": "Under -35%",
+          "code": "u-35"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -25%",
+          "code": "u-25"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -15%",
+          "code": "u-15"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -5%",
+          "code": "u-5"
+        },
+        {
+          "name": "Over +5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over +10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over +15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over +20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over +25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over +30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over +35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over +40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over +45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over +50%",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Current Ratio",
+      "code": "fa_curratio",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "High (>3)",
+          "code": "high"
+        },
+        {
+          "name": "Low (<1)",
+          "code": "low"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 1.5",
+          "code": "o1.5"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        }
+      ]
+    },
+    {
+      "name": "Quick Ratio",
+      "code": "fa_quickratio",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "High (>3)",
+          "code": "high"
+        },
+        {
+          "name": "Low (<0.5)",
+          "code": "low"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 1.5",
+          "code": "o1.5"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10",
+          "code": "o10"
+        }
+      ]
+    },
+    {
+      "name": "LT Debt/Equity",
+      "code": "fa_ltdebteq",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "High (>0.5)",
+          "code": "high"
+        },
+        {
+          "name": "Low (<0.1)",
+          "code": "low"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 0.9",
+          "code": "u0.9"
+        },
+        {
+          "name": "Under 0.8",
+          "code": "u0.8"
+        },
+        {
+          "name": "Under 0.7",
+          "code": "u0.7"
+        },
+        {
+          "name": "Under 0.6",
+          "code": "u0.6"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Under 0.4",
+          "code": "u0.4"
+        },
+        {
+          "name": "Under 0.3",
+          "code": "u0.3"
+        },
+        {
+          "name": "Under 0.2",
+          "code": "u0.2"
+        },
+        {
+          "name": "Under 0.1",
+          "code": "u0.1"
+        },
+        {
+          "name": "Over 0.1",
+          "code": "o0.1"
+        },
+        {
+          "name": "Over 0.2",
+          "code": "o0.2"
+        },
+        {
+          "name": "Over 0.3",
+          "code": "o0.3"
+        },
+        {
+          "name": "Over 0.4",
+          "code": "o0.4"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 0.6",
+          "code": "o0.6"
+        },
+        {
+          "name": "Over 0.7",
+          "code": "o0.7"
+        },
+        {
+          "name": "Over 0.8",
+          "code": "o0.8"
+        },
+        {
+          "name": "Over 0.9",
+          "code": "o0.9"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        }
+      ]
+    },
+    {
+      "name": "Debt/Equity",
+      "code": "fa_debteq",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "High (>0.5)",
+          "code": "high"
+        },
+        {
+          "name": "Low (<0.1)",
+          "code": "low"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 0.9",
+          "code": "u0.9"
+        },
+        {
+          "name": "Under 0.8",
+          "code": "u0.8"
+        },
+        {
+          "name": "Under 0.7",
+          "code": "u0.7"
+        },
+        {
+          "name": "Under 0.6",
+          "code": "u0.6"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Under 0.4",
+          "code": "u0.4"
+        },
+        {
+          "name": "Under 0.3",
+          "code": "u0.3"
+        },
+        {
+          "name": "Under 0.2",
+          "code": "u0.2"
+        },
+        {
+          "name": "Under 0.1",
+          "code": "u0.1"
+        },
+        {
+          "name": "Over 0.1",
+          "code": "o0.1"
+        },
+        {
+          "name": "Over 0.2",
+          "code": "o0.2"
+        },
+        {
+          "name": "Over 0.3",
+          "code": "o0.3"
+        },
+        {
+          "name": "Over 0.4",
+          "code": "o0.4"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 0.6",
+          "code": "o0.6"
+        },
+        {
+          "name": "Over 0.7",
+          "code": "o0.7"
+        },
+        {
+          "name": "Over 0.8",
+          "code": "o0.8"
+        },
+        {
+          "name": "Over 0.9",
+          "code": "o0.9"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        }
+      ]
+    },
+    {
+      "name": "Gross Margin",
+      "code": "fa_grossmargin",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "High (>50%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 90%",
+          "code": "u90"
+        },
+        {
+          "name": "Under 80%",
+          "code": "u80"
+        },
+        {
+          "name": "Under 70%",
+          "code": "u70"
+        },
+        {
+          "name": "Under 60%",
+          "code": "u60"
+        },
+        {
+          "name": "Under 50%",
+          "code": "u50"
+        },
+        {
+          "name": "Under 45%",
+          "code": "u45"
+        },
+        {
+          "name": "Under 40%",
+          "code": "u40"
+        },
+        {
+          "name": "Under 35%",
+          "code": "u35"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 0%",
+          "code": "u0"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -70%",
+          "code": "u-70"
+        },
+        {
+          "name": "Under -100%",
+          "code": "u-100"
+        },
+        {
+          "name": "Over 0%",
+          "code": "o0"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Operating Margin",
+      "code": "fa_opermargin",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "High (>25%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 90%",
+          "code": "u90"
+        },
+        {
+          "name": "Under 80%",
+          "code": "u80"
+        },
+        {
+          "name": "Under 70%",
+          "code": "u70"
+        },
+        {
+          "name": "Under 60%",
+          "code": "u60"
+        },
+        {
+          "name": "Under 50%",
+          "code": "u50"
+        },
+        {
+          "name": "Under 45%",
+          "code": "u45"
+        },
+        {
+          "name": "Under 40%",
+          "code": "u40"
+        },
+        {
+          "name": "Under 35%",
+          "code": "u35"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 0%",
+          "code": "u0"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -70%",
+          "code": "u-70"
+        },
+        {
+          "name": "Under -100%",
+          "code": "u-100"
+        },
+        {
+          "name": "Over 0%",
+          "code": "o0"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Net Profit Margin",
+      "code": "fa_netmargin",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "High (>20%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 90%",
+          "code": "u90"
+        },
+        {
+          "name": "Under 80%",
+          "code": "u80"
+        },
+        {
+          "name": "Under 70%",
+          "code": "u70"
+        },
+        {
+          "name": "Under 60%",
+          "code": "u60"
+        },
+        {
+          "name": "Under 50%",
+          "code": "u50"
+        },
+        {
+          "name": "Under 45%",
+          "code": "u45"
+        },
+        {
+          "name": "Under 40%",
+          "code": "u40"
+        },
+        {
+          "name": "Under 35%",
+          "code": "u35"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 0%",
+          "code": "u0"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -70%",
+          "code": "u-70"
+        },
+        {
+          "name": "Under -100%",
+          "code": "u-100"
+        },
+        {
+          "name": "Over 0%",
+          "code": "o0"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Payout Ratio",
+      "code": "fa_payoutratio",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "None (0%)",
+          "code": "none"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Low (<20%)",
+          "code": "low"
+        },
+        {
+          "name": "High (>50%)",
+          "code": "high"
+        },
+        {
+          "name": "Over 0%",
+          "code": "o0"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        },
+        {
+          "name": "Over 100%",
+          "code": "o100"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Under 40%",
+          "code": "u40"
+        },
+        {
+          "name": "Under 50%",
+          "code": "u50"
+        },
+        {
+          "name": "Under 60%",
+          "code": "u60"
+        },
+        {
+          "name": "Under 70%",
+          "code": "u70"
+        },
+        {
+          "name": "Under 80%",
+          "code": "u80"
+        },
+        {
+          "name": "Under 90%",
+          "code": "u90"
+        },
+        {
+          "name": "Under 100%",
+          "code": "u100"
+        }
+      ]
+    },
+    {
+      "name": "Insider Ownership",
+      "code": "sh_insiderown",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<5%)",
+          "code": "low"
+        },
+        {
+          "name": "High (>30%)",
+          "code": "high"
+        },
+        {
+          "name": "Very High (>50%)",
+          "code": "veryhigh"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Insider Transactions",
+      "code": "sh_insidertrans",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Very Positive (>20%)",
+          "code": "verypos"
+        },
+        {
+          "name": "Under -90%",
+          "code": "u-90"
+        },
+        {
+          "name": "Under -80%",
+          "code": "u-80"
+        },
+        {
+          "name": "Under -70%",
+          "code": "u-70"
+        },
+        {
+          "name": "Under -60%",
+          "code": "u-60"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -45%",
+          "code": "u-45"
+        },
+        {
+          "name": "Under -40%",
+          "code": "u-40"
+        },
+        {
+          "name": "Under -35%",
+          "code": "u-35"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -25%",
+          "code": "u-25"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -15%",
+          "code": "u-15"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -5%",
+          "code": "u-5"
+        },
+        {
+          "name": "Over +5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over +10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over +15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over +20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over +25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over +30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over +35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over +40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over +45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over +50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over +60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over +70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over +80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over +90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Institutional Ownership",
+      "code": "sh_instown",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<5%)",
+          "code": "low"
+        },
+        {
+          "name": "High (>90%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 90%",
+          "code": "u90"
+        },
+        {
+          "name": "Under 80%",
+          "code": "u80"
+        },
+        {
+          "name": "Under 70%",
+          "code": "u70"
+        },
+        {
+          "name": "Under 60%",
+          "code": "u60"
+        },
+        {
+          "name": "Under 50%",
+          "code": "u50"
+        },
+        {
+          "name": "Under 40%",
+          "code": "u40"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over 40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over 50%",
+          "code": "o50"
+        },
+        {
+          "name": "Over 60%",
+          "code": "o60"
+        },
+        {
+          "name": "Over 70%",
+          "code": "o70"
+        },
+        {
+          "name": "Over 80%",
+          "code": "o80"
+        },
+        {
+          "name": "Over 90%",
+          "code": "o90"
+        }
+      ]
+    },
+    {
+      "name": "Institutional Transactions",
+      "code": "sh_insttrans",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Very Negative (<-15%)",
+          "code": "veryneg"
+        },
+        {
+          "name": "Negative (<0%)",
+          "code": "neg"
+        },
+        {
+          "name": "Positive (>0%)",
+          "code": "pos"
+        },
+        {
+          "name": "Very Positive (>20%)",
+          "code": "verypos"
+        },
+        {
+          "name": "Under -50%",
+          "code": "u-50"
+        },
+        {
+          "name": "Under -45%",
+          "code": "u-45"
+        },
+        {
+          "name": "Under -40%",
+          "code": "u-40"
+        },
+        {
+          "name": "Under -35%",
+          "code": "u-35"
+        },
+        {
+          "name": "Under -30%",
+          "code": "u-30"
+        },
+        {
+          "name": "Under -25%",
+          "code": "u-25"
+        },
+        {
+          "name": "Under -20%",
+          "code": "u-20"
+        },
+        {
+          "name": "Under -15%",
+          "code": "u-15"
+        },
+        {
+          "name": "Under -10%",
+          "code": "u-10"
+        },
+        {
+          "name": "Under -5%",
+          "code": "u-5"
+        },
+        {
+          "name": "Over +5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over +10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over +15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over +20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over +25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over +30%",
+          "code": "o30"
+        },
+        {
+          "name": "Over +35%",
+          "code": "o35"
+        },
+        {
+          "name": "Over +40%",
+          "code": "o40"
+        },
+        {
+          "name": "Over +45%",
+          "code": "o45"
+        },
+        {
+          "name": "Over +50%",
+          "code": "o50"
+        }
+      ]
+    },
+    {
+      "name": "Float Short",
+      "code": "sh_short",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Low (<5%)",
+          "code": "low"
+        },
+        {
+          "name": "High (>20%)",
+          "code": "high"
+        },
+        {
+          "name": "Under 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Under 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Under 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Under 25%",
+          "code": "u25"
+        },
+        {
+          "name": "Under 30%",
+          "code": "u30"
+        },
+        {
+          "name": "Over 5%",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10%",
+          "code": "o10"
+        },
+        {
+          "name": "Over 15%",
+          "code": "o15"
+        },
+        {
+          "name": "Over 20%",
+          "code": "o20"
+        },
+        {
+          "name": "Over 25%",
+          "code": "o25"
+        },
+        {
+          "name": "Over 30%",
+          "code": "o30"
+        }
+      ]
+    },
+    {
+      "name": "Analyst Recom.",
+      "code": "an_recom",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Strong Buy (1)",
+          "code": "strongbuy"
+        },
+        {
+          "name": "Buy or better",
+          "code": "buybetter"
+        },
+        {
+          "name": "Buy",
+          "code": "buy"
+        },
+        {
+          "name": "Hold or better",
+          "code": "holdbetter"
+        },
+        {
+          "name": "Hold",
+          "code": "hold"
+        },
+        {
+          "name": "Hold or worse",
+          "code": "holdworse"
+        },
+        {
+          "name": "Sell",
+          "code": "sell"
+        },
+        {
+          "name": "Sell or worse",
+          "code": "sellworse"
+        },
+        {
+          "name": "Strong Sell (5)",
+          "code": "strongsell"
+        }
+      ]
+    },
+    {
+      "name": "Option/Short",
+      "code": "sh_opt",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Optionable",
+          "code": "option"
+        },
+        {
+          "name": "Shortable",
+          "code": "short"
+        },
+        {
+          "name": "Optionable and shortable",
+          "code": "optionshort"
+        }
+      ]
+    },
+    {
+      "name": "Earnings Date",
+      "code": "earningsdate",
+      "type": "date",
+      "options": [
+        {
+          "name": "Today",
+          "code": "today"
+        },
+        {
+          "name": "Today Before Market Open",
+          "code": "todaybefore"
+        },
+        {
+          "name": "Today After Market Close",
+          "code": "todayafter"
+        },
+        {
+          "name": "Tomorrow",
+          "code": "tomorrow"
+        },
+        {
+          "name": "Tomorrow Before Market Open",
+          "code": "tomorrowbefore"
+        },
+        {
+          "name": "Tomorrow After Market Close",
+          "code": "tomorrowafter"
+        },
+        {
+          "name": "Yesterday",
+          "code": "yesterday"
+        },
+        {
+          "name": "Yesterday Before Market Open",
+          "code": "yesterdaybefore"
+        },
+        {
+          "name": "Yesterday After Market Close",
+          "code": "yesterdayafter"
+        },
+        {
+          "name": "Next 5 Days",
+          "code": "nextdays5"
+        },
+        {
+          "name": "Previous 5 Days",
+          "code": "prevdays5"
+        },
+        {
+          "name": "This Week",
+          "code": "thisweek"
+        },
+        {
+          "name": "Next Week",
+          "code": "nextweek"
+        },
+        {
+          "name": "Previous Week",
+          "code": "prevweek"
+        },
+        {
+          "name": "This Month",
+          "code": "thismonth"
+        }
+      ]
+    },
+    {
+      "name": "Performance",
+      "code": "ta_perf",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Today Up",
+          "code": "dup"
+        },
+        {
+          "name": "Today Down",
+          "code": "ddown"
+        },
+        {
+          "name": "Today -15%",
+          "code": "d15u"
+        },
+        {
+          "name": "Today -10%",
+          "code": "d10u"
+        },
+        {
+          "name": "Today -5%",
+          "code": "d5u"
+        },
+        {
+          "name": "Today +5%",
+          "code": "d5o"
+        },
+        {
+          "name": "Today +10%",
+          "code": "d10o"
+        },
+        {
+          "name": "Today +15%",
+          "code": "d15o"
+        },
+        {
+          "name": "Week -30%",
+          "code": "1w30u"
+        },
+        {
+          "name": "Week -20%",
+          "code": "1w20u"
+        },
+        {
+          "name": "Week -10%",
+          "code": "1w10u"
+        },
+        {
+          "name": "Week Down",
+          "code": "1wdown"
+        },
+        {
+          "name": "Week Up",
+          "code": "1wup"
+        },
+        {
+          "name": "Week +10%",
+          "code": "1w10o"
+        },
+        {
+          "name": "Week +20%",
+          "code": "1w20o"
+        },
+        {
+          "name": "Week +30%",
+          "code": "1w30o"
+        },
+        {
+          "name": "Month -50%",
+          "code": "4w50u"
+        },
+        {
+          "name": "Month -30%",
+          "code": "4w30u"
+        },
+        {
+          "name": "Month -20%",
+          "code": "4w20u"
+        },
+        {
+          "name": "Month -10%",
+          "code": "4w10u"
+        },
+        {
+          "name": "Month Down",
+          "code": "4wdown"
+        },
+        {
+          "name": "Month Up",
+          "code": "4wup"
+        },
+        {
+          "name": "Month +10%",
+          "code": "4w10o"
+        },
+        {
+          "name": "Month +20%",
+          "code": "4w20o"
+        },
+        {
+          "name": "Month +30%",
+          "code": "4w30o"
+        },
+        {
+          "name": "Month +50%",
+          "code": "4w50o"
+        },
+        {
+          "name": "Quarter -50%",
+          "code": "13w50u"
+        },
+        {
+          "name": "Quarter -30%",
+          "code": "13w30u"
+        },
+        {
+          "name": "Quarter -20%",
+          "code": "13w20u"
+        },
+        {
+          "name": "Quarter -10%",
+          "code": "13w10u"
+        },
+        {
+          "name": "Quarter Down",
+          "code": "13wdown"
+        },
+        {
+          "name": "Quarter Up",
+          "code": "13wup"
+        },
+        {
+          "name": "Quarter +10%",
+          "code": "13w10o"
+        },
+        {
+          "name": "Quarter +20%",
+          "code": "13w20o"
+        },
+        {
+          "name": "Quarter +30%",
+          "code": "13w30o"
+        },
+        {
+          "name": "Quarter +50%",
+          "code": "13w50o"
+        },
+        {
+          "name": "Half -75%",
+          "code": "26w75u"
+        },
+        {
+          "name": "Half -50%",
+          "code": "26w50u"
+        },
+        {
+          "name": "Half -30%",
+          "code": "26w30u"
+        },
+        {
+          "name": "Half -20%",
+          "code": "26w20u"
+        },
+        {
+          "name": "Half -10%",
+          "code": "26w10u"
+        },
+        {
+          "name": "Half Down",
+          "code": "26wdown"
+        },
+        {
+          "name": "Half Up",
+          "code": "26wup"
+        },
+        {
+          "name": "Half +10%",
+          "code": "26w10o"
+        },
+        {
+          "name": "Half +20%",
+          "code": "26w20o"
+        },
+        {
+          "name": "Half +30%",
+          "code": "26w30o"
+        },
+        {
+          "name": "Half +50%",
+          "code": "26w50o"
+        },
+        {
+          "name": "Half +100%",
+          "code": "26w100o"
+        },
+        {
+          "name": "Year -75%",
+          "code": "52w75u"
+        },
+        {
+          "name": "Year -50%",
+          "code": "52w50u"
+        },
+        {
+          "name": "Year -30%",
+          "code": "52w30u"
+        },
+        {
+          "name": "Year -20%",
+          "code": "52w20u"
+        },
+        {
+          "name": "Year -10%",
+          "code": "52w10u"
+        },
+        {
+          "name": "Year Down",
+          "code": "52wdown"
+        },
+        {
+          "name": "Year Up",
+          "code": "52wup"
+        },
+        {
+          "name": "Year +10%",
+          "code": "52w10o"
+        },
+        {
+          "name": "Year +20%",
+          "code": "52w20o"
+        },
+        {
+          "name": "Year +30%",
+          "code": "52w30o"
+        },
+        {
+          "name": "Year +50%",
+          "code": "52w50o"
+        },
+        {
+          "name": "Year +100%",
+          "code": "52w100o"
+        },
+        {
+          "name": "Year +200%",
+          "code": "52w200o"
+        },
+        {
+          "name": "Year +300%",
+          "code": "52w300o"
+        },
+        {
+          "name": "Year +500%",
+          "code": "52w500o"
+        },
+        {
+          "name": "YTD -75%",
+          "code": "ytd75u"
+        },
+        {
+          "name": "YTD -50%",
+          "code": "ytd50u"
+        },
+        {
+          "name": "YTD -30%",
+          "code": "ytd30u"
+        },
+        {
+          "name": "YTD -20%",
+          "code": "ytd20u"
+        },
+        {
+          "name": "YTD -10%",
+          "code": "ytd10u"
+        },
+        {
+          "name": "YTD -5%",
+          "code": "ytd5u"
+        },
+        {
+          "name": "YTD Down",
+          "code": "ytddown"
+        },
+        {
+          "name": "YTD Up",
+          "code": "ytdup"
+        },
+        {
+          "name": "YTD +5%",
+          "code": "ytd5o"
+        },
+        {
+          "name": "YTD +10%",
+          "code": "ytd10o"
+        },
+        {
+          "name": "YTD +20%",
+          "code": "ytd20o"
+        },
+        {
+          "name": "YTD +30%",
+          "code": "ytd30o"
+        },
+        {
+          "name": "YTD +50%",
+          "code": "ytd50o"
+        },
+        {
+          "name": "YTD +100%",
+          "code": "ytd100o"
+        }
+      ]
+    },
+    {
+      "name": "Performance 2",
+      "code": "ta_perf2",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Today Up",
+          "code": "dup"
+        },
+        {
+          "name": "Today Down",
+          "code": "ddown"
+        },
+        {
+          "name": "Today -15%",
+          "code": "d15u"
+        },
+        {
+          "name": "Today -10%",
+          "code": "d10u"
+        },
+        {
+          "name": "Today -5%",
+          "code": "d5u"
+        },
+        {
+          "name": "Today +5%",
+          "code": "d5o"
+        },
+        {
+          "name": "Today +10%",
+          "code": "d10o"
+        },
+        {
+          "name": "Today +15%",
+          "code": "d15o"
+        },
+        {
+          "name": "Week -30%",
+          "code": "1w30u"
+        },
+        {
+          "name": "Week -20%",
+          "code": "1w20u"
+        },
+        {
+          "name": "Week -10%",
+          "code": "1w10u"
+        },
+        {
+          "name": "Week Down",
+          "code": "1wdown"
+        },
+        {
+          "name": "Week Up",
+          "code": "1wup"
+        },
+        {
+          "name": "Week +10%",
+          "code": "1w10o"
+        },
+        {
+          "name": "Week +20%",
+          "code": "1w20o"
+        },
+        {
+          "name": "Week +30%",
+          "code": "1w30o"
+        },
+        {
+          "name": "Month -50%",
+          "code": "4w50u"
+        },
+        {
+          "name": "Month -30%",
+          "code": "4w30u"
+        },
+        {
+          "name": "Month -20%",
+          "code": "4w20u"
+        },
+        {
+          "name": "Month -10%",
+          "code": "4w10u"
+        },
+        {
+          "name": "Month Down",
+          "code": "4wdown"
+        },
+        {
+          "name": "Month Up",
+          "code": "4wup"
+        },
+        {
+          "name": "Month +10%",
+          "code": "4w10o"
+        },
+        {
+          "name": "Month +20%",
+          "code": "4w20o"
+        },
+        {
+          "name": "Month +30%",
+          "code": "4w30o"
+        },
+        {
+          "name": "Month +50%",
+          "code": "4w50o"
+        },
+        {
+          "name": "Quarter -50%",
+          "code": "13w50u"
+        },
+        {
+          "name": "Quarter -30%",
+          "code": "13w30u"
+        },
+        {
+          "name": "Quarter -20%",
+          "code": "13w20u"
+        },
+        {
+          "name": "Quarter -10%",
+          "code": "13w10u"
+        },
+        {
+          "name": "Quarter Down",
+          "code": "13wdown"
+        },
+        {
+          "name": "Quarter Up",
+          "code": "13wup"
+        },
+        {
+          "name": "Quarter +10%",
+          "code": "13w10o"
+        },
+        {
+          "name": "Quarter +20%",
+          "code": "13w20o"
+        },
+        {
+          "name": "Quarter +30%",
+          "code": "13w30o"
+        },
+        {
+          "name": "Quarter +50%",
+          "code": "13w50o"
+        },
+        {
+          "name": "Half -75%",
+          "code": "26w75u"
+        },
+        {
+          "name": "Half -50%",
+          "code": "26w50u"
+        },
+        {
+          "name": "Half -30%",
+          "code": "26w30u"
+        },
+        {
+          "name": "Half -20%",
+          "code": "26w20u"
+        },
+        {
+          "name": "Half -10%",
+          "code": "26w10u"
+        },
+        {
+          "name": "Half Down",
+          "code": "26wdown"
+        },
+        {
+          "name": "Half Up",
+          "code": "26wup"
+        },
+        {
+          "name": "Half +10%",
+          "code": "26w10o"
+        },
+        {
+          "name": "Half +20%",
+          "code": "26w20o"
+        },
+        {
+          "name": "Half +30%",
+          "code": "26w30o"
+        },
+        {
+          "name": "Half +50%",
+          "code": "26w50o"
+        },
+        {
+          "name": "Half +100%",
+          "code": "26w100o"
+        },
+        {
+          "name": "Year -75%",
+          "code": "52w75u"
+        },
+        {
+          "name": "Year -50%",
+          "code": "52w50u"
+        },
+        {
+          "name": "Year -30%",
+          "code": "52w30u"
+        },
+        {
+          "name": "Year -20%",
+          "code": "52w20u"
+        },
+        {
+          "name": "Year -10%",
+          "code": "52w10u"
+        },
+        {
+          "name": "Year Down",
+          "code": "52wdown"
+        },
+        {
+          "name": "Year Up",
+          "code": "52wup"
+        },
+        {
+          "name": "Year +10%",
+          "code": "52w10o"
+        },
+        {
+          "name": "Year +20%",
+          "code": "52w20o"
+        },
+        {
+          "name": "Year +30%",
+          "code": "52w30o"
+        },
+        {
+          "name": "Year +50%",
+          "code": "52w50o"
+        },
+        {
+          "name": "Year +100%",
+          "code": "52w100o"
+        },
+        {
+          "name": "Year +200%",
+          "code": "52w200o"
+        },
+        {
+          "name": "Year +300%",
+          "code": "52w300o"
+        },
+        {
+          "name": "Year +500%",
+          "code": "52w500o"
+        },
+        {
+          "name": "YTD -75%",
+          "code": "ytd75u"
+        },
+        {
+          "name": "YTD -50%",
+          "code": "ytd50u"
+        },
+        {
+          "name": "YTD -30%",
+          "code": "ytd30u"
+        },
+        {
+          "name": "YTD -20%",
+          "code": "ytd20u"
+        },
+        {
+          "name": "YTD -10%",
+          "code": "ytd10u"
+        },
+        {
+          "name": "YTD -5%",
+          "code": "ytd5u"
+        },
+        {
+          "name": "YTD Down",
+          "code": "ytddown"
+        },
+        {
+          "name": "YTD Up",
+          "code": "ytdup"
+        },
+        {
+          "name": "YTD +5%",
+          "code": "ytd5o"
+        },
+        {
+          "name": "YTD +10%",
+          "code": "ytd10o"
+        },
+        {
+          "name": "YTD +20%",
+          "code": "ytd20o"
+        },
+        {
+          "name": "YTD +30%",
+          "code": "ytd30o"
+        },
+        {
+          "name": "YTD +50%",
+          "code": "ytd50o"
+        },
+        {
+          "name": "YTD +100%",
+          "code": "ytd100o"
+        }
+      ]
+    },
+    {
+      "name": "Volatility",
+      "code": "ta_volatility",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Week - Over 3%",
+          "code": "wo3"
+        },
+        {
+          "name": "Week - Over 4%",
+          "code": "wo4"
+        },
+        {
+          "name": "Week - Over 5%",
+          "code": "wo5"
+        },
+        {
+          "name": "Week - Over 6%",
+          "code": "wo6"
+        },
+        {
+          "name": "Week - Over 7%",
+          "code": "wo7"
+        },
+        {
+          "name": "Week - Over 8%",
+          "code": "wo8"
+        },
+        {
+          "name": "Week - Over 9%",
+          "code": "wo9"
+        },
+        {
+          "name": "Week - Over 10%",
+          "code": "wo10"
+        },
+        {
+          "name": "Week - Over 12%",
+          "code": "wo12"
+        },
+        {
+          "name": "Week - Over 15%",
+          "code": "wo15"
+        },
+        {
+          "name": "Month - Over 2%",
+          "code": "mo2"
+        },
+        {
+          "name": "Month - Over 3%",
+          "code": "mo3"
+        },
+        {
+          "name": "Month - Over 4%",
+          "code": "mo4"
+        },
+        {
+          "name": "Month - Over 5%",
+          "code": "mo5"
+        },
+        {
+          "name": "Month - Over 6%",
+          "code": "mo6"
+        },
+        {
+          "name": "Month - Over 7%",
+          "code": "mo7"
+        },
+        {
+          "name": "Month - Over 8%",
+          "code": "mo8"
+        },
+        {
+          "name": "Month - Over 9%",
+          "code": "mo9"
+        },
+        {
+          "name": "Month - Over 10%",
+          "code": "mo10"
+        },
+        {
+          "name": "Month - Over 12%",
+          "code": "mo12"
+        },
+        {
+          "name": "Month - Over 15%",
+          "code": "mo15"
+        }
+      ]
+    },
+    {
+      "name": "RSI (14)",
+      "code": "ta_rsi",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Overbought (90)",
+          "code": "ob90"
+        },
+        {
+          "name": "Overbought (80)",
+          "code": "ob80"
+        },
+        {
+          "name": "Overbought (70)",
+          "code": "ob70"
+        },
+        {
+          "name": "Overbought (60)",
+          "code": "ob60"
+        },
+        {
+          "name": "Oversold (40)",
+          "code": "os40"
+        },
+        {
+          "name": "Oversold (30)",
+          "code": "os30"
+        },
+        {
+          "name": "Oversold (20)",
+          "code": "os20"
+        },
+        {
+          "name": "Oversold (10)",
+          "code": "os10"
+        },
+        {
+          "name": "Not Overbought (<60)",
+          "code": "nob60"
+        },
+        {
+          "name": "Not Overbought (<50)",
+          "code": "nob50"
+        },
+        {
+          "name": "Not Oversold (>50)",
+          "code": "nos50"
+        },
+        {
+          "name": "Not Oversold (>40)",
+          "code": "nos40"
+        }
+      ]
+    },
+    {
+      "name": "Gap",
+      "code": "ta_gap",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Up",
+          "code": "u"
+        },
+        {
+          "name": "Up 0%",
+          "code": "u0"
+        },
+        {
+          "name": "Up 1%",
+          "code": "u1"
+        },
+        {
+          "name": "Up 2%",
+          "code": "u2"
+        },
+        {
+          "name": "Up 3%",
+          "code": "u3"
+        },
+        {
+          "name": "Up 4%",
+          "code": "u4"
+        },
+        {
+          "name": "Up 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Up 6%",
+          "code": "u6"
+        },
+        {
+          "name": "Up 7%",
+          "code": "u7"
+        },
+        {
+          "name": "Up 8%",
+          "code": "u8"
+        },
+        {
+          "name": "Up 9%",
+          "code": "u9"
+        },
+        {
+          "name": "Up 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Up 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Up 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Down",
+          "code": "d"
+        },
+        {
+          "name": "Down 0%",
+          "code": "d0"
+        },
+        {
+          "name": "Down 1%",
+          "code": "d1"
+        },
+        {
+          "name": "Down 2%",
+          "code": "d2"
+        },
+        {
+          "name": "Down 3%",
+          "code": "d3"
+        },
+        {
+          "name": "Down 4%",
+          "code": "d4"
+        },
+        {
+          "name": "Down 5%",
+          "code": "d5"
+        },
+        {
+          "name": "Down 6%",
+          "code": "d6"
+        },
+        {
+          "name": "Down 7%",
+          "code": "d7"
+        },
+        {
+          "name": "Down 8%",
+          "code": "d8"
+        },
+        {
+          "name": "Down 9%",
+          "code": "d9"
+        },
+        {
+          "name": "Down 10%",
+          "code": "d10"
+        },
+        {
+          "name": "Down 15%",
+          "code": "d15"
+        },
+        {
+          "name": "Down 20%",
+          "code": "d20"
+        }
+      ]
+    },
+    {
+      "name": "20-Day Simple Moving Average",
+      "code": "ta_sma20",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Price below SMA20",
+          "code": "pb"
+        },
+        {
+          "name": "Price 10% below SMA20",
+          "code": "pb10"
+        },
+        {
+          "name": "Price 20% below SMA20",
+          "code": "pb20"
+        },
+        {
+          "name": "Price 30% below SMA20",
+          "code": "pb30"
+        },
+        {
+          "name": "Price 40% below SMA20",
+          "code": "pb40"
+        },
+        {
+          "name": "Price 50% below SMA20",
+          "code": "pb50"
+        },
+        {
+          "name": "Price above SMA20",
+          "code": "pa"
+        },
+        {
+          "name": "Price 10% above SMA20",
+          "code": "pa10"
+        },
+        {
+          "name": "Price 20% above SMA20",
+          "code": "pa20"
+        },
+        {
+          "name": "Price 30% above SMA20",
+          "code": "pa30"
+        },
+        {
+          "name": "Price 40% above SMA20",
+          "code": "pa40"
+        },
+        {
+          "name": "Price 50% above SMA20",
+          "code": "pa50"
+        },
+        {
+          "name": "Price crossed SMA20",
+          "code": "pc"
+        },
+        {
+          "name": "Price crossed SMA20 above",
+          "code": "pca"
+        },
+        {
+          "name": "Price crossed SMA20 below",
+          "code": "pcb"
+        },
+        {
+          "name": "SMA20 crossed SMA50",
+          "code": "cross50"
+        },
+        {
+          "name": "SMA20 crossed SMA50 above",
+          "code": "cross50a"
+        },
+        {
+          "name": "SMA20 crossed SMA50 below",
+          "code": "cross50b"
+        },
+        {
+          "name": "SMA20 crossed SMA200",
+          "code": "cross200"
+        },
+        {
+          "name": "SMA20 crossed SMA200 above",
+          "code": "cross200a"
+        },
+        {
+          "name": "SMA20 crossed SMA200 below",
+          "code": "cross200b"
+        },
+        {
+          "name": "SMA20 above SMA50",
+          "code": "sa50"
+        },
+        {
+          "name": "SMA20 below SMA50",
+          "code": "sb50"
+        },
+        {
+          "name": "SMA20 above SMA200",
+          "code": "sa200"
+        },
+        {
+          "name": "SMA20 below SMA200",
+          "code": "sb200"
+        }
+      ]
+    },
+    {
+      "name": "50-Day Simple Moving Average",
+      "code": "ta_sma50",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Price below SMA50",
+          "code": "pb"
+        },
+        {
+          "name": "Price 10% below SMA50",
+          "code": "pb10"
+        },
+        {
+          "name": "Price 20% below SMA50",
+          "code": "pb20"
+        },
+        {
+          "name": "Price 30% below SMA50",
+          "code": "pb30"
+        },
+        {
+          "name": "Price 40% below SMA50",
+          "code": "pb40"
+        },
+        {
+          "name": "Price 50% below SMA50",
+          "code": "pb50"
+        },
+        {
+          "name": "Price above SMA50",
+          "code": "pa"
+        },
+        {
+          "name": "Price 10% above SMA50",
+          "code": "pa10"
+        },
+        {
+          "name": "Price 20% above SMA50",
+          "code": "pa20"
+        },
+        {
+          "name": "Price 30% above SMA50",
+          "code": "pa30"
+        },
+        {
+          "name": "Price 40% above SMA50",
+          "code": "pa40"
+        },
+        {
+          "name": "Price 50% above SMA50",
+          "code": "pa50"
+        },
+        {
+          "name": "Price crossed SMA50",
+          "code": "pc"
+        },
+        {
+          "name": "Price crossed SMA50 above",
+          "code": "pca"
+        },
+        {
+          "name": "Price crossed SMA50 below",
+          "code": "pcb"
+        },
+        {
+          "name": "SMA50 crossed SMA20",
+          "code": "cross20"
+        },
+        {
+          "name": "SMA50 crossed SMA20 above",
+          "code": "cross20a"
+        },
+        {
+          "name": "SMA50 crossed SMA20 below",
+          "code": "cross20b"
+        },
+        {
+          "name": "SMA50 crossed SMA200",
+          "code": "cross200"
+        },
+        {
+          "name": "SMA50 crossed SMA200 above",
+          "code": "cross200a"
+        },
+        {
+          "name": "SMA50 crossed SMA200 below",
+          "code": "cross200b"
+        },
+        {
+          "name": "SMA50 above SMA20",
+          "code": "sa20"
+        },
+        {
+          "name": "SMA50 below SMA20",
+          "code": "sb20"
+        },
+        {
+          "name": "SMA50 above SMA200",
+          "code": "sa200"
+        },
+        {
+          "name": "SMA50 below SMA200",
+          "code": "sb200"
+        }
+      ]
+    },
+    {
+      "name": "200-Day Simple Moving Average",
+      "code": "ta_sma200",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Price below SMA200",
+          "code": "pb"
+        },
+        {
+          "name": "Price 10% below SMA200",
+          "code": "pb10"
+        },
+        {
+          "name": "Price 20% below SMA200",
+          "code": "pb20"
+        },
+        {
+          "name": "Price 30% below SMA200",
+          "code": "pb30"
+        },
+        {
+          "name": "Price 40% below SMA200",
+          "code": "pb40"
+        },
+        {
+          "name": "Price 50% below SMA200",
+          "code": "pb50"
+        },
+        {
+          "name": "Price 60% below SMA200",
+          "code": "pb60"
+        },
+        {
+          "name": "Price 70% below SMA200",
+          "code": "pb70"
+        },
+        {
+          "name": "Price 80% below SMA200",
+          "code": "pb80"
+        },
+        {
+          "name": "Price 90% below SMA200",
+          "code": "pb90"
+        },
+        {
+          "name": "Price above SMA200",
+          "code": "pa"
+        },
+        {
+          "name": "Price 10% above SMA200",
+          "code": "pa10"
+        },
+        {
+          "name": "Price 20% above SMA200",
+          "code": "pa20"
+        },
+        {
+          "name": "Price 30% above SMA200",
+          "code": "pa30"
+        },
+        {
+          "name": "Price 40% above SMA200",
+          "code": "pa40"
+        },
+        {
+          "name": "Price 50% above SMA200",
+          "code": "pa50"
+        },
+        {
+          "name": "Price 60% above SMA200",
+          "code": "pa60"
+        },
+        {
+          "name": "Price 70% above SMA200",
+          "code": "pa70"
+        },
+        {
+          "name": "Price 80% above SMA200",
+          "code": "pa80"
+        },
+        {
+          "name": "Price 90% above SMA200",
+          "code": "pa90"
+        },
+        {
+          "name": "Price 100% above SMA200",
+          "code": "pa100"
+        },
+        {
+          "name": "Price crossed SMA200",
+          "code": "pc"
+        },
+        {
+          "name": "Price crossed SMA200 above",
+          "code": "pca"
+        },
+        {
+          "name": "Price crossed SMA200 below",
+          "code": "pcb"
+        },
+        {
+          "name": "SMA200 crossed SMA20",
+          "code": "cross20"
+        },
+        {
+          "name": "SMA200 crossed SMA20 above",
+          "code": "cross20a"
+        },
+        {
+          "name": "SMA200 crossed SMA20 below",
+          "code": "cross20b"
+        },
+        {
+          "name": "SMA200 crossed SMA50",
+          "code": "cross50"
+        },
+        {
+          "name": "SMA200 crossed SMA50 above",
+          "code": "cross50a"
+        },
+        {
+          "name": "SMA200 crossed SMA50 below",
+          "code": "cross50b"
+        },
+        {
+          "name": "SMA200 above SMA20",
+          "code": "sa20"
+        },
+        {
+          "name": "SMA200 below SMA20",
+          "code": "sb20"
+        },
+        {
+          "name": "SMA200 above SMA50",
+          "code": "sa50"
+        },
+        {
+          "name": "SMA200 below SMA50",
+          "code": "sb50"
+        }
+      ]
+    },
+    {
+      "name": "Change",
+      "code": "ta_change",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Up",
+          "code": "u"
+        },
+        {
+          "name": "Up 1%",
+          "code": "u1"
+        },
+        {
+          "name": "Up 2%",
+          "code": "u2"
+        },
+        {
+          "name": "Up 3%",
+          "code": "u3"
+        },
+        {
+          "name": "Up 4%",
+          "code": "u4"
+        },
+        {
+          "name": "Up 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Up 6%",
+          "code": "u6"
+        },
+        {
+          "name": "Up 7%",
+          "code": "u7"
+        },
+        {
+          "name": "Up 8%",
+          "code": "u8"
+        },
+        {
+          "name": "Up 9%",
+          "code": "u9"
+        },
+        {
+          "name": "Up 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Up 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Up 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Down",
+          "code": "d"
+        },
+        {
+          "name": "Down 1%",
+          "code": "d1"
+        },
+        {
+          "name": "Down 2%",
+          "code": "d2"
+        },
+        {
+          "name": "Down 3%",
+          "code": "d3"
+        },
+        {
+          "name": "Down 4%",
+          "code": "d4"
+        },
+        {
+          "name": "Down 5%",
+          "code": "d5"
+        },
+        {
+          "name": "Down 6%",
+          "code": "d6"
+        },
+        {
+          "name": "Down 7%",
+          "code": "d7"
+        },
+        {
+          "name": "Down 8%",
+          "code": "d8"
+        },
+        {
+          "name": "Down 9%",
+          "code": "d9"
+        },
+        {
+          "name": "Down 10%",
+          "code": "d10"
+        },
+        {
+          "name": "Down 15%",
+          "code": "d15"
+        },
+        {
+          "name": "Down 20%",
+          "code": "d20"
+        }
+      ]
+    },
+    {
+      "name": "Change from Open",
+      "code": "ta_changeopen",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Up",
+          "code": "u"
+        },
+        {
+          "name": "Up 1%",
+          "code": "u1"
+        },
+        {
+          "name": "Up 2%",
+          "code": "u2"
+        },
+        {
+          "name": "Up 3%",
+          "code": "u3"
+        },
+        {
+          "name": "Up 4%",
+          "code": "u4"
+        },
+        {
+          "name": "Up 5%",
+          "code": "u5"
+        },
+        {
+          "name": "Up 6%",
+          "code": "u6"
+        },
+        {
+          "name": "Up 7%",
+          "code": "u7"
+        },
+        {
+          "name": "Up 8%",
+          "code": "u8"
+        },
+        {
+          "name": "Up 9%",
+          "code": "u9"
+        },
+        {
+          "name": "Up 10%",
+          "code": "u10"
+        },
+        {
+          "name": "Up 15%",
+          "code": "u15"
+        },
+        {
+          "name": "Up 20%",
+          "code": "u20"
+        },
+        {
+          "name": "Down",
+          "code": "d"
+        },
+        {
+          "name": "Down 1%",
+          "code": "d1"
+        },
+        {
+          "name": "Down 2%",
+          "code": "d2"
+        },
+        {
+          "name": "Down 3%",
+          "code": "d3"
+        },
+        {
+          "name": "Down 4%",
+          "code": "d4"
+        },
+        {
+          "name": "Down 5%",
+          "code": "d5"
+        },
+        {
+          "name": "Down 6%",
+          "code": "d6"
+        },
+        {
+          "name": "Down 7%",
+          "code": "d7"
+        },
+        {
+          "name": "Down 8%",
+          "code": "d8"
+        },
+        {
+          "name": "Down 9%",
+          "code": "d9"
+        },
+        {
+          "name": "Down 10%",
+          "code": "d10"
+        },
+        {
+          "name": "Down 15%",
+          "code": "d15"
+        },
+        {
+          "name": "Down 20%",
+          "code": "d20"
+        }
+      ]
+    },
+    {
+      "name": "20-Day High/Low",
+      "code": "ta_highlow20d",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "New High",
+          "code": "nh"
+        },
+        {
+          "name": "New Low",
+          "code": "nl"
+        },
+        {
+          "name": "5% or more below High",
+          "code": "b5h"
+        },
+        {
+          "name": "10% or more below High",
+          "code": "b10h"
+        },
+        {
+          "name": "15% or more below High",
+          "code": "b15h"
+        },
+        {
+          "name": "20% or more below High",
+          "code": "b20h"
+        },
+        {
+          "name": "30% or more below High",
+          "code": "b30h"
+        },
+        {
+          "name": "40% or more below High",
+          "code": "b40h"
+        },
+        {
+          "name": "50% or more below High",
+          "code": "b50h"
+        },
+        {
+          "name": "0-3% below High",
+          "code": "b0to3h"
+        },
+        {
+          "name": "0-5% below High",
+          "code": "b0to5h"
+        },
+        {
+          "name": "0-10% below High",
+          "code": "b0to10h"
+        },
+        {
+          "name": "5% or more above Low",
+          "code": "a5h"
+        },
+        {
+          "name": "10% or more above Low",
+          "code": "a10h"
+        },
+        {
+          "name": "15% or more above Low",
+          "code": "a15h"
+        },
+        {
+          "name": "20% or more above Low",
+          "code": "a20h"
+        },
+        {
+          "name": "30% or more above Low",
+          "code": "a30h"
+        },
+        {
+          "name": "40% or more above Low",
+          "code": "a40h"
+        },
+        {
+          "name": "50% or more above Low",
+          "code": "a50h"
+        },
+        {
+          "name": "0-3% above Low",
+          "code": "a0to3h"
+        },
+        {
+          "name": "0-5% above Low",
+          "code": "a0to5h"
+        },
+        {
+          "name": "0-10% above Low",
+          "code": "a0to10h"
+        }
+      ]
+    },
+    {
+      "name": "50-Day High/Low",
+      "code": "ta_highlow50d",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "New High",
+          "code": "nh"
+        },
+        {
+          "name": "New Low",
+          "code": "nl"
+        },
+        {
+          "name": "5% or more below High",
+          "code": "b5h"
+        },
+        {
+          "name": "10% or more below High",
+          "code": "b10h"
+        },
+        {
+          "name": "15% or more below High",
+          "code": "b15h"
+        },
+        {
+          "name": "20% or more below High",
+          "code": "b20h"
+        },
+        {
+          "name": "30% or more below High",
+          "code": "b30h"
+        },
+        {
+          "name": "40% or more below High",
+          "code": "b40h"
+        },
+        {
+          "name": "50% or more below High",
+          "code": "b50h"
+        },
+        {
+          "name": "0-3% below High",
+          "code": "b0to3h"
+        },
+        {
+          "name": "0-5% below High",
+          "code": "b0to5h"
+        },
+        {
+          "name": "0-10% below High",
+          "code": "b0to10h"
+        },
+        {
+          "name": "5% or more above Low",
+          "code": "a5h"
+        },
+        {
+          "name": "10% or more above Low",
+          "code": "a10h"
+        },
+        {
+          "name": "15% or more above Low",
+          "code": "a15h"
+        },
+        {
+          "name": "20% or more above Low",
+          "code": "a20h"
+        },
+        {
+          "name": "30% or more above Low",
+          "code": "a30h"
+        },
+        {
+          "name": "40% or more above Low",
+          "code": "a40h"
+        },
+        {
+          "name": "50% or more above Low",
+          "code": "a50h"
+        },
+        {
+          "name": "0-3% above Low",
+          "code": "a0to3h"
+        },
+        {
+          "name": "0-5% above Low",
+          "code": "a0to5h"
+        },
+        {
+          "name": "0-10% above Low",
+          "code": "a0to10h"
+        }
+      ]
+    },
+    {
+      "name": "52-Week High/Low",
+      "code": "ta_highlow52w",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "New High",
+          "code": "nh"
+        },
+        {
+          "name": "New Low",
+          "code": "nl"
+        },
+        {
+          "name": "5% or more below High",
+          "code": "b5h"
+        },
+        {
+          "name": "10% or more below High",
+          "code": "b10h"
+        },
+        {
+          "name": "15% or more below High",
+          "code": "b15h"
+        },
+        {
+          "name": "20% or more below High",
+          "code": "b20h"
+        },
+        {
+          "name": "30% or more below High",
+          "code": "b30h"
+        },
+        {
+          "name": "40% or more below High",
+          "code": "b40h"
+        },
+        {
+          "name": "50% or more below High",
+          "code": "b50h"
+        },
+        {
+          "name": "60% or more below High",
+          "code": "b60h"
+        },
+        {
+          "name": "70% or more below High",
+          "code": "b70h"
+        },
+        {
+          "name": "80% or more below High",
+          "code": "b80h"
+        },
+        {
+          "name": "90% or more below High",
+          "code": "b90h"
+        },
+        {
+          "name": "0-3% below High",
+          "code": "b0to3h"
+        },
+        {
+          "name": "0-5% below High",
+          "code": "b0to5h"
+        },
+        {
+          "name": "0-10% below High",
+          "code": "b0to10h"
+        },
+        {
+          "name": "5% or more above Low",
+          "code": "a5h"
+        },
+        {
+          "name": "10% or more above Low",
+          "code": "a10h"
+        },
+        {
+          "name": "15% or more above Low",
+          "code": "a15h"
+        },
+        {
+          "name": "20% or more above Low",
+          "code": "a20h"
+        },
+        {
+          "name": "30% or more above Low",
+          "code": "a30h"
+        },
+        {
+          "name": "40% or more above Low",
+          "code": "a40h"
+        },
+        {
+          "name": "50% or more above Low",
+          "code": "a50h"
+        },
+        {
+          "name": "60% or more above Low",
+          "code": "a60h"
+        },
+        {
+          "name": "70% or more above Low",
+          "code": "a70h"
+        },
+        {
+          "name": "80% or more above Low",
+          "code": "a80h"
+        },
+        {
+          "name": "90% or more above Low",
+          "code": "a90h"
+        },
+        {
+          "name": "100% or more above Low",
+          "code": "a100h"
+        },
+        {
+          "name": "120% or more above Low",
+          "code": "a120h"
+        },
+        {
+          "name": "150% or more above Low",
+          "code": "a150h"
+        },
+        {
+          "name": "200% or more above Low",
+          "code": "a200h"
+        },
+        {
+          "name": "300% or more above Low",
+          "code": "a300h"
+        },
+        {
+          "name": "500% or more above Low",
+          "code": "a500h"
+        },
+        {
+          "name": "0-3% above Low",
+          "code": "a0to3h"
+        },
+        {
+          "name": "0-5% above Low",
+          "code": "a0to5h"
+        },
+        {
+          "name": "0-10% above Low",
+          "code": "a0to10h"
+        }
+      ]
+    },
+    {
+      "name": "Pattern",
+      "code": "ta_pattern",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Horizontal S/R",
+          "code": "horizontal"
+        },
+        {
+          "name": "Horizontal S/R (Strong)",
+          "code": "horizontal2"
+        },
+        {
+          "name": "TL Resistance",
+          "code": "tlresistance"
+        },
+        {
+          "name": "TL Resistance (Strong)",
+          "code": "tlresistance2"
+        },
+        {
+          "name": "TL Support",
+          "code": "tlsupport"
+        },
+        {
+          "name": "TL Support (Strong)",
+          "code": "tlsupport2"
+        },
+        {
+          "name": "Wedge Up",
+          "code": "wedgeup"
+        },
+        {
+          "name": "Wedge Up (Strong)",
+          "code": "wedgeup2"
+        },
+        {
+          "name": "Wedge Down",
+          "code": "wedgedown"
+        },
+        {
+          "name": "Wedge Down (Strong)",
+          "code": "wedgedown2"
+        },
+        {
+          "name": "Triangle Ascending",
+          "code": "wedgeresistance"
+        },
+        {
+          "name": "Triangle Ascending (Strong)",
+          "code": "wedgeresistance2"
+        },
+        {
+          "name": "Triangle Descending",
+          "code": "wedgesupport"
+        },
+        {
+          "name": "Triangle Descending (Strong)",
+          "code": "wedgesupport2"
+        },
+        {
+          "name": "Wedge",
+          "code": "wedge"
+        },
+        {
+          "name": "Wedge (Strong)",
+          "code": "wedge2"
+        },
+        {
+          "name": "Channel Up",
+          "code": "channelup"
+        },
+        {
+          "name": "Channel Up (Strong)",
+          "code": "channelup2"
+        },
+        {
+          "name": "Channel Down",
+          "code": "channeldown"
+        },
+        {
+          "name": "Channel Down (Strong)",
+          "code": "channeldown2"
+        },
+        {
+          "name": "Channel",
+          "code": "channel"
+        },
+        {
+          "name": "Channel (Strong)",
+          "code": "channel2"
+        },
+        {
+          "name": "Double Top",
+          "code": "doubletop"
+        },
+        {
+          "name": "Double Bottom",
+          "code": "doublebottom"
+        },
+        {
+          "name": "Multiple Top",
+          "code": "multipletop"
+        },
+        {
+          "name": "Multiple Bottom",
+          "code": "multiplebottom"
+        },
+        {
+          "name": "Head & Shoulders",
+          "code": "headandshoulders"
+        },
+        {
+          "name": "Head & Shoulders Inverse",
+          "code": "headandshouldersinv"
+        }
+      ]
+    },
+    {
+      "name": "Candlestick",
+      "code": "ta_candlestick",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Long Lower Shadow",
+          "code": "lls"
+        },
+        {
+          "name": "Long Upper Shadow",
+          "code": "lus"
+        },
+        {
+          "name": "Hammer",
+          "code": "h"
+        },
+        {
+          "name": "Inverted Hammer",
+          "code": "ih"
+        },
+        {
+          "name": "Spinning Top White",
+          "code": "stw"
+        },
+        {
+          "name": "Spinning Top Black",
+          "code": "stb"
+        },
+        {
+          "name": "Doji",
+          "code": "d"
+        },
+        {
+          "name": "Dragonfly Doji",
+          "code": "dd"
+        },
+        {
+          "name": "Gravestone Doji",
+          "code": "gd"
+        },
+        {
+          "name": "Marubozu White",
+          "code": "mw"
+        },
+        {
+          "name": "Marubozu Black",
+          "code": "mb"
+        }
+      ]
+    },
+    {
+      "name": "Beta",
+      "code": "ta_beta",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 0",
+          "code": "u0"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 1.5",
+          "code": "u1.5"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Over 0",
+          "code": "o0"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 1.5",
+          "code": "o1.5"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 2.5",
+          "code": "o2.5"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "0 to 0.5",
+          "code": "0to0.5"
+        },
+        {
+          "name": "0 to 1",
+          "code": "0to1"
+        },
+        {
+          "name": "0.5 to 1",
+          "code": "0.5to1"
+        },
+        {
+          "name": "0.5 to 1.5",
+          "code": "0.5to1.5"
+        },
+        {
+          "name": "1 to 1.5",
+          "code": "1to1.5"
+        },
+        {
+          "name": "1 to 2",
+          "code": "1to2"
+        }
+      ]
+    },
+    {
+      "name": "Average True Range",
+      "code": "ta_averagetruerange",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Over 0.25",
+          "code": "o0.25"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 0.75",
+          "code": "o0.75"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 1.5",
+          "code": "o1.5"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 2.5",
+          "code": "o2.5"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 3.5",
+          "code": "o3.5"
+        },
+        {
+          "name": "Over 4",
+          "code": "o4"
+        },
+        {
+          "name": "Over 4.5",
+          "code": "o4.5"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Under 0.25",
+          "code": "u0.25"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Under 0.75",
+          "code": "u0.75"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 1.5",
+          "code": "u1.5"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 2.5",
+          "code": "u2.5"
+        },
+        {
+          "name": "Under 3",
+          "code": "u3"
+        },
+        {
+          "name": "Under 3.5",
+          "code": "u3.5"
+        },
+        {
+          "name": "Under 4",
+          "code": "u4"
+        },
+        {
+          "name": "Under 4.5",
+          "code": "u4.5"
+        },
+        {
+          "name": "Under 5",
+          "code": "u5"
+        }
+      ]
+    },
+    {
+      "name": "Average Volume",
+      "code": "sh_avgvol",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 50K",
+          "code": "u50"
+        },
+        {
+          "name": "Under 100K",
+          "code": "u100"
+        },
+        {
+          "name": "Under 500K",
+          "code": "u500"
+        },
+        {
+          "name": "Under 750K",
+          "code": "u750"
+        },
+        {
+          "name": "Under 1M",
+          "code": "u1000"
+        },
+        {
+          "name": "Over 50K",
+          "code": "o50"
+        },
+        {
+          "name": "Over 100K",
+          "code": "o100"
+        },
+        {
+          "name": "Over 200K",
+          "code": "o200"
+        },
+        {
+          "name": "Over 300K",
+          "code": "o300"
+        },
+        {
+          "name": "Over 400K",
+          "code": "o400"
+        },
+        {
+          "name": "Over 500K",
+          "code": "o500"
+        },
+        {
+          "name": "Over 750K",
+          "code": "o750"
+        },
+        {
+          "name": "Over 1M",
+          "code": "o1000"
+        },
+        {
+          "name": "Over 2M",
+          "code": "o2000"
+        },
+        {
+          "name": "100K to 500K",
+          "code": "100to500"
+        },
+        {
+          "name": "100K to 1M",
+          "code": "100to1000"
+        },
+        {
+          "name": "500K to 1M",
+          "code": "500to1000"
+        },
+        {
+          "name": "500K to 10M",
+          "code": "500to10000"
+        }
+      ]
+    },
+    {
+      "name": "Relative Volume",
+      "code": "sh_relvol",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Over 10",
+          "code": "o10"
+        },
+        {
+          "name": "Over 5",
+          "code": "o5"
+        },
+        {
+          "name": "Over 3",
+          "code": "o3"
+        },
+        {
+          "name": "Over 2",
+          "code": "o2"
+        },
+        {
+          "name": "Over 1.5",
+          "code": "o1.5"
+        },
+        {
+          "name": "Over 1",
+          "code": "o1"
+        },
+        {
+          "name": "Over 0.75",
+          "code": "o0.75"
+        },
+        {
+          "name": "Over 0.5",
+          "code": "o0.5"
+        },
+        {
+          "name": "Over 0.25",
+          "code": "o0.25"
+        },
+        {
+          "name": "Under 2",
+          "code": "u2"
+        },
+        {
+          "name": "Under 1.5",
+          "code": "u1.5"
+        },
+        {
+          "name": "Under 1",
+          "code": "u1"
+        },
+        {
+          "name": "Under 0.75",
+          "code": "u0.75"
+        },
+        {
+          "name": "Under 0.5",
+          "code": "u0.5"
+        },
+        {
+          "name": "Under 0.25",
+          "code": "u0.25"
+        },
+        {
+          "name": "Under 0.1",
+          "code": "u0.1"
+        }
+      ]
+    },
+    {
+      "name": "Current Volume",
+      "code": "sh_curvol",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 50K",
+          "code": "u50"
+        },
+        {
+          "name": "Under 100K",
+          "code": "u100"
+        },
+        {
+          "name": "Under 500K",
+          "code": "u500"
+        },
+        {
+          "name": "Under 750K",
+          "code": "u750"
+        },
+        {
+          "name": "Under 1M",
+          "code": "u1000"
+        },
+        {
+          "name": "Over 0",
+          "code": "o0"
+        },
+        {
+          "name": "Over 50K",
+          "code": "o50"
+        },
+        {
+          "name": "Over 100K",
+          "code": "o100"
+        },
+        {
+          "name": "Over 200K",
+          "code": "o200"
+        },
+        {
+          "name": "Over 300K",
+          "code": "o300"
+        },
+        {
+          "name": "Over 400K",
+          "code": "o400"
+        },
+        {
+          "name": "Over 500K",
+          "code": "o500"
+        },
+        {
+          "name": "Over 750K",
+          "code": "o750"
+        },
+        {
+          "name": "Over 1M",
+          "code": "o1000"
+        },
+        {
+          "name": "Over 2M",
+          "code": "o2000"
+        },
+        {
+          "name": "Over 5M",
+          "code": "o5000"
+        },
+        {
+          "name": "Over 10M",
+          "code": "o10000"
+        },
+        {
+          "name": "Over 20M",
+          "code": "o20000"
+        }
+      ]
+    },
+    {
+      "name": "Price",
+      "code": "sh_price",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under $1",
+          "code": "u1"
+        },
+        {
+          "name": "Under $2",
+          "code": "u2"
+        },
+        {
+          "name": "Under $3",
+          "code": "u3"
+        },
+        {
+          "name": "Under $4",
+          "code": "u4"
+        },
+        {
+          "name": "Under $5",
+          "code": "u5"
+        },
+        {
+          "name": "Under $7",
+          "code": "u7"
+        },
+        {
+          "name": "Under $10",
+          "code": "u10"
+        },
+        {
+          "name": "Under $15",
+          "code": "u15"
+        },
+        {
+          "name": "Under $20",
+          "code": "u20"
+        },
+        {
+          "name": "Under $30",
+          "code": "u30"
+        },
+        {
+          "name": "Under $40",
+          "code": "u40"
+        },
+        {
+          "name": "Under $50",
+          "code": "u50"
+        },
+        {
+          "name": "Over $1",
+          "code": "o1"
+        },
+        {
+          "name": "Over $2",
+          "code": "o2"
+        },
+        {
+          "name": "Over $3",
+          "code": "o3"
+        },
+        {
+          "name": "Over $4",
+          "code": "o4"
+        },
+        {
+          "name": "Over $5",
+          "code": "o5"
+        },
+        {
+          "name": "Over $7",
+          "code": "o7"
+        },
+        {
+          "name": "Over $10",
+          "code": "o10"
+        },
+        {
+          "name": "Over $15",
+          "code": "o15"
+        },
+        {
+          "name": "Over $20",
+          "code": "o20"
+        },
+        {
+          "name": "Over $30",
+          "code": "o30"
+        },
+        {
+          "name": "Over $40",
+          "code": "o40"
+        },
+        {
+          "name": "Over $50",
+          "code": "o50"
+        },
+        {
+          "name": "Over $60",
+          "code": "o60"
+        },
+        {
+          "name": "Over $70",
+          "code": "o70"
+        },
+        {
+          "name": "Over $80",
+          "code": "o80"
+        },
+        {
+          "name": "Over $90",
+          "code": "o90"
+        },
+        {
+          "name": "Over $100",
+          "code": "o100"
+        },
+        {
+          "name": "$1 to $5",
+          "code": "1to5"
+        },
+        {
+          "name": "$1 to $10",
+          "code": "1to10"
+        },
+        {
+          "name": "$1 to $20",
+          "code": "1to20"
+        },
+        {
+          "name": "$5 to $10",
+          "code": "5to10"
+        },
+        {
+          "name": "$5 to $20",
+          "code": "5to20"
+        },
+        {
+          "name": "$5 to $50",
+          "code": "5to50"
+        },
+        {
+          "name": "$10 to $20",
+          "code": "10to20"
+        },
+        {
+          "name": "$10 to $50",
+          "code": "10to50"
+        },
+        {
+          "name": "$20 to $50",
+          "code": "20to50"
+        },
+        {
+          "name": "$50 to $100",
+          "code": "50to100"
+        }
+      ]
+    },
+    {
+      "name": "Target Price",
+      "code": "targetprice",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "50% Above Price",
+          "code": "a50"
+        },
+        {
+          "name": "40% Above Price",
+          "code": "a40"
+        },
+        {
+          "name": "30% Above Price",
+          "code": "a30"
+        },
+        {
+          "name": "20% Above Price",
+          "code": "a20"
+        },
+        {
+          "name": "10% Above Price",
+          "code": "a10"
+        },
+        {
+          "name": "5% Above Price",
+          "code": "a5"
+        },
+        {
+          "name": "Above Price",
+          "code": "above"
+        },
+        {
+          "name": "Below Price",
+          "code": "below"
+        },
+        {
+          "name": "5% Below Price",
+          "code": "b5"
+        },
+        {
+          "name": "10% Below Price",
+          "code": "b10"
+        },
+        {
+          "name": "20% Below Price",
+          "code": "b20"
+        },
+        {
+          "name": "30% Below Price",
+          "code": "b30"
+        },
+        {
+          "name": "40% Below Price",
+          "code": "b40"
+        },
+        {
+          "name": "50% Below Price",
+          "code": "b50"
+        }
+      ]
+    },
+    {
+      "name": "IPO Date",
+      "code": "ipodate",
+      "type": "date",
+      "options": [
+        {
+          "name": "Today",
+          "code": "today"
+        },
+        {
+          "name": "Yesterday",
+          "code": "yesterday"
+        },
+        {
+          "name": "In the last week",
+          "code": "prevweek"
+        },
+        {
+          "name": "In the last month",
+          "code": "prevmonth"
+        },
+        {
+          "name": "In the last quarter",
+          "code": "prevquarter"
+        },
+        {
+          "name": "In the last year",
+          "code": "prevyear"
+        },
+        {
+          "name": "In the last 2 years",
+          "code": "prev2yrs"
+        },
+        {
+          "name": "In the last 3 years",
+          "code": "prev3yrs"
+        },
+        {
+          "name": "In the last 5 years",
+          "code": "prev5yrs"
+        },
+        {
+          "name": "More than a year ago",
+          "code": "more1"
+        },
+        {
+          "name": "More than 5 years ago",
+          "code": "more5"
+        },
+        {
+          "name": "More than 10 years ago",
+          "code": "more10"
+        },
+        {
+          "name": "More than 15 years ago",
+          "code": "more15"
+        },
+        {
+          "name": "More than 20 years ago",
+          "code": "more20"
+        },
+        {
+          "name": "More than 25 years ago",
+          "code": "more25"
+        }
+      ]
+    },
+    {
+      "name": "Shares Outstanding",
+      "code": "sh_outstanding",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 1M",
+          "code": "u1"
+        },
+        {
+          "name": "Under 5M",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10M",
+          "code": "u10"
+        },
+        {
+          "name": "Under 20M",
+          "code": "u20"
+        },
+        {
+          "name": "Under 50M",
+          "code": "u50"
+        },
+        {
+          "name": "Under 100M",
+          "code": "u100"
+        },
+        {
+          "name": "Over 1M",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2M",
+          "code": "o2"
+        },
+        {
+          "name": "Over 5M",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10M",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20M",
+          "code": "o20"
+        },
+        {
+          "name": "Over 50M",
+          "code": "o50"
+        },
+        {
+          "name": "Over 100M",
+          "code": "o100"
+        },
+        {
+          "name": "Over 200M",
+          "code": "o200"
+        },
+        {
+          "name": "Over 500M",
+          "code": "o500"
+        },
+        {
+          "name": "Over 1000M",
+          "code": "o1000"
+        }
+      ]
+    },
+    {
+      "name": "Float",
+      "code": "sh_float",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 1M",
+          "code": "u1"
+        },
+        {
+          "name": "Under 5M",
+          "code": "u5"
+        },
+        {
+          "name": "Under 10M",
+          "code": "u10"
+        },
+        {
+          "name": "Under 20M",
+          "code": "u20"
+        },
+        {
+          "name": "Under 50M",
+          "code": "u50"
+        },
+        {
+          "name": "Under 100M",
+          "code": "u100"
+        },
+        {
+          "name": "Over 1M",
+          "code": "o1"
+        },
+        {
+          "name": "Over 2M",
+          "code": "o2"
+        },
+        {
+          "name": "Over 5M",
+          "code": "o5"
+        },
+        {
+          "name": "Over 10M",
+          "code": "o10"
+        },
+        {
+          "name": "Over 20M",
+          "code": "o20"
+        },
+        {
+          "name": "Over 50M",
+          "code": "o50"
+        },
+        {
+          "name": "Over 100M",
+          "code": "o100"
+        },
+        {
+          "name": "Over 200M",
+          "code": "o200"
+        },
+        {
+          "name": "Over 500M",
+          "code": "o500"
+        },
+        {
+          "name": "Over 1000M",
+          "code": "o1000"
+        }
+      ]
+    },
+    {
+      "name": "Net Expense Ratio",
+      "code": "etf_netexpense",
+      "type": "categorical",
+      "options": [
+        {
+          "name": "Under 0.1%",
+          "code": "u01"
+        },
+        {
+          "name": "Under 0.2%",
+          "code": "u02"
+        },
+        {
+          "name": "Under 0.3%",
+          "code": "u03"
+        },
+        {
+          "name": "Under 0.4%",
+          "code": "u04"
+        },
+        {
+          "name": "Under 0.5%",
+          "code": "u05"
+        },
+        {
+          "name": "Under 0.6%",
+          "code": "u06"
+        },
+        {
+          "name": "Under 0.7%",
+          "code": "u07"
+        },
+        {
+          "name": "Under 0.8%",
+          "code": "u08"
+        },
+        {
+          "name": "Under 0.9%",
+          "code": "u09"
+        },
+        {
+          "name": "Under 1.0%",
+          "code": "u10"
+        }
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "name": "Top Gainers",
+      "code": "ta_topgainers"
+    },
+    {
+      "name": "Top Losers",
+      "code": "ta_toplosers"
+    },
+    {
+      "name": "New High",
+      "code": "ta_newhigh"
+    },
+    {
+      "name": "New Low",
+      "code": "ta_newlow"
+    },
+    {
+      "name": "Most Volatile",
+      "code": "ta_mostvolatile"
+    },
+    {
+      "name": "Most Active",
+      "code": "ta_mostactive"
+    },
+    {
+      "name": "Unusual Volume",
+      "code": "ta_unusualvolume"
+    },
+    {
+      "name": "Overbought",
+      "code": "ta_overbought"
+    },
+    {
+      "name": "Oversold",
+      "code": "ta_oversold"
+    },
+    {
+      "name": "Downgrades",
+      "code": "n_downgrades"
+    },
+    {
+      "name": "Upgrades",
+      "code": "n_upgrades"
+    },
+    {
+      "name": "Earnings Before",
+      "code": "n_earningsbefore"
+    },
+    {
+      "name": "Earnings After",
+      "code": "n_earningsafter"
+    },
+    {
+      "name": "Recent Insider Buying",
+      "code": "it_latestbuys"
+    },
+    {
+      "name": "Recent Insider Selling",
+      "code": "it_latestsales"
+    },
+    {
+      "name": "Major News",
+      "code": "n_majornews"
+    },
+    {
+      "name": "Horizontal S/R",
+      "code": "ta_p_horizontal"
+    },
+    {
+      "name": "TL Resistance",
+      "code": "ta_p_tlresistance"
+    },
+    {
+      "name": "TL Support",
+      "code": "ta_p_tlsupport"
+    },
+    {
+      "name": "Wedge Up",
+      "code": "ta_p_wedgeup"
+    },
+    {
+      "name": "Wedge Down",
+      "code": "ta_p_wedgedown"
+    },
+    {
+      "name": "Triangle Ascending",
+      "code": "ta_p_wedgeresistance"
+    },
+    {
+      "name": "Triangle Descending",
+      "code": "ta_p_wedgesupport"
+    },
+    {
+      "name": "Wedge",
+      "code": "ta_p_wedge"
+    },
+    {
+      "name": "Channel Up",
+      "code": "ta_p_channelup"
+    },
+    {
+      "name": "Channel Down",
+      "code": "ta_p_channeldown"
+    },
+    {
+      "name": "Channel",
+      "code": "ta_p_channel"
+    },
+    {
+      "name": "Double Top",
+      "code": "ta_p_doubletop"
+    },
+    {
+      "name": "Double Bottom",
+      "code": "ta_p_doublebottom"
+    },
+    {
+      "name": "Multiple Top",
+      "code": "ta_p_multipletop"
+    },
+    {
+      "name": "Multiple Bottom",
+      "code": "ta_p_multiplebottom"
+    },
+    {
+      "name": "Head & Shoulders",
+      "code": "ta_p_headandshoulders"
+    },
+    {
+      "name": "Head & Shoulders Inverse",
+      "code": "ta_p_headandshouldersinv"
+    }
+  ],
+  "orders": [
+    {
+      "name": "Ticker",
+      "code": "ticker"
+    },
+    {
+      "name": "Company",
+      "code": "company"
+    },
+    {
+      "name": "Sector",
+      "code": "sector"
+    },
+    {
+      "name": "Industry",
+      "code": "industry"
+    },
+    {
+      "name": "Country",
+      "code": "country"
+    },
+    {
+      "name": "Market Cap.",
+      "code": "marketcap"
+    },
+    {
+      "name": "Price/Earnings",
+      "code": "pe"
+    },
+    {
+      "name": "Forward Price/Earnings",
+      "code": "forwardpe"
+    },
+    {
+      "name": "PEG (Price/Earnings/Growth)",
+      "code": "peg"
+    },
+    {
+      "name": "Price/Sales",
+      "code": "ps"
+    },
+    {
+      "name": "Price/Book",
+      "code": "pb"
+    },
+    {
+      "name": "Price/Cash",
+      "code": "pc"
+    },
+    {
+      "name": "Price/Free Cash Flow",
+      "code": "pfcf"
+    },
+    {
+      "name": "Dividend Yield",
+      "code": "dividendyield"
+    },
+    {
+      "name": "Payout Ratio",
+      "code": "payoutratio"
+    },
+    {
+      "name": "EPS (ttm)",
+      "code": "eps"
+    },
+    {
+      "name": "EPS growth this year",
+      "code": "epsyoy"
+    },
+    {
+      "name": "EPS growth next year",
+      "code": "epsyoy1"
+    },
+    {
+      "name": "EPS growth past 5 years",
+      "code": "eps5years"
+    },
+    {
+      "name": "EPS growth next 5 years",
+      "code": "estltgrowth"
+    },
+    {
+      "name": "Sales growth past 5 years",
+      "code": "sales5years"
+    },
+    {
+      "name": "EPS growth qtr over qtr",
+      "code": "epsqoq"
+    },
+    {
+      "name": "Sales growth qtr over qtr",
+      "code": "salesqoq"
+    },
+    {
+      "name": "Shares Outstanding",
+      "code": "sharesoutstanding2"
+    },
+    {
+      "name": "Shares Float",
+      "code": "sharesfloat"
+    },
+    {
+      "name": "Insider Ownership",
+      "code": "insiderown"
+    },
+    {
+      "name": "Insider Transactions",
+      "code": "insidertrans"
+    },
+    {
+      "name": "Institutional Ownership",
+      "code": "instown"
+    },
+    {
+      "name": "Institutional Transactions",
+      "code": "insttrans"
+    },
+    {
+      "name": "Short Interest Share",
+      "code": "shortinterestshare"
+    },
+    {
+      "name": "Short Interest Ratio",
+      "code": "shortinterestratio"
+    },
+    {
+      "name": "Earnings Date",
+      "code": "earningsdate"
+    },
+    {
+      "name": "Return on Assets",
+      "code": "roa"
+    },
+    {
+      "name": "Return on Equity",
+      "code": "roe"
+    },
+    {
+      "name": "Return on Investment",
+      "code": "roi"
+    },
+    {
+      "name": "Current Ratio",
+      "code": "curratio"
+    },
+    {
+      "name": "Quick Ratio",
+      "code": "quickratio"
+    },
+    {
+      "name": "LT Debt/Equity",
+      "code": "ltdebteq"
+    },
+    {
+      "name": "Total Debt/Equity",
+      "code": "debteq"
+    },
+    {
+      "name": "Gross Margin",
+      "code": "grossmargin"
+    },
+    {
+      "name": "Operating Margin",
+      "code": "opermargin"
+    },
+    {
+      "name": "Net Profit Margin",
+      "code": "netmargin"
+    },
+    {
+      "name": "Analyst Recommendation",
+      "code": "recom"
+    },
+    {
+      "name": "Performance (Week)",
+      "code": "perf1w"
+    },
+    {
+      "name": "Performance (Month)",
+      "code": "perf4w"
+    },
+    {
+      "name": "Performance (Quarter)",
+      "code": "perf13w"
+    },
+    {
+      "name": "Performance (Half Year)",
+      "code": "perf26w"
+    },
+    {
+      "name": "Performance (Year)",
+      "code": "perf52w"
+    },
+    {
+      "name": "Performance (Year To Date)",
+      "code": "perfytd"
+    },
+    {
+      "name": "Beta",
+      "code": "beta"
+    },
+    {
+      "name": "Average True Range",
+      "code": "averagetruerange"
+    },
+    {
+      "name": "Volatility (Week)",
+      "code": "volatility1w"
+    },
+    {
+      "name": "Volatility (Month)",
+      "code": "volatility4w"
+    },
+    {
+      "name": "20-Day SMA (Relative)",
+      "code": "sma20"
+    },
+    {
+      "name": "50-Day SMA (Relative)",
+      "code": "sma50"
+    },
+    {
+      "name": "200-Day SMA (Relative)",
+      "code": "sma200"
+    },
+    {
+      "name": "50-Day High (Relative)",
+      "code": "high50d"
+    },
+    {
+      "name": "50-Day Low (Relative)",
+      "code": "low50d"
+    },
+    {
+      "name": "52-Week High (Relative)",
+      "code": "high52w"
+    },
+    {
+      "name": "52-Week Low (Relative)",
+      "code": "low52w"
+    },
+    {
+      "name": "Relative Strength Index (14)",
+      "code": "rsi"
+    },
+    {
+      "name": "Average Volume (3 Month)",
+      "code": "averagevolume"
+    },
+    {
+      "name": "Relative Volume",
+      "code": "relativevolume"
+    },
+    {
+      "name": "Change",
+      "code": "change"
+    },
+    {
+      "name": "Change from Open",
+      "code": "changeopen"
+    },
+    {
+      "name": "Gap",
+      "code": "gap"
+    },
+    {
+      "name": "Volume",
+      "code": "volume"
+    },
+    {
+      "name": "Price",
+      "code": "price"
+    },
+    {
+      "name": "Target Price",
+      "code": "targetprice"
+    },
+    {
+      "name": "IPO Date",
+      "code": "ipodate"
+    }
+  ],
+  "views": [
+    {
+      "name": "overview",
+      "code": "111",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Company",
+        "Sector",
+        "Industry",
+        "Country",
+        "Market Cap",
+        "P/E",
+        "Price",
+        "Change %",
+        "Volume"
+      ]
+    },
+    {
+      "name": "valuation",
+      "code": "121",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Market Cap",
+        "P/E",
+        "Forward P/E",
+        "PEG",
+        "P/S",
+        "P/B",
+        "P/C",
+        "P/FCF",
+        "EPS This Y",
+        "EPS Next Y",
+        "EPS Past 5Y",
+        "EPS Next 5Y",
+        "Sales Past 5Y",
+        "Price",
+        "Change %",
+        "Volume"
+      ]
+    },
+    {
+      "name": "financial",
+      "code": "161",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Market Cap",
+        "Dividend",
+        "ROA",
+        "ROE",
+        "ROIC",
+        "Curr R",
+        "Quick R",
+        "LTDebt/Eq",
+        "Debt/Eq",
+        "Gross M",
+        "Oper M",
+        "Profit M",
+        "Earnings",
+        "Price",
+        "Change %",
+        "Volume"
+      ]
+    },
+    {
+      "name": "ownership",
+      "code": "131",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Market Cap",
+        "Outstanding",
+        "Float",
+        "Insider Own",
+        "Insider Trans",
+        "Inst Own",
+        "Inst Trans",
+        "Short Float",
+        "Short Ratio",
+        "Avg Volume",
+        "Price",
+        "Change %",
+        "Volume"
+      ]
+    },
+    {
+      "name": "performance",
+      "code": "141",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Perf Week",
+        "Perf Month",
+        "Perf Quart",
+        "Perf Half",
+        "Perf YTD",
+        "Perf Year",
+        "Perf 3Y",
+        "Perf 5Y",
+        "Perf 10Y",
+        "Volatility W",
+        "Volatility M",
+        "Avg Volume",
+        "Rel Volume",
+        "Price",
+        "Change %",
+        "Volume"
+      ]
+    },
+    {
+      "name": "technical",
+      "code": "171",
+      "columns": [
+        "No.",
+        "Ticker",
+        "Beta",
+        "ATR",
+        "SMA20",
+        "SMA50",
+        "SMA200",
+        "52W High",
+        "52W Low",
+        "RSI",
+        "Price",
+        "Change %",
+        "Change from Open %",
+        "Gap",
+        "Volume"
+      ]
+    },
+    {
+      "name": "custom",
+      "code": "151",
+      "columns": []
+    },
+    {
+      "name": "ticker",
+      "code": "411",
+      "columns": []
+    }
+  ],
+  "columns": [
+    {
+      "name": "No.",
+      "code": "0"
+    },
+    {
+      "name": "Ticker",
+      "code": "1"
+    },
+    {
+      "name": "Company",
+      "code": "2"
+    },
+    {
+      "name": "Sector",
+      "code": "3"
+    },
+    {
+      "name": "Industry",
+      "code": "4"
+    },
+    {
+      "name": "Country",
+      "code": "5"
+    },
+    {
+      "name": "Market Cap.",
+      "code": "6"
+    },
+    {
+      "name": "P/E",
+      "code": "7"
+    },
+    {
+      "name": "Forward P/E",
+      "code": "8"
+    },
+    {
+      "name": "PEG",
+      "code": "9"
+    },
+    {
+      "name": "P/S",
+      "code": "10"
+    },
+    {
+      "name": "P/B",
+      "code": "11"
+    },
+    {
+      "name": "P/Cash",
+      "code": "12"
+    },
+    {
+      "name": "P/Free Cash Flow",
+      "code": "13"
+    },
+    {
+      "name": "Dividend Yield",
+      "code": "14"
+    },
+    {
+      "name": "Payout Ratio",
+      "code": "15"
+    },
+    {
+      "name": "EPS",
+      "code": "16"
+    },
+    {
+      "name": "EPS growth this year",
+      "code": "17"
+    },
+    {
+      "name": "EPS growth next year",
+      "code": "18"
+    },
+    {
+      "name": "EPS growth past 5 years",
+      "code": "19"
+    },
+    {
+      "name": "EPS growth next 5 years",
+      "code": "20"
+    },
+    {
+      "name": "Sales growth past 5 years",
+      "code": "21"
+    },
+    {
+      "name": "EPS growth qtr over qtr",
+      "code": "22"
+    },
+    {
+      "name": "Sales growth qtr over qtr",
+      "code": "23"
+    },
+    {
+      "name": "Shares Outstanding",
+      "code": "24"
+    },
+    {
+      "name": "Shares Float",
+      "code": "25"
+    },
+    {
+      "name": "Insider Ownership",
+      "code": "26"
+    },
+    {
+      "name": "Insider Transactions",
+      "code": "27"
+    },
+    {
+      "name": "Institutional Ownership",
+      "code": "28"
+    },
+    {
+      "name": "Institutional Transactions",
+      "code": "29"
+    },
+    {
+      "name": "Float Short",
+      "code": "30"
+    },
+    {
+      "name": "Short Ratio",
+      "code": "31"
+    },
+    {
+      "name": "Return on Assets",
+      "code": "32"
+    },
+    {
+      "name": "Return on Equity",
+      "code": "33"
+    },
+    {
+      "name": "Return on Investments",
+      "code": "34"
+    },
+    {
+      "name": "Current Ratio",
+      "code": "35"
+    },
+    {
+      "name": "Quick Ratio",
+      "code": "36"
+    },
+    {
+      "name": "Long Term Debt/Equity",
+      "code": "37"
+    },
+    {
+      "name": "Total Debt/Equity",
+      "code": "38"
+    },
+    {
+      "name": "Gross Margin",
+      "code": "39"
+    },
+    {
+      "name": "Operating Margin",
+      "code": "40"
+    },
+    {
+      "name": "Net Profit Margin",
+      "code": "41"
+    },
+    {
+      "name": "Performance (Week)",
+      "code": "42"
+    },
+    {
+      "name": "Performance (Month)",
+      "code": "43"
+    },
+    {
+      "name": "Performance (Quarter)",
+      "code": "44"
+    },
+    {
+      "name": "Performance (Half Year)",
+      "code": "45"
+    },
+    {
+      "name": "Performance (Year)",
+      "code": "46"
+    },
+    {
+      "name": "Performance (YearToDate)",
+      "code": "47"
+    },
+    {
+      "name": "Beta",
+      "code": "48"
+    },
+    {
+      "name": "Average True Range",
+      "code": "49"
+    },
+    {
+      "name": "Volatility (Week)",
+      "code": "50"
+    },
+    {
+      "name": "Volatility (Month)",
+      "code": "51"
+    },
+    {
+      "name": "20-Day Simple Moving Average",
+      "code": "52"
+    },
+    {
+      "name": "50-Day Simple Moving Average",
+      "code": "53"
+    },
+    {
+      "name": "200-Day Simple Moving Average",
+      "code": "54"
+    },
+    {
+      "name": "50-Day High",
+      "code": "55"
+    },
+    {
+      "name": "50-Day Low",
+      "code": "56"
+    },
+    {
+      "name": "52-Week High",
+      "code": "57"
+    },
+    {
+      "name": "52-Week Low",
+      "code": "58"
+    },
+    {
+      "name": "RSI",
+      "code": "59"
+    },
+    {
+      "name": "Change from Open",
+      "code": "60"
+    },
+    {
+      "name": "Gap",
+      "code": "61"
+    },
+    {
+      "name": "Analyst Recom.",
+      "code": "62"
+    },
+    {
+      "name": "Average Volume",
+      "code": "63"
+    },
+    {
+      "name": "Relative Volume",
+      "code": "64"
+    },
+    {
+      "name": "Price",
+      "code": "65"
+    },
+    {
+      "name": "Change",
+      "code": "66"
+    },
+    {
+      "name": "Volume",
+      "code": "67"
+    },
+    {
+      "name": "Earnings Date",
+      "code": "68"
+    },
+    {
+      "name": "Target Price",
+      "code": "69"
+    },
+    {
+      "name": "IPO Date",
+      "code": "70"
+    },
+    {
+      "name": "Book value per share",
+      "code": "73"
+    },
+    {
+      "name": "Cash per share",
+      "code": "74"
+    },
+    {
+      "name": "Dividend",
+      "code": "75"
+    },
+    {
+      "name": "Employees",
+      "code": "76"
+    },
+    {
+      "name": "EPS estimate next quarter",
+      "code": "77"
+    },
+    {
+      "name": "Income",
+      "code": "78"
+    },
+    {
+      "name": "Index",
+      "code": "79"
+    },
+    {
+      "name": "Optionable",
+      "code": "80"
+    },
+    {
+      "name": "Previous Close",
+      "code": "81"
+    },
+    {
+      "name": "Sales",
+      "code": "82"
+    },
+    {
+      "name": "Shortable",
+      "code": "83"
+    },
+    {
+      "name": "Short Interest",
+      "code": "84"
+    },
+    {
+      "name": "Float/Outstanding",
+      "code": "85"
+    },
+    {
+      "name": "Open",
+      "code": "86"
+    },
+    {
+      "name": "High",
+      "code": "87"
+    },
+    {
+      "name": "Low",
+      "code": "88"
+    }
+  ]
+}

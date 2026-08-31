@@ -127,9 +127,12 @@ def _parse_entry(payload: Any) -> Capability:
         )
     else:
         _require(
-            operation is None and fixture is None and tests is None and docs is None,
+            operation is None and fixture is None and tests is None,
             f"{entry_id}: planned entries claim no public surface",
         )
+        # Planned entries stay claim-free but must document their deferral in
+        # the capability matrix or the migration guide.
+        _require(docs is not None, f"{entry_id}: planned entries name their docs")
     return Capability(
         id=entry_id,
         family=text("family"),

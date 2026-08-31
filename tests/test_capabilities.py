@@ -39,6 +39,71 @@ REQUIRED_REPRESENTATIONS = {
 }
 
 
+# The page/screen/data method surface of audited ``finvizfinance`` 1.4.0
+# (pinned at c8d461d): module path for class methods, bare name for the
+# module-level table helpers, mapped to the manifest capability that replaces
+# it — or None when the method is intentionally not ported. The
+# ``finvizfinance.util`` transport/registry plumbing (``fetch``, ``web_scrap``,
+# ``set_proxy``, ``get_filters``, …) has no per-method twin: explicit
+# ``FinvizClient`` construction options and the checked-in registry replace it
+# wholesale (see the migration guide's "Global mutable transport" difference).
+LEGACY_METHOD_COVERAGE: dict[str, str | None] = {
+    "Quote.get_current": "quote.bundle",
+    "finvizfinance.ticker_charts": "charts.descriptor",
+    "finvizfinance.ticker_fundament": "quote.snapshot",
+    "finvizfinance.ticker_description": "quote.bundle",
+    "finvizfinance.ticker_peer": "quote.peers",
+    "finvizfinance.ticker_etf_holders": "quote.etf_holders",
+    "finvizfinance.ticker_outer_ratings": "quote.ratings",
+    "finvizfinance.ticker_news": "quote.news",
+    "finvizfinance.ticker_inside_trader": "quote.insider",
+    "finvizfinance.ticker_signal": "screener.signals",
+    "finvizfinance.ticker_full_info": "quote.bundle",
+    "Statements.get_statements": "statements.ia",
+    "screener.Overview.screener_view": "screener.views",
+    "screener.Valuation.screener_view": "screener.views",
+    "screener.Financial.screener_view": "screener.views",
+    "screener.Ownership.screener_view": "screener.views",
+    "screener.Performance.screener_view": "screener.views",
+    "screener.Technical.screener_view": "screener.views",
+    "screener.Custom.screener_view": "screener.views",
+    "screener.Ticker.screener_view": "screener.views",
+    "screener.Base.set_filter": "screener.views",
+    "screener.Base.reset": "screener.views",
+    "screener.Base.compare": "screener.views",
+    "group.Overview.screener_view": "groups.views",
+    "group.Valuation.screener_view": "groups.views",
+    "group.Performance.screener_view": "groups.views",
+    "group.Custom.screener_view": "groups.views",
+    "group.Spectrum.screener_view": "groups.views",
+    "News.get_news": "news.global",
+    "Insider.get_insider": "insider.global",
+    "Earnings.partition_days": "earnings.screen",
+    # Persistence helpers shipped on the legacy public surface: never ported
+    # (caller-owned export; see the migration guide).
+    "Earnings.output_csv": None,
+    "Earnings.output_excel": None,
+    "Calendar.calendar": "calendar.economic",
+    "Forex.performance": "forex.structured",
+    "Forex.chart": "forex.structured",
+    "Crypto.performance": "crypto.structured",
+    "Crypto.chart": "crypto.structured",
+    "Future.performance": "futures.tile",
+    # Table-internals helpers shipped on the legacy public surface: never ported.
+    "image_scrap_function": None,
+    "find_table_by_headers": None,
+}
+
+# Manifest capabilities backed by a pure local computation: no network I/O, so
+# the async/sync pairing rule does not apply.
+PURE_LOCAL_CAPABILITIES = {"charts.descriptor", "groups.views"}
+
+# The one legacy-named pair: the earnings module ships ``earnings_async`` next
+# to the sync ``earnings_screen`` (the async name predates the 0.2 curated
+# export and renaming it would break the public surface).
+ASYNC_NAME_OVERRIDES = {"earnings.screen": ("earnings_screen", "earnings_async")}
+
+
 @dataclass(frozen=True, slots=True)
 class Capability:
     """One manifest entry, validated at load time."""
@@ -115,7 +180,10 @@ def test_planned_entries_claim_no_public_functions_or_files() -> None:
     assert planned, "later capabilities must be seeded as planned"
     for entry in planned:
         assert entry.operation is None, entry.id
-        assert entry.fixture is None and entry.tests is None and entry.docs is None, entry.id
+        assert entry.fixture is None and entry.tests is None, entry.id
+        # The deferral itself is always documented (matrix or migration guide).
+        assert entry.docs is not None, entry.id
+        assert (REPO_ROOT / entry.docs).exists(), entry.id
 
 
 def test_frozen_inventory_families_are_all_represented() -> None:
@@ -561,3 +629,95 @@ class TestDocs:
             "import asyncio",
         ):
             assert fragment in text, fragment
+
+
+def test_every_legacy_method_maps_to_a_capability_or_explicit_skip() -> None:
+    """The finvizfinance method audit is fully covered by the manifest.
+
+    Every legacy method maps to a manifest capability that exists and is
+    implemented; methods deliberately not ported must keep their explicit
+    None entry here so the matrix can never silently drop one.
+    """
+    implemented = {e.id for e in capabilities() if e.status == "implemented"}
+    for method, capability_id in LEGACY_METHOD_COVERAGE.items():
+        if capability_id is None:
+            continue
+        assert capability_id in implemented, f"{method}: {capability_id}"
+
+
+def test_legacy_export_helpers_are_documented_not_ported() -> None:
+    """The legacy CSV/Excel export helpers have no finvizp twin.
+
+    finvizfinance ships output_csv/output_excel on Earnings (and Excel export
+    on screener views). finvizp rejects persistence helpers by design; the
+    migration guide must document the Arrow-native caller workflow instead.
+    """
+    import finvizp
+
+    assert not hasattr(finvizp, "output_csv")
+    assert not hasattr(finvizp, "output_excel")
+    assert not hasattr(finvizp, "to_csv")
+    assert not hasattr(finvizp, "to_excel")
+
+    guide = (REPO_ROOT / "docs" / "how-to" / "migrate-from-finvizfinance.md").read_text("utf-8")
+    for fragment in ("to_csv", "to_excel"):
+        assert fragment in guide, fragment
+
+
+def test_capability_matrix_document_is_complete() -> None:
+    """docs/reference/capability-matrix.md names every manifest entry."""
+    text = (REPO_ROOT / "docs" / "reference" / "capability-matrix.md").read_text("utf-8")
+    for entry in capabilities():
+        assert entry.id in text, entry.id
+
+
+def test_migration_guide_covers_every_replaced_capability() -> None:
+    """docs/how-to/migrate-from-finvizfinance.md documents every replacement."""
+    text = (REPO_ROOT / "docs" / "how-to" / "migrate-from-finvizfinance.md").read_text("utf-8")
+    for entry in capabilities():
+        if entry.status != "implemented" or entry.replaced is None:
+            continue
+        assert entry.id in text, entry.id
+        operation = entry.operation
+        assert operation is not None
+        attribute = operation.partition(":")[2]
+        assert attribute in text, entry.id
+
+
+def test_implemented_networked_operations_have_async_and_sync_twins() -> None:
+    """Every networked implemented operation ships the async-first pair."""
+    for entry in capabilities():
+        if entry.status != "implemented" or entry.id in PURE_LOCAL_CAPABILITIES:
+            continue
+        assert entry.operation is not None, entry.id
+        module_name, _, attribute = entry.operation.partition(":")
+        module = importlib.import_module(module_name)
+        if entry.id in ASYNC_NAME_OVERRIDES:
+            sync_name, async_name = ASYNC_NAME_OVERRIDES[entry.id]
+        else:
+            sync_name, async_name = attribute, f"{attribute.removesuffix('_async')}_async"
+        assert callable(getattr(module, sync_name, None)), entry.id
+        assert callable(getattr(module, async_name, None)), entry.id
+
+
+def test_no_always_failing_public_stub_is_exported() -> None:
+    """Planned/deferred capabilities are namespaced out of the public surface.
+
+    A caller must never import something that always fails; every planned
+    entry stays operation-less and nothing resembling a deferred family is
+    exported from the curated top-level surface.
+    """
+    exported = {name for name in finvizp.__all__ if not name.startswith("_")}
+    for entry in capabilities():
+        if entry.status != "planned":
+            continue
+        assert entry.operation is None, entry.id
+    for stub in (
+        "screener_export",
+        "group_export",
+        "etf",
+        "options",
+        "portfolio",
+        "alerts",
+    ):
+        assert stub not in exported, stub

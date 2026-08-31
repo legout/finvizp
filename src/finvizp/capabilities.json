@@ -278,7 +278,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -338,7 +338,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -503,7 +503,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -518,7 +518,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -533,7 +533,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -548,7 +548,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": null,
+      "docs": "docs/how-to/migrate-from-finvizfinance.md",
       "observation_date": "2026-08-27"
     }
   ]

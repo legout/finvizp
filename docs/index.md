@@ -62,6 +62,12 @@ The machine-readable dormant board graph is
   surface: immutable chart/spectrum descriptors with explicit bounded
   downloads, module-level forex/crypto structured tiles and performance
   tables, and current futures tile data with honest temporal semantics.
+- [Capability matrix](reference/capability-matrix.md) — the complete
+  implemented/planned ledger mirroring `finvizp.capabilities()`, with access
+  tiers, fixtures, tests, and the `finvizfinance` replacement per entry.
+- [Migrating from `finvizfinance`](how-to/migrate-from-finvizfinance.md) —
+  method-by-method mapping to the Arrow-native surface, intentional
+  differences, and caller-owned CSV/Excel export without pandas.
 - [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
   opt-in TTL caching with single-flight, provisional conservative
   defaults, and caller-owned persistence.

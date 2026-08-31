@@ -1,0 +1,44 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/user/**'
+      - 'src/**'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install package + docs toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . mkdocstrings-python zensical
+      - name: Build site
+        working-directory: docs/user
+        run: zensical build --clean
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/user/site
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -1,0 +1,50 @@
+# finvizp user documentation — built with zensical.
+# Diataxis-structured; research/plans/superpowers dirs are NOT part of the site.
+
+[project]
+site_name = "finvizp"
+site_dir = "site"
+language = "en"
+docs_dir = "."
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["../src"]
+options.docstring_style = "google"
+options.show_source = false
+
+[[project.nav]]
+title = "Tutorials"
+children = [
+  { title = "Get started", href = "tutorials/get-started.md" },
+  { title = "First data: symbols & quotes", href = "tutorials/symbols-and-quotes.md" },
+]
+
+[[project.nav]]
+title = "How-to guides"
+children = [
+  { title = "Use the sync API", href = "how-to/sync-api.md" },
+  { title = "Configure proxies & cache", href = "how-to/proxies-and-cache.md" },
+  { title = "Keep your own history", href = "how-to/caller-owned-history.md" },
+  { title = "Migrate from finvizfinance", href = "how-to/migrate-from-finvizfinance.md" },
+  { title = "Run live smokes", href = "how-to/live-smokes-and-drift.md" },
+]
+
+[[project.nav]]
+title = "Reference"
+children = [
+  { title = "API: client & operations", href = "reference/api.md" },
+  { title = "Result envelopes", href = "reference/results.md" },
+  { title = "Arrow schemas", href = "reference/schemas-0.1.md" },
+  { title = "Schema versioning", href = "reference/schema-versioning.md" },
+  { title = "Screener", href = "reference/screener.md" },
+  { title = "Screener registry", href = "reference/screener-registry.md" },
+  { title = "Groups, maps & events", href = "reference/groups-maps-events.md" },
+  { title = "Markets & artifacts", href = "reference/markets-and-artifacts.md" },
+  { title = "Capability matrix", href = "reference/capability-matrix.md" },
+]
+
+[[project.nav]]
+title = "Explanation"
+children = [
+  { title = "Access & responsible use", href = "explanation/access-and-responsible-use.md" },
+]

@@ -85,7 +85,7 @@ statement, timeframe)` becomes one operation over the six statement codes:
 
 | `finvizfinance` | `finvizp` replacement | Differences that matter |
 |---|---|---|
-| `group/Sector/Industry/Country/Capitalization.screener_view(...)` | `finvizp.group_async(GroupQuery(dimension=..., view=...))` | Dimensions `sector`/`industry`/`country`/`capitalization`; views `overview`/`valuation`/`performance`/`custom`. Arrow tables with typed units. |
+| `group/Overview/Valuation/Performance.screener_view(...)` | `finvizp.group_async(GroupQuery(dimension=..., view=...))` | One `screener_view(group=..., order=...)` on each class; `Sector`/`Industry`/`Country`/`Capitalization` are `group=` argument values, not classes. Dimensions `sector`/`industry`/`country`/`capitalization`; views `overview`/`valuation`/`performance`/`custom`. Arrow tables with typed units. |
 | `group/Custom.screener_view(...)` | `finvizp.group_async(GroupQuery(view="custom", columns=...))` | Registry-validated column set, deterministic schema. |
 | `group/Spectrum.screener_view(...)` | `finvizp.spectrum_async(GroupQuery(...))` | Returns an `Artifact` descriptor without downloading bytes (the legacy path crashed with `AttributeError` on valid input); bytes via `download_artifact_async`. |
 

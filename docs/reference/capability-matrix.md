@@ -82,10 +82,14 @@ always-failing public stub to import. Each documents why it is deferred.
   frozen matrix is closed: each capability is either implemented with
   fixture/test/docs evidence, or explicitly gated with a justified
   non-public access classification.
-- Every audited `finvizfinance` 1.4.0 public method maps to one of the
-  implemented capabilities (or is an intentionally unported persistence
-  helper); the method-by-method mapping with the Arrow replacement workflow
-  lives in the [migration guide](../how-to/migrate-from-finvizfinance.md).
+- Every page/screen/data method of the audited `finvizfinance` 1.4.0 surface
+  maps to one of the implemented capabilities (or is an intentionally unported
+  table helper); the method-by-method mapping with the Arrow replacement
+  workflow lives in the
+  [migration guide](../how-to/migrate-from-finvizfinance.md). The legacy
+  `util` transport/registry plumbing is replaced wholesale by explicit
+  `FinvizClient` construction options and the checked-in screener registry,
+  not method-by-method.
 - The one intentional signature change set — `FetchResult[T]` envelopes
   instead of pandas objects, typed queries instead of mutable filter state,
   bounded artifacts instead of implicit downloads — is documented there too.

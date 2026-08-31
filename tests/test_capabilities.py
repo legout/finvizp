@@ -39,10 +39,14 @@ REQUIRED_REPRESENTATIONS = {
 }
 
 
-# Every audited ``finvizfinance`` 1.4.0 public method (module path for class
-# methods, bare name for module-level helpers) mapped to the manifest capability
-# that replaces it — or None when the method is intentionally not ported and the
-# capability matrix must say why.
+# The page/screen/data method surface of audited ``finvizfinance`` 1.4.0
+# (pinned at c8d461d): module path for class methods, bare name for the
+# module-level table helpers, mapped to the manifest capability that replaces
+# it — or None when the method is intentionally not ported. The
+# ``finvizfinance.util`` transport/registry plumbing (``fetch``, ``web_scrap``,
+# ``set_proxy``, ``get_filters``, …) has no per-method twin: explicit
+# ``FinvizClient`` construction options and the checked-in registry replace it
+# wholesale (see the migration guide's "Global mutable transport" difference).
 LEGACY_METHOD_COVERAGE: dict[str, str | None] = {
     "Quote.get_current": "quote.bundle",
     "finvizfinance.ticker_charts": "charts.descriptor",
@@ -82,10 +86,9 @@ LEGACY_METHOD_COVERAGE: dict[str, str | None] = {
     "Crypto.performance": "crypto.structured",
     "Crypto.chart": "crypto.structured",
     "Future.performance": "futures.tile",
-    # Internal helpers shipped on the legacy public surface: never ported.
+    # Table-internals helpers shipped on the legacy public surface: never ported.
     "image_scrap_function": None,
     "find_table_by_headers": None,
-    "row_to_dict": None,
 }
 
 # Manifest capabilities backed by a pure local computation: no network I/O, so

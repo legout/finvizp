@@ -2,8 +2,11 @@
 
 `finvizp` preserves the capability breadth of `finvizfinance` 1.4.0 (audited at
 commit `c8d461d1991da1675edc63ea0238391e6f0ba776`) but not its interface. This
-guide maps every legacy method to its Arrow-native replacement and documents
-the intentional differences. The capability-level ledger lives in the
+guide maps every legacy page/screen/data method to its Arrow-native replacement
+and documents the intentional differences; the legacy `util` transport/registry
+plumbing (`set_proxy`, `get_filters`, …) has no per-method twin — explicit
+`FinvizClient` options and the checked-in registry replace it wholesale. The
+capability-level ledger lives in the
 [capability matrix](../reference/capability-matrix.md).
 
 ## The shape change in one paragraph

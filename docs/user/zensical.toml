@@ -6,45 +6,37 @@ site_name = "finvizp"
 site_dir = "site"
 language = "en"
 docs_dir = "."
+site_url = "https://legout.github.io/finvizp/"
+nav = [
+  "index.md",
+  { "Tutorials" = [
+    { "Get started" = "tutorials/get-started.md" },
+    { "First data: symbols & quotes" = "tutorials/symbols-and-quotes.md" },
+  ] },
+  { "How-to guides" = [
+    { "Use the sync API" = "how-to/sync-api.md" },
+    { "Configure proxies & cache" = "how-to/proxies-and-cache.md" },
+    { "Keep your own history" = "how-to/caller-owned-history.md" },
+    { "Migrate from finvizfinance" = "how-to/migrate-from-finvizfinance.md" },
+    { "Run live smokes" = "how-to/live-smokes-and-drift.md" },
+  ] },
+  { "Reference" = [
+    { "API: client & operations" = "reference/api.md" },
+    { "Result envelopes" = "reference/results.md" },
+    { "Arrow schemas" = "reference/schemas-0.1.md" },
+    { "Schema versioning" = "reference/schema-versioning.md" },
+    { "Screener" = "reference/screener.md" },
+    { "Screener registry" = "reference/screener-registry.md" },
+    { "Groups, maps & events" = "reference/groups-maps-events.md" },
+    { "Markets & artifacts" = "reference/markets-and-artifacts.md" },
+    { "Capability matrix" = "reference/capability-matrix.md" },
+  ] },
+  { "Explanation" = [
+    { "Access & responsible use" = "explanation/access-and-responsible-use.md" },
+  ] },
+]
 
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["../src"]
 options.docstring_style = "google"
 options.show_source = false
-
-[[project.nav]]
-title = "Tutorials"
-children = [
-  { title = "Get started", href = "tutorials/get-started.md" },
-  { title = "First data: symbols & quotes", href = "tutorials/symbols-and-quotes.md" },
-]
-
-[[project.nav]]
-title = "How-to guides"
-children = [
-  { title = "Use the sync API", href = "how-to/sync-api.md" },
-  { title = "Configure proxies & cache", href = "how-to/proxies-and-cache.md" },
-  { title = "Keep your own history", href = "how-to/caller-owned-history.md" },
-  { title = "Migrate from finvizfinance", href = "how-to/migrate-from-finvizfinance.md" },
-  { title = "Run live smokes", href = "how-to/live-smokes-and-drift.md" },
-]
-
-[[project.nav]]
-title = "Reference"
-children = [
-  { title = "API: client & operations", href = "reference/api.md" },
-  { title = "Result envelopes", href = "reference/results.md" },
-  { title = "Arrow schemas", href = "reference/schemas-0.1.md" },
-  { title = "Schema versioning", href = "reference/schema-versioning.md" },
-  { title = "Screener", href = "reference/screener.md" },
-  { title = "Screener registry", href = "reference/screener-registry.md" },
-  { title = "Groups, maps & events", href = "reference/groups-maps-events.md" },
-  { title = "Markets & artifacts", href = "reference/markets-and-artifacts.md" },
-  { title = "Capability matrix", href = "reference/capability-matrix.md" },
-]
-
-[[project.nav]]
-title = "Explanation"
-children = [
-  { title = "Access & responsible use", href = "explanation/access-and-responsible-use.md" },
-]

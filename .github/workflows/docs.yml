@@ -35,7 +35,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e . mkdocstrings-python zensical
       - name: Build site
-        working-directory: docs/user
         run: zensical build --clean
       - uses: actions/upload-pages-artifact@v4
         with:

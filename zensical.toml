@@ -1,12 +1,13 @@
-# finvizp user documentation — built with zensical.
-# Diataxis-structured; research/plans/superpowers dirs are NOT part of the site.
+# finvizp user documentation, built with Zensical.
+# The Markdown tree follows Diataxis: tutorials, how-to, reference, explanation.
 
 [project]
 site_name = "finvizp"
-site_dir = "site"
-language = "en"
-docs_dir = "."
 site_url = "https://legout.github.io/finvizp/"
+docs_dir = "docs/user"
+site_dir = "docs/user/site"
+language = "en"
+extra_css = ["stylesheets/extra.css"]
 nav = [
   "index.md",
   { "Tutorials" = [
@@ -21,7 +22,11 @@ nav = [
     { "Run live smokes" = "how-to/live-smokes-and-drift.md" },
   ] },
   { "Reference" = [
-    { "API: client & operations" = "reference/api.md" },
+    { "API: client & contracts" = "reference/api.md" },
+    { "API: operations" = "reference/api-operations.md" },
+    { "API: core operations" = "reference/api-core-operations.md" },
+    { "API: analysis operations" = "reference/api-analysis-operations.md" },
+    { "API: market operations" = "reference/api-market-operations.md" },
     { "Result envelopes" = "reference/results.md" },
     { "Arrow schemas" = "reference/schemas-0.1.md" },
     { "Schema versioning" = "reference/schema-versioning.md" },
@@ -37,6 +42,14 @@ nav = [
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["../src"]
+paths = ["src"]
 options.docstring_style = "google"
 options.show_source = false
+
+[project.theme]
+features = [
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.top",
+  "toc.follow",
+]

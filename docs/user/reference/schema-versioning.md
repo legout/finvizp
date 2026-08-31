@@ -1,90 +1,98 @@
 # Schema versioning
 
-Every Arrow table finvizp returns is built from a versioned, validated
-registry: `src/finvizp/schema_registry.json`. The registry is the single
-source of truth for dataset names, schema versions, ordered fields, Arrow
-types, units, nullability, key/temporal hints, `_raw` companions, the
-`extra_fields` drift map, and the provenance columns (`symbol`, `fetched_at`).
-Tests enforce the registry contract continuously — see
+`finvizp` builds every Arrow table from the validated registry at
+`src/finvizp/schema_registry.json`.
+
+The registry defines:
+
+- dataset names and versions;
+- ordered fields, Arrow types, units, and nullability;
+- key and temporal hints;
+- `_raw` companions and the `extra_fields` drift map;
+- provenance columns such as `symbol` and `fetched_at`.
+
+Tests keep the registry and the normalizer in sync:
 `tests/test_schemas.py`, `tests/test_schema_contracts.py`, and
 `tests/test_normalization_matrix.py`.
 
-## Reading the registry
+## Read the registry
 
 ```python
 from finvizp import schemas
 
-schemas.dataset_names()  # deterministic dataset order
-schemas.dataset("quote_news")  # one Dataset: fields, versions, hints
-schemas.arrow_schema("quote_news")  # deterministic pyarrow.Schema
+schemas.dataset_names()                 # deterministic order
+schemas.dataset("quote_news")          # fields, versions, hints
+schemas.arrow_schema("quote_news")     # pyarrow.Schema
 schemas.dataset_version("quote_etf_holders")  # 2
 ```
 
-A dataset version is part of the cache key and of every result's
-`metadata.schema_version`. A registry bump invalidates cached results and
-tells you which schema a historical table used. Parser behavior is versioned
-separately in `metadata.parser_version`.
+A dataset version is part of the cache key and appears in
+`result.metadata.schema_version`. Parser behavior has its own
+`metadata.parser_version`.
 
-## Current registered datasets (observed 2026-08-27)
+## Registered datasets
 
-| Dataset | Version | Rows are | Temporal fields |
-|---|---|---|---|
-| `symbol_universe` | 1 | one canonical symbol | — |
-| `symbol_search` | 1 | one ranked suggestion | — |
-| `statements` | 1 | one metric × period cell | `period_end_date` |
-| `quote_snapshot` | 1 | one stock's snapshot (six tables merged) | `ex_dividend_date`, `ipo_date` |
-| `quote_description` | 1 | one stock's description | — |
-| `quote_ratings` | 1 | one analyst action | `published_at` (+`_raw`/`_status`) |
-| `quote_news` | 1 | one news event | `published_at` (+`_raw`/`_status`) |
-| `quote_insider` | 1 | one insider transaction | `transaction_date` |
-| `quote_peers` | 1 | one peer symbol | — |
-| `quote_etf_holders` | 2 | one ETF holding position | — |
-| `quote_signals` | 1 | one signal/link descriptor | — |
-| `earnings_screen` | 1 | one ranked earnings-dated symbol | `earnings_date` |
-| `economic_calendar` | 1 | one scheduled release | `release_date`, `release_timestamp` (+`_status`), `reference_date` |
-| `economic_details` | 1 | one release's detail row | same as calendar |
-| `futures_tiles` | 1 | one futures contract tile | verbatim sparkline text, `delay_minutes` |
+| Dataset | Version | One row represents |
+|---|---:|---|
+| `symbol_universe` | 1 | One canonical symbol. |
+| `symbol_search` | 1 | One ranked suggestion. |
+| `statements` | 1 | One metric and period cell. |
+| `quote_snapshot` | 1 | One stock snapshot. |
+| `quote_description` | 1 | One stock description. |
+| `quote_ratings` | 1 | One analyst action. |
+| `quote_news` | 1 | One news event. |
+| `quote_insider` | 1 | One insider transaction. |
+| `quote_peers` | 1 | One peer symbol. |
+| `quote_etf_holders` | 2 | One ETF holding position. |
+| `quote_signals` | 1 | One signal or link descriptor. |
+| `earnings_screen` | 1 | One earnings-dated ranked symbol. |
+| `economic_calendar` | 1 | One scheduled release. |
+| `economic_details` | 1 | One release detail row. |
+| `futures_tiles` | 1 | One futures contract tile. |
 
-## Units, companions, and temporal honesty
+## Units and missing values
 
-- Typed units, not strings: `percent` columns are fractions (`0.5` means
-  50%), `compact` columns are absolute numbers (`2.5e9` means 2.5B), `count`
-  columns are `int64`, `date` columns are `date32`, `timestamp` columns are
-  UTC `timestamp("us")`.
-- `raw: true` promises a nullable `*_raw` string companion carrying the
-  provider's exact display; timestamp fields with `raw: true` also carry a
-  nullable `*_status` text column.
-- Builder parse statuses are `anchored` (time-only display anchored to the
-  provider response date in `America/New_York`), `exact` (full local
-  datetime), and `ambiguous` (DST fold/gap: no unambiguous UTC instant; the
-  typed value stays null and the raw display survives). Parser layers add
-  `relative` and `date_only` verdicts for displays they resolve or decline to
-  invent (see `docs/reference/groups-maps-events.md` for the news family).
-- A known-missing value is an Arrow null — never NaN, never zero. Additive
-  provider labels land in `extra_fields` with an `unknown_field`
-  `FetchWarning`; `strict_schema=True` promotes drift to `FinvizDataError`.
+| Unit | Stored representation | Example |
+|---|---|---|
+| `percent` | Fraction | `0.5` means 50%. |
+| `compact` | Absolute number | `2.5e9` means 2.5B. |
+| `count` | `int64` | A row count. |
+| `date` | Arrow `date32` | A calendar date. |
+| `timestamp` | UTC `timestamp("us")` | A point in time. |
 
-## Registry validation rules
+When the provider's display is ambiguous, the typed value is null and the
+exact display stays in a nullable `*_raw` column. Timestamp fields also carry
+a `*_status` column.
 
-Loading a registry entry fails loudly when: a dataset name/version/fields
-shape is invalid; a type or unit is outside the closed vocabulary; a unit and
-type disagree; a temporal hint disagrees with the unit; a key is nullable;
-`symbol`/`fetched_at` provenance columns are missing or mis-typed; `raw: true`
-has no `*_raw` companion (or a timestamp lacks `*_status`); a `_raw` column
-has no valid nullable base; or `extra_fields` is absent/duplicated. Versions
-are positive integers and never reused for a different field list.
+Known-missing values are Arrow nulls. They are never represented as zero or
+NaN.
 
-## Changing a schema
+Additive provider labels go into `extra_fields` with a `FetchWarning`.
+`strict_schema=True` turns recoverable drift into `FinvizDataError`.
 
-1. Add, remove, or retype fields in `schema_registry.json`.
-2. Bump the dataset's `version` (additive optional fields may keep the
-   version; anything that changes an existing column's meaning or a table's
-   row identity must bump).
-3. Update the pinned-version guard in `tests/test_schema_contracts.py`
-   deliberately — it fails on accidental bumps.
-4. Re-run `uv run pytest tests/test_schema_contracts.py
-   tests/test_normalization_matrix.py tests/test_schemas.py`: complete,
-   partial, and empty shapes must still share the registered schema, and the
-   normalization matrix must stay family-independent.
-5. Update this page's dataset table; `scripts/check_docs.py` and the docs
-   integrity tests keep links honest.
+## Temporal status values
+
+The normalizer uses these statuses for time displays:
+
+- `anchored`: time-only display anchored to the response date in
+  `America/New_York`;
+- `exact`: complete local date and time;
+- `ambiguous`: DST fold or gap, so the typed instant stays null;
+- `relative`: relative display resolved against the fetch time;
+- `date_only`: date known, time intentionally unknown.
+
+## Change a schema
+
+1. Edit `schema_registry.json`.
+2. Bump the dataset version when an existing field changes meaning, type, or
+   row identity. Additive optional fields may keep the version.
+3. Update the pinned-version guard in `tests/test_schema_contracts.py`.
+4. Run the focused contract and normalization tests:
+
+   ```bash
+   uv run pytest tests/test_schema_contracts.py \
+     tests/test_normalization_matrix.py tests/test_schemas.py
+   ```
+
+5. Update this page's dataset table. The docs and integrity tests catch broken
+   links and missing references.

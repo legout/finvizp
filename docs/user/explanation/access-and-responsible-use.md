@@ -1,63 +1,53 @@
-# Access and responsible use (explanation)
+# Access and responsible use
 
-finvizp exists to read the **public** Finviz surface politely. This page
-explains the access model and the use limits the library enforces — and the
-ones it deliberately does not enforce because they are the caller's
-responsibility. For endpoint-level detail see
-[Access and entitlements](https://github.com/legout/finvizp/blob/main/docs/research/access-and-entitlements.md); for the
-transport knobs see
-[Proxies and cache](../how-to/proxies-and-cache.md) and
-[Caller-owned history](../how-to/caller-owned-history.md).
+`finvizp` reads the public Finviz surface with bounded, explicit requests. This
+page describes what the client does and what remains your responsibility.
 
-## Tiers
+For endpoint details, see the
+[access and entitlements research](https://github.com/legout/finvizp/blob/main/docs/research/access-and-entitlements.md).
+For request settings, see [proxies and cache](../how-to/proxies-and-cache.md).
 
-| Tier | Meaning | finvizp behavior |
-| --- | --- | --- |
-| PUBLIC | Anonymous browser-visible pages and first-party JSON | Fully covered by every operation marked `implemented` |
-| AUTHENTICATED | Requires a logged-in session | Never automated; no login flow exists in the library |
-| ELITE | Requires a paid subscription | Typed `FinvizEntitlementError` when the provider walls a route; export endpoints are simply not called |
+## Access tiers
 
-Cookies prove authentication, not Elite entitlement. The library never
-stores, transmits, or fabricates credentials, and result metadata records
-only the observed `access_tier`.
+| Tier | Meaning | Client behavior |
+|---|---|---|
+| `PUBLIC` | Anonymous browser-visible HTML or first-party JSON. | Implemented public operations may use it. |
+| `AUTHENTICATED` | Requires a logged-in session. | No login flow or automation. |
+| `ELITE` | Requires a paid subscription. | A wall raises `FinvizEntitlementError`; export routes are not called. |
+| `UNKNOWN` | The response does not establish entitlement. | The client does not guess. |
 
-## What the client enforces
+Cookies prove authentication, not Elite entitlement. The library does not store,
+transmit, or fabricate credentials.
 
-- **One request per logical operation.** Parsers never trigger follow-up
-  fetches; related links, badges, and article URLs are data, not work.
-- **Bounded retries** (2, exponential backoff) for transient transport/5xx/429
-  only — never for query, parse, entitlement, or challenge errors.
-- **No failover after an access wall.** A 403, challenge, or entitlement
-  error ends the attempt; switching proxies or identities to evade it is out
-  of scope, permanently.
-- **Redaction everywhere.** Proxy URLs, authorization headers, cookies, and
-  response bodies are redacted recursively in every error context and
-  metadata record.
-- **Robots awareness.** Routes the provider's `robots.txt` disallows for
-  automation (exports, chart/image variants, insider searches) are either not
-  implemented or strictly opt-in single reads, never crawled.
+## What the client does
 
-## What stays the caller's responsibility
+- Makes one request per logical operation. Related links, badges, and article
+  URLs are data, not follow-up work.
+- Retries transient transport, 5xx, and 429 failures within bounded limits.
+- Stops on 403, challenge, and entitlement responses. It does not switch
+  proxies or identities to evade a wall.
+- Redacts proxy URLs, authorization headers, cookies, and response bodies from
+  metadata and error context.
+- Avoids sitemap enumeration and filter-grid exhaustion.
 
-The library cannot make collecting legal, licensed, or polite — it can only
-make politeness the default. Callers own:
+## What you must decide
 
-- the **purpose** of their access and any terms-of-service obligations on
-  their use of the data (redistribution, commercial use, attribution);
-- the **rate and volume** of their own loops; the client's bounded defaults
-  are ceilings for polite access, not throughput targets;
-- **retention and privacy** for whatever they persist; snapshots you build
-  are your data and your liability (see
-  [Caller-owned history](../how-to/caller-owned-history.md));
-- **verification of entitlement** for anything beyond the anonymous public
-  surface, per deployment.
+The client cannot decide whether your use is permitted. You are responsible for:
 
-## Hard limits (non-negotiable in this library)
+- the purpose of access and any terms, licences, attribution, or redistribution
+  requirements;
+- the rate and volume of your own loops;
+- retention and privacy for snapshots you persist;
+- verifying entitlement for anything beyond the anonymous public surface.
 
-- No login automation, credential handling, or session farming.
-- No crawling: no sitemap enumeration, ticker sweeps, publisher/fund/manager
-  index walks, or filter-grid exhaustion. One explicit request per explicit
-  caller choice, always.
-- No bypass of challenges, entitlement walls, or robots directives.
-- No telemetry: nothing about your usage, queries, or environment leaves the
-  process. There is no phone-home path in the code.
+The defaults are intended to be polite. They are not a legal opinion or a
+throughput guarantee.
+
+## Hard limits
+
+`finvizp` does not provide:
+
+- login automation or session farming;
+- sitemap, ticker, publisher, fund, manager, or filter-grid crawls;
+- challenge, entitlement, or robots bypasses;
+- usage telemetry or a phone-home path.

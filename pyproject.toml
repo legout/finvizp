@@ -26,6 +26,11 @@ Repository = "https://github.com/legout/finvizp"
 Issues = "https://github.com/legout/finvizp/issues"
 Documentation = "https://github.com/legout/finvizp/tree/main/docs"
 
+[project.optional-dependencies]
+dev = [
+    "ipython>=9.17.0",
+]
+
 [dependency-groups]
 dev = [
   "mkdocstrings-python>=2.0.7",

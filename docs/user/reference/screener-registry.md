@@ -1,60 +1,68 @@
-# Screener registry and drift tooling (0.2)
+# Screener registry and drift tooling
 
-`src/finvizp/screener_registry.json` is the checked-in, human-reviewed source
-of truth for screener metadata: filters (with their categorical options),
-signals, orders, views, and columns. Every screener query is validated against
-it before any network request is made, so a stale registry fails safely — it
-rejects queries the provider now supports — but never invents provider codes.
+`src/finvizp/screener_registry.json` is the reviewed source of truth for
+screener filters, signals, orders, views, and columns.
 
-The registry is data, reviewed like code. Nothing in the library writes to it
-at runtime.
+Every query is checked against it before the client sends a request. A stale
+registry can reject a provider option that was added later, but it never
+invents a provider code.
 
-## Observing drift
+The library reads this file at runtime. It never edits it.
 
-`finvizp._dev.screener_drift` (developer tooling, imported by explicit path —
-never part of the public API) builds a reviewable drift report:
+## Produce a drift report
+
+The drift tool is developer-only and is not part of the public API.
 
 ```python
-from finvizp._dev.screener_drift import build_live_report
-from finvizp import FinvizClient
+from pathlib import Path
 
-report = build_live_report(live=True, client=FinvizClient())
-# or write it out for review:
-build_live_report(live=True, out_path=pathlib.Path("drift.json"))
+from finvizp import FinvizClient
+from finvizp._dev.screener_drift import build_live_report
+
+with FinvizClient() as client:
+    report = build_live_report(live=True, client=client)
+
+build_live_report(live=True, out_path=Path("drift.json"))
 ```
 
-Live access is always opt-in: the call requires an explicit `live=True`
-keyword. It performs exactly two metadata requests — the custom view page
-(`v=151`, carrying the order and signal dropdowns) and the all-filters layout
-(`v=111&ft=4`, carrying every filter select) — fetched once, never crawled or
-scheduled. `collect_observations(client=...)` runs the same bounded fetch if
-you want the raw observation mapping instead of a report.
+!!! warning "Live access is opt-in"
+    `live=True` is required. The report makes exactly two metadata requests:
+    the custom view page (`v=151`) and the all-filters layout (`v=111&ft=4`).
+    It does not crawl, schedule, or enumerate the site.
 
-The report is deterministic JSON (`meta` + `report` sections) listing
-`added`, `removed`, and `changed` entries per namespace, paired by human name
-and sorted. Strings from the provider that carry markup or shell-ish
-characters are replaced with `[redacted]`; the report never contains cookies,
-proxy configuration, or raw response bodies. Only namespaces actually observed
-are compared, so an unobserved namespace is never misreported as removed.
+Use `collect_observations(client=...)` when you need the raw observation
+mapping rather than the report.
 
-For offline work, `build_live_report(live=False, observations=...)` compares
-supplied observations instead of fetching — this is how the report shape is
-exercised in tests.
+## Report contents
 
-## Approval and update workflow
+The JSON report has `meta` and `report` sections. Each namespace lists sorted
+entries under `added`, `removed`, or `changed`.
 
-1. Run the report (bounded, opt-in) and read the diff.
-2. For each entry, verify the change is real metadata — not a provider
-   experiment, A/B artifact, or Elite-gated surface. Cross-check the live page
-   by hand.
-3. Edit `screener_registry.json` deliberately: new entries get human names and
-   grammar-conformant codes; changed entries keep their `name` key. Bump
-   `version` and update `observation_date`.
-4. Review the registry diff like any code change; the typed registry loader
-   (`finvizp._queries.screener._parse_registry`) will reject duplicate names,
-   grammar-violating codes, and empty option lists at import time.
-5. Commit. The tool never mutates the registry — `registry_mutated` in every
-   report is always `false` by construction.
+The tool:
 
-Fixed-view column drift is out of scope for this tool: it is covered by the
-page parser's header-driven column contract.
+- pairs entries by human name;
+- compares only namespaces observed in the current run;
+- replaces provider strings containing markup or shell-like characters with
+  `[redacted]`;
+- omits cookies, proxy configuration, and raw response bodies.
+
+An unobserved namespace is not reported as removed.
+
+## Approve a change
+
+1. Run the bounded report and read the diff.
+2. Check each difference against the live page. Rule out an experiment, an
+   A/B variant, or an Elite-only option.
+3. Edit `screener_registry.json` deliberately.
+4. Keep existing `name` keys when changing entries. New entries need a human
+   name and a grammar-valid provider code.
+5. Bump `version` and `observation_date`.
+6. Review the registry diff like code, then commit it.
+
+The typed loader rejects duplicate names, invalid codes, and empty option
+lists. The report never mutates the registry; `registry_mutated` is always
+`false`.
+
+!!! note
+    Fixed-view column drift is handled by the page parser's header contract,
+    not by this tool.

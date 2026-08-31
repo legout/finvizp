@@ -1,29 +1,20 @@
-# Caller-owned history (how-to)
+# Keep your own history
 
-finvizp reads snapshot surfaces. With one documented exception the provider
-does not expose history through the public endpoints this client covers, and
-finvizp ships no persistence layer, storage helpers, or database code by
-design: what a caller keeps is the caller's own collection, under the
-caller's retention rules.
+The public Finviz surfaces are mostly snapshots. `finvizp` returns each snapshot
+with provenance, but it does not store data for you.
 
-## Provider history vs. collector-built snapshots
+## Two kinds of history
 
-- **Provider history** — data the provider itself serves as a historical
-  series. On the current public surface this is essentially limited to the
-  economic-calendar release detail page (`calendar_detail_async`), which
-  returns the release's own history table. Sparklines on forex/crypto tiles
-  and futures are verbatim value arrays with no timestamps — the payload
-  carries no interval, so finvizp never presents them as history
-  (`sparkline_timestamps` and `sparkline_interval_seconds` are always
-  `None`), and quotes are delayed snapshots, not series.
-- **Collector-built snapshots** — history that exists only because a caller
-  captured repeatedly. Every `FetchResult` is an immutable point-in-time
-  record; accumulating them is the intended way to build history.
+| Kind | What it means |
+|---|---|
+| Provider history | A historical series the provider serves directly. The public client currently exposes this mainly through economic-calendar release details. |
+| Collector history | Snapshots you capture repeatedly and store yourself. |
 
-## Building point-in-time history
+Forex, crypto, and futures sparklines have no point timestamps or intervals.
+`finvizp` keeps those arrays verbatim and does not present them as time series.
+Quotes are delayed snapshots.
 
-Capture the pieces of `FetchResult` you need and store them with your own
-tools — Arrow IPC, Parquet, a database, anything:
+## Capture a snapshot
 
 ```python
 from finvizp import FinvizClient, quote_async
@@ -31,12 +22,8 @@ from finvizp import FinvizClient, quote_async
 async with FinvizClient() as client:
     result = await quote_async("AAPL", client=client)
 
-# The snapshot itself (Arrow-native, your writer of choice):
-table = result.table  # or result.data for bundle operations
-
-# The provenance that makes repeated captures comparable:
+table = result.table
 record = {
-    # fetched_at is the provider-observed time provenance stamp
     "fetched_at": result.metadata.fetched_at,
     "response_hash": result.metadata.response_hash,
     "schema_version": result.metadata.schema_version,
@@ -46,10 +33,12 @@ record = {
 }
 ```
 
-Write both under one key (symbol + `fetched_at` is the natural one) with the
-storage system you already run. Provenance fields are stable across
-operations, so captures from different families stay joinable. See
-[Proxies and cache](proxies-and-cache.md) for the cache behavior that governs
-repeat reads inside one process, and
-[Snapshot history](https://github.com/legout/finvizp/blob/main/docs/brainstorming/snapshot-history.md) for the design
-reasoning.
+Write `table` and `record` together with Arrow IPC, Parquet, a database, or the
+storage system you already use. A key such as `(symbol, fetched_at)` keeps
+repeated captures distinct.
+
+Provenance fields stay consistent across operation families, so captures can be
+joined later. The package never invents provider history.
+
+See [proxies and cache](proxies-and-cache.md) for repeat reads inside one
+process and the [design notes on snapshot history](https://github.com/legout/finvizp/blob/main/docs/brainstorming/snapshot-history.md).

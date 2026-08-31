@@ -1,67 +1,75 @@
 # Arrow schemas in 0.1
 
-finvizp tables are built from a versioned, validated registry
-(`src/finvizp/schema_registry.json`) exposed through `finvizp.schemas`.
-Field order is deterministic, nullability and units are declared per field,
-and every dataset carries `symbol` (non-null key) and `fetched_at` (non-null
-UTC timestamp) provenance columns plus exactly one nullable `extra_fields`
-map for additive provider fields.
+`finvizp` exposes versioned Arrow tables through `finvizp.schemas`. Field order,
+nullability, units, and provenance are deterministic.
 
-## Reading a table
+Every dataset contains non-null `symbol` and UTC `fetched_at` fields, plus one
+nullable `extra_fields` map for additive provider fields.
+
+## Read a table
 
 ```python
 import finvizp
 
-result = finvizp.quote("AAPL", client=client)
-snapshot = finvizp.snapshot("AAPL", client=client)
-table = snapshot.table  # Arrow table, registered schema
-table.schema  # deterministic field order
-table.column("market_cap")  # float64 fraction-of-compact units
+snapshot = finvizp.snapshot("AAPL")
+table = snapshot.table
+
+print(table.schema)
+print(table.column("market_cap"))
 ```
 
-Typed units, not strings: `percent` columns are fractions (`0.5` means
-50%), `compact` columns are absolute numbers (`2.5e9` means 2.5B), `count`
-columns are `int64`, dates are `date32`, timestamps are UTC
-`timestamp("us")`. Where the provider display is ambiguous, the verbatim
-text survives in a `*_raw` companion column and a known-missing value is an
-Arrow null — never NaN, never zero.
+## Units and missing values
 
-## Registered datasets (0.1)
+| Provider display | Arrow representation | Example |
+|---|---|---|
+| Percent | Fraction | `0.5` means 50%. |
+| Compact number | Absolute number | `2.5e9` means 2.5B. |
+| Count | `int64` | A row count. |
+| Date | `date32` | A calendar date. |
+| Timestamp | UTC `timestamp("us")` | A point in time. |
 
-| Dataset | Version | Rows are | Key relations |
-|---|---|---|---|
-| `symbol_universe` | 1 | one canonical symbol per row | — |
-| `symbol_search` | 1 | one ranked suggestion | `symbol`, `company`, `exchange` |
-| `statements` | 1 | one metric × period cell | `statement_kind`, `periodicity`, `metric`, `value`/`value_raw`, `currency` |
-| `quote_snapshot` | 1 | one stock's identity/valuation snapshot | 50 columns, all six snapshot tables merged |
-| `quote_description` | 1 | one stock's description | `description` |
-| `quote_ratings` | 1 | one analyst action | `published_at` (+`_raw`/`_status`), `rating`, `analyst`, `price_target` |
-| `quote_news` | 1 | one news event | `published_at`, `title`, `url`, `publisher` |
-| `quote_insider` | 1 | one insider transaction | `transaction_date`, `transaction_type`, `cost`, `shares` |
-| `quote_peers` | 1 | one peer symbol | — |
-| `quote_etf_holders` | 2 | one ETF holding position | — |
-| `quote_signals` | 1 | one signal/link descriptor | — |
+Ambiguous displays keep their original text in a nullable `*_raw` column and
+use null for the typed value. Timestamp fields also carry `*_status`.
+Known-missing values are null, never zero or NaN.
 
-The `QuoteBundle` returned by `quote()` holds one table per relation (or
-`None` when the region is absent on the page) plus signal/artifact
-descriptors; projection functions (`snapshot`, `ratings`, …) return the
-single relation's table, derived from the same cached page with
-`projected_from="quote"` provenance.
+## Registered datasets
 
-## Versioning contract
+| Dataset | Version | One row represents |
+|---|---:|---|
+| `symbol_universe` | 1 | One canonical symbol. |
+| `symbol_search` | 1 | One ranked suggestion. |
+| `statements` | 1 | One metric and period cell. |
+| `quote_snapshot` | 1 | One stock identity and valuation snapshot. |
+| `quote_description` | 1 | One stock description. |
+| `quote_ratings` | 1 | One analyst action. |
+| `quote_news` | 1 | One news event. |
+| `quote_insider` | 1 | One insider transaction. |
+| `quote_peers` | 1 | One peer symbol. |
+| `quote_etf_holders` | 2 | One ETF holding position. |
+| `quote_signals` | 1 | One signal or link descriptor. |
 
-- `dataset_version(name)` is part of the cache key and of every result's
-  `metadata.schema_version`; a registry bump invalidates cached results
-  and tells you which schema a historical table used.
-- Additive provider labels land in `extra_fields` with a `FetchWarning`,
-  never silently dropped; `strict_schema=True` promotes drift (or a
-  recoverable conversion failure) to `FinvizDataError` for callers who
-  want contracts enforced over best-effort.
-- Parser behavior is versioned in `metadata.parser_version`.
+The full list, including later milestone datasets, is in
+[Schema versioning](schema-versioning.md).
 
-## Canonical symbol notation
+## Quote bundles and projections
 
-Symbols are normalized (trimmed, uppercased, reviewed dot/slash class
-notation mapped to dashes: `brk.b` → `BRK-B`), deduplicated, and positions
-preserved in `metadata.symbols`. The provider's dash notation is the only
-canonical form on the wire.
+`quote()` returns a `QuoteBundle` containing one table per available relation.
+`None` means that relation was absent from the page.
+
+Projection functions such as `snapshot()`, `ratings()`, and `news()` return one
+relation and can reuse the cached quote page. Their metadata includes
+`projected_from="quote"`.
+
+## Versioning rules
+
+- `dataset_version(name)` is part of the cache key and appears in
+  `metadata.schema_version`.
+- Additive provider labels go to `extra_fields` with a `FetchWarning`.
+- `strict_schema=True` promotes recoverable drift to `FinvizDataError`.
+- Parser behavior is tracked separately in `metadata.parser_version`.
+
+## Canonical symbols
+
+The client trims and uppercases symbols, maps reviewed dot/slash notation to
+the provider's dash form (`brk.b` becomes `BRK-B`), deduplicates requests, and
+preserves input positions in `metadata.symbols`.

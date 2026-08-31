@@ -1,21 +1,66 @@
-# API: client & operations
+# Python API
 
-The public surface is one client class plus operation functions that take it.
+This page covers the objects shared by all operations. The operation reference
+is split by family so you can find a function without scrolling through the
+entire package.
 
-## Client
+## Transport
 
 ::: finvizp.FinvizClient
     options:
-      members:
-        - "__init__"
+      show_source: false
+      members_order: source
 
-## Module operations
+## Result and access contracts
 
-Each operation exists as an async function and (where applicable) a sync
-twin without the `_async` suffix.
-
-::: finvizp
+::: finvizp.FetchResult
     options:
-      show_root_heading: true
-      filters:
-        - "!^_"
+      show_source: false
+      members_order: source
+
+::: finvizp.ResultMetadata
+    options:
+      show_source: false
+      members_order: source
+
+::: finvizp.AccessTier
+    options:
+      show_source: false
+
+::: finvizp.ResultStatus
+    options:
+      show_source: false
+
+## Compound and artifact results
+
+::: finvizp.QuoteBundle
+    options:
+      show_source: false
+
+::: finvizp.MapBundle
+    options:
+      show_source: false
+
+::: finvizp.Artifact
+    options:
+      show_source: false
+
+## Errors
+
+All public exceptions derive from `FinvizError`. See
+[results and errors](results.md) for the practical error table.
+
+::: finvizp.FinvizError
+    options:
+      show_source: false
+      members: false
+
+::: finvizp.FinvizPartialError
+    options:
+      show_source: false
+      members: false
+
+::: finvizp.FinvizQueryError
+    options:
+      show_source: false
+      members: false

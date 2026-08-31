@@ -1,77 +1,73 @@
-# Results, provenance, and error handling (0.1)
+# Results and errors
 
-Every finvizp network operation returns an immutable `FetchResult[T]`
-envelope. `.data` is the canonical payload — an Arrow table for endpoint
-operations, a `QuoteBundle` for `quote()` — and `.table`/`.artifact` are
-typed convenience views that raise `FinvizDataError` on the wrong payload
-kind.
+Networked operations return an immutable `FetchResult[T]`. The payload lives in
+`.data`:
 
-## Result status
+- endpoint operations return an Arrow table;
+- `quote()` returns a `QuoteBundle`;
+- artifact downloads return an `Artifact` with content metadata.
 
-`ResultStatus` has exactly three values:
+Use `.table` or `.artifact` when you know which payload you received. The wrong
+view raises `FinvizDataError` instead of returning a misleading value.
 
-- `COMPLETE` — every requested unit succeeded.
-- `PARTIAL` — some units failed; only produced with `allow_partial=True`
-  (strict mode raises `FinvizPartialError` carrying the immutable partial
-  result instead).
-- `EMPTY` — the provider answered successfully with recognized empty data
-  (for example a symbol with no statement rows). Empty is a result, not an
-  error.
+## Status values
+
+| Status | Meaning |
+|---|---|
+| `COMPLETE` | Every requested unit succeeded. |
+| `PARTIAL` | Some units failed. Returned only with `allow_partial=True`. |
+| `EMPTY` | The provider answered successfully with recognized empty data. |
+
+An empty result is not an error. Strict mode raises `FinvizPartialError` for a
+mixed batch, but preserves the successful prefix in `partial_result`.
 
 ## Provenance
 
-`FetchResult.metadata` (`ResultMetadata`) is frozen and carries everything
-needed to interpret the data later:
+`result.metadata` is frozen and records how to interpret the payload.
 
-- `endpoint`, `query`, `response_hash`, `route_fingerprint` — what was asked
-  and how the response is identified;
-- `fetched_at` (provider fetch time) and `served_at`/`cache_hit`/`cache_age`
-  (cache facts; cache hits keep the original `fetched_at` and hash);
-- `access_tier` (`AccessTier`: `PUBLIC`, `AUTHENTICATED`, `ELITE`,
-  `UNKNOWN`) — inferred from response evidence, never guessed;
-- `symbols` — per-symbol resolution records preserving the requested
-  spelling, canonical form, and position;
-- `warnings` (`FetchWarning` with a stable `code`) and `unit_errors`
-  (`UnitError`) — typed, scrubbed diagnostics;
-- `parser_version`/`schema_version` — which parser and registered Arrow
-  schema produced the table;
-- `projected_from` — `"quote"` on projection results derived from a cached
-  bundle.
-
-Nothing in metadata ever contains credentials, proxy URLs, or response
-bodies; context formatting redacts them recursively.
-
-## Batching: strict, partial, and empty
-
-Batch operations (`statements_batch`, `quote`, projections) validate and
-normalize symbols before any network access, deduplicate, keep
-first-canonical order, and enforce a bounded batch size:
-
-- strict (default): the first failed unit raises `FinvizPartialError` with
-  the successful prefix preserved in `partial_result`;
-- `allow_partial=True`: the call returns a `PARTIAL` result whose
-  `metadata.unit_errors` says which symbols failed and why;
-- all units failed: `FinvizBatchError` carries one `UnitError` per symbol;
-- a symbol that does not resolve to data is a typed per-unit error
-  (`FinvizNotFoundError` class), never a crash and never a silent drop.
-
-## Errors
-
-All failures derive from `FinvizError`. The hierarchy distinguishes exactly:
-
-| Exception | Meaning |
+| Field | What it tells you |
 |---|---|
-| `FinvizTransportError` | network/transport failure, timeouts included |
-| `FinvizRateLimitError` | 429 with parsed `Retry-After` |
-| `FinvizBlockedError` | 403/challenge wall |
-| `FinvizEntitlementError` | login/Elite redirect on entitled content |
-| `FinvizNotFoundError` | symbol or resource does not resolve |
-| `FinvizQueryError` | invalid caller input (also a `ValueError`) |
-| `FinvizPartialError` | strict-mode batch with failures; carries partial result |
-| `FinvizBatchError` | all batch units failed |
-| `FinvizParseError` | provider shape drift — the response is not what was verified |
-| `FinvizDataError` | contract violation in data construction or lookup |
+| `endpoint`, `query` | What the client requested. |
+| `response_hash`, `route_fingerprint` | Which response and route produced the data. |
+| `fetched_at` | When the provider response was fetched. |
+| `served_at`, `cache_hit`, `cache_age` | How this call was served from the cache. |
+| `access_tier` | Observed `PUBLIC`, `AUTHENTICATED`, `ELITE`, or `UNKNOWN`. |
+| `symbols` | Requested spelling, canonical symbol, and input position. |
+| `warnings`, `unit_errors` | Typed, scrubbed diagnostics. |
+| `parser_version`, `schema_version` | Code and schema versions that produced the table. |
+| `projected_from` | `"quote"` when a relation came from a cached quote bundle. |
 
-Parse drift and access problems are deliberately different exceptions: a
-live smoke can classify an access/network failure separately from schema
-drift.
+Metadata never contains credentials, proxy URLs, or response bodies. Context
+formatting redacts sensitive values recursively.
+
+## Batches
+
+Batch calls validate, normalize, deduplicate, and order symbols before network
+access. They also enforce the operation's maximum batch size.
+
+| Mode | Behavior |
+|---|---|
+| Strict, default | Raises `FinvizPartialError` at the first failed unit. Successful rows remain in `partial_result`. |
+| `allow_partial=True` | Returns `PARTIAL`; inspect `metadata.unit_errors` for failed units. |
+| All units fail | Raises `FinvizBatchError` with one `UnitError` per unit. |
+| Symbol/resource does not resolve | Records a typed `FinvizNotFoundError`, never a silent drop. |
+
+## Error hierarchy
+
+Every public error derives from `FinvizError`.
+
+| Exception | Use it for |
+|---|---|
+| `FinvizTransportError` | Network failures and timeouts. |
+| `FinvizRateLimitError` | HTTP 429 with parsed `Retry-After`. |
+| `FinvizBlockedError` | HTTP 403 or a challenge page. |
+| `FinvizEntitlementError` | Login or Elite content walls. |
+| `FinvizNotFoundError` | A symbol or resource does not resolve. |
+| `FinvizQueryError` | Invalid caller input. Also a `ValueError`. |
+| `FinvizPartialError` | Strict batch mode with at least one failed unit. |
+| `FinvizBatchError` | Every batch unit failed. |
+| `FinvizParseError` | The provider's response shape drifted. |
+| `FinvizDataError` | A conversion, schema, or lookup contract failed. |
+
+Access failures and parser drift stay separate. A live smoke can therefore
+report “the route is blocked” without mislabeling it as a parser regression.

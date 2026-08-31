@@ -112,7 +112,7 @@ Deep links: [screener](docs/reference/screener.md) ·
 Build the site locally:
 
 ```bash
-uv run zensical build --config-file docs/user/zensical.toml
+uv run zensical build --clean
 ```
 
 Background research (surface inventory, finvizfinance audit, Yahoo overlap,

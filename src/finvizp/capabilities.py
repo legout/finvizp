@@ -232,6 +232,11 @@ def provisional_defaults() -> dict[str, Any]:
 def _self_check() -> None:
     """Import-time integrity: implemented entries must be importable and real."""
     root = _manifest_root()
+    # File references (fixtures/tests/docs) are repo hygiene: they only
+    # resolve inside a source checkout. Installed copies (site-packages)
+    # never ship the tests/ tree, so existence is checked only when the
+    # package is imported from a repository; importability always applies.
+    in_source_tree = (root / "src" / "finvizp").is_dir()
     for entry in _load():
         if entry.status != "implemented":
             continue
@@ -246,7 +251,7 @@ def _self_check() -> None:
             msg = f"capability {entry.id!r} operation {entry.operation!r} is not callable"
             raise FinvizDataError(msg)
         for relative in (entry.fixture, entry.tests, entry.docs):
-            if relative is not None and not (root / relative).exists():
+            if relative is not None and in_source_tree and not (root / relative).exists():
                 msg = f"capability {entry.id!r} references missing file {relative!r}"
                 raise FinvizDataError(msg)
 

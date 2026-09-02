@@ -185,25 +185,21 @@ def _convert(label: str, display: str) -> Any:
             # they parse; anything unparseable becomes an Arrow null — the
             # raw display survives in the page for drift review.
             cleaned = display.replace(",", "")
-            try:
-                if cleaned.endswith("%"):
-                    return parse_percent(display)
-                if (
-                    cleaned
-                    and cleaned[-1] in "KMBT"
-                    and cleaned[:-1].replace(".", "", 1).lstrip("-").isdigit()
-                ):
-                    return parse_compact(display)
-                return float(cleaned)
-            except ValueError:
-                return None
+            if cleaned.endswith("%"):
+                return parse_percent(display)
+            if (
+                cleaned
+                and cleaned[-1] in "KMBT"
+                and cleaned[:-1].replace(".", "", 1).lstrip("-").isdigit()
+            ):
+                return parse_compact(display)
+            return float(cleaned)
         if unit == "percent":
             return parse_percent(display)
-    except ValueError as exc:
-        raise FinvizParseError(
-            f"cannot convert display to {unit} for column {label!r}",
-            context={"endpoint": "screener"},
-        ) from exc
+    except ValueError:
+        # Numeric units never kill the walk: an unparseable display in a
+        # numeric column is stored as an Arrow null for drift review.
+        return None
     return display
 
 

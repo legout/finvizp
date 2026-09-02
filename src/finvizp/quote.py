@@ -111,9 +111,9 @@ async def _fetch_uncached_bundle(
     """
     facets = _bundle_facets(parser_version, schema_version)
     try:
-        return await client._endpoint_op(CANONICAL_PATH, query={"t": symbol}, **facets)()
+        return await client._endpoint_op(CANONICAL_PATH, query={"t": symbol}, **facets)
     except _NOT_FOUND_LIKE:
-        return await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)()
+        return await client._endpoint_op(FALLBACK_PATH, query={"t": symbol}, **facets)
 
 
 _BUNDLE_ROUTES: WeakKeyDictionary[FinvizClient, dict[str, str]] = WeakKeyDictionary()
@@ -149,12 +149,12 @@ async def _fetch_bundle(
         facets = _bundle_facets(parser_version, schema_version)
         alternate = FALLBACK_PATH if route == CANONICAL_PATH else CANONICAL_PATH
         try:
-            result = await client._endpoint_op(route, query={"t": symbol}, **facets)()
+            result = await client._endpoint_op(route, query={"t": symbol}, **facets)
         except _NOT_FOUND_LIKE:
             # The memoized route drifted (soft 404 / parse drift): probe the
             # alternate route — never a same-path retry — and update the memo
             # so warm calls follow the recovered path.
-            result = await client._endpoint_op(alternate, query={"t": symbol}, **facets)()
+            result = await client._endpoint_op(alternate, query={"t": symbol}, **facets)
     routes[symbol] = result.metadata.endpoint
     return result
 

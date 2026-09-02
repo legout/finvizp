@@ -12,7 +12,7 @@ implemented versus planned.
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from finvizp.arrow import build_table, dataset_field_names
 from finvizp.artifacts import (
@@ -29,7 +29,7 @@ from finvizp.capabilities import (
     provisional_defaults,
 )
 from finvizp.client import ClientEvent, ClientResponse, FinvizClient, classify_response
-from finvizp.earnings import earnings, earnings_async, earnings_options, earnings_screen
+from finvizp.earnings import earnings, earnings_async, earnings_screen
 from finvizp.errors import (
     FetchWarning,
     FinvizBatchError,
@@ -172,7 +172,6 @@ __all__ = [
     "download_artifact_async",
     "earnings",
     "earnings_async",
-    "earnings_options",
     "earnings_screen",
     "etf_holders",
     "etf_holders_async",

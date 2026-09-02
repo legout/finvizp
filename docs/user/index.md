@@ -16,7 +16,7 @@ uv add finvizp  # or: pip install finvizp
 ```python
 import finvizp
 
-bundle = finvizp.quote("AAPL")          # sync twin; async: quote_async
+bundle = finvizp.quote("AAPL")  # sync twin; async: quote_async
 print(bundle.data.snapshot.num_rows)
 ```
 

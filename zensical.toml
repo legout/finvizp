@@ -23,7 +23,6 @@ nav = [
   ] },
   { "Reference" = [
     { "API: client & contracts" = "reference/api.md" },
-    { "API: operations" = "reference/api-operations.md" },
     { "API: core operations" = "reference/api-core-operations.md" },
     { "API: analysis operations" = "reference/api-analysis-operations.md" },
     { "API: market operations" = "reference/api-market-operations.md" },

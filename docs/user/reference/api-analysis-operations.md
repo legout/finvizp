@@ -19,7 +19,6 @@ These operations cover screeners, earnings, groups, and the structured map.
       members:
         - earnings
         - earnings_async
-        - earnings_options
         - earnings_screen
 
 ## Groups and maps

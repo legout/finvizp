@@ -5,7 +5,7 @@
 **Status:** Approved after design grilling
 
 **Execution Path:** Dedicated dormant Hermes Kanban board backed by the
-[implementation roadmap](../../plans/2026-08-27-implementation-roadmap.md)
+[documentation index](../../index.md)
 
 ## Purpose
 

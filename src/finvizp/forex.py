@@ -154,7 +154,7 @@ async def performance_async(
         parser_version=_PARSER_VERSION,
         schema_version=_SCHEMA_VERSION,
         parse=_parse_performance,
-    )()
+    )
 
 
 def performance(
@@ -190,7 +190,7 @@ async def tiles_async(
         parser_version=_PARSER_VERSION,
         schema_version=_SCHEMA_VERSION,
         parse=_parse_tiles,
-    )()
+    )
 
 
 def tiles(
@@ -231,7 +231,7 @@ async def chart_async(
         parser_version=_PARSER_VERSION,
         schema_version=_SCHEMA_VERSION,
         parse=_parse_charts(symbol, timeframe),
-    )()
+    )
 
 
 def chart(

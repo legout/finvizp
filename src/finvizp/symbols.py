@@ -141,7 +141,7 @@ async def symbols_async(
     ``cache=False`` bypasses the client cache for this call.
     """
     async with _client_or_transient(client) as op_client:
-        op = op_client._endpoint_op(
+        return await op_client._endpoint_op(
             _MANIFEST_PATH,
             query=_MANIFEST_QUERY,
             cache=cache,
@@ -156,7 +156,6 @@ async def symbols_async(
             retry=False,
             parse=_parse_manifest,
         )
-        return await op()
 
 
 def symbols(
@@ -190,7 +189,7 @@ async def search_symbols_async(
     if with_indices:
         params["withIndices"] = 1
     async with _client_or_transient(client) as op_client:
-        op = op_client._endpoint_op(
+        return await op_client._endpoint_op(
             _SEARCH_PATH,
             query=params,
             cache=cache,
@@ -200,7 +199,6 @@ async def search_symbols_async(
             schema_version=_SCHEMA_VERSION,
             parse=lambda response: _parse_suggestions(response, params),
         )
-        return await op()
 
 
 def search_symbols(

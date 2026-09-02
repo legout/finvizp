@@ -207,7 +207,7 @@ async def calendar_async(
     payloads raise :class:`FinvizParseError`. ``refresh`` bypasses and
     replaces any cached entry; ``cache=False`` bypasses it without storing.
     """
-    return await _calendar_op(client, refresh=refresh, strict_schema=strict_schema, cache=cache)()
+    return await _calendar_op(client, refresh=refresh, strict_schema=strict_schema, cache=cache)
 
 
 async def calendar_detail_async(
@@ -228,7 +228,7 @@ async def calendar_detail_async(
     release = _validate_release(release)
     return await _detail_op(
         client, release, refresh=refresh, strict_schema=strict_schema, cache=cache
-    )()
+    )
 
 
 def calendar(

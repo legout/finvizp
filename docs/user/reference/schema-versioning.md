@@ -20,9 +20,9 @@ Tests keep the registry and the normalizer in sync:
 ```python
 from finvizp import schemas
 
-schemas.dataset_names()                 # deterministic order
-schemas.dataset("quote_news")          # fields, versions, hints
-schemas.arrow_schema("quote_news")     # pyarrow.Schema
+schemas.dataset_names()  # deterministic order
+schemas.dataset("quote_news")  # fields, versions, hints
+schemas.arrow_schema("quote_news")  # pyarrow.Schema
 schemas.dataset_version("quote_etf_holders")  # 2
 ```
 

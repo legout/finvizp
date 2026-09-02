@@ -2,8 +2,8 @@
 
 **Research date:** 2026-08-27
 
-**Project status:** milestone 0.1 implemented (symbols, statements, quote
-bundles); later milestones planned per the roadmap
+**Project status:** release 0.2 cleanup complete; the published user
+surface lives under `docs/user`
 
 `finvizp` means **Finviz for Python**. It is intended to be an async,
 Arrow-native public Finviz client covering the verified 2026-08-27 public
@@ -35,40 +35,35 @@ surface and all `finvizfinance` capabilities through a smaller, deeper interface
    URLs, bounded live findings, and reproducibility caveats.
 11. [Publishing](publishing.md) — explicit version tags, GitHub Actions,
    trusted PyPI publishing, and release verification.
-12. [Implementation roadmap](plans/2026-08-27-implementation-roadmap.md) —
-    module ownership, milestone dependencies, Kanban workflow, verification,
-    and links to the executable 0.1–1.0 plans.
 
 The approved foundation design is recorded at
 [docs/superpowers/specs/2026-08-27-finvizp-foundation-design.md](superpowers/specs/2026-08-27-finvizp-foundation-design.md).
-The machine-readable dormant board graph is
-[`docs/plans/kanban-cards.json`](plans/kanban-cards.json).
 
-## Using finvizp (0.1)
+## Using finvizp (0.2)
 
-- [Results, provenance, and errors](reference/results.md) — the immutable
+- [Results, provenance, and errors](user/reference/results.md) — the immutable
   `FetchResult` envelope, status/provenance facts, batching semantics, and
   the typed error hierarchy.
-- [Arrow schemas in 0.1](reference/schemas-0.1.md) — every registered
+- [Arrow schemas in 0.1](user/reference/schemas-0.1.md) — every registered
   dataset, units, `_raw` companions, and the versioning contract.
-- [Screener](reference/screener.md) — the 0.2 screener surface: typed
+- [Screener](user/reference/screener.md) — the 0.2 screener surface: typed
   queries, fixed/custom view schemas, pagination and safety semantics,
   signals, earnings screens, and bounded live smokes.
-- [Groups, maps, and events](reference/groups-maps-events.md) — the 0.3
+- [Groups, maps, and events](user/reference/groups-maps-events.md) — the 0.3
   surface: typed group queries and spectrum descriptors, structured map
   bundles, global/publisher news with typed temporal fields, insider feed
   families, and the economic calendar with release details.
-- [Markets and artifacts](reference/markets-and-artifacts.md) — the 0.4
+- [Markets and artifacts](user/reference/markets-and-artifacts.md) — the 0.4
   surface: immutable chart/spectrum descriptors with explicit bounded
   downloads, module-level forex/crypto structured tiles and performance
   tables, and current futures tile data with honest temporal semantics.
-- [Capability matrix](reference/capability-matrix.md) — the complete
+- [Capability matrix](user/reference/capability-matrix.md) — the complete
   implemented/planned ledger mirroring `finvizp.capabilities()`, with access
   tiers, fixtures, tests, and the `finvizfinance` replacement per entry.
-- [Migrating from `finvizfinance`](how-to/migrate-from-finvizfinance.md) —
+- [Migrating from `finvizfinance`](user/how-to/migrate-from-finvizfinance.md) —
   method-by-method mapping to the Arrow-native surface, intentional
   differences, and caller-owned CSV/Excel export without pandas.
-- [Proxies and cache](how-to/proxies-and-cache.md) — proxy precedence,
+- [Proxies and cache](user/how-to/proxies-and-cache.md) — proxy precedence,
   opt-in TTL caching with single-flight, provisional conservative
   defaults, and caller-owned persistence.
 

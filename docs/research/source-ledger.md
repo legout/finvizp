@@ -39,8 +39,7 @@ or refresh the research.
   - `src/yfin/client.py`
   - `src/yfin/arrow.py`
   - `src/yfin/summary.py`
-  - `docs/reference/arrow-schemas.md`
-  - `docs/reference/module-groups.md`
+  - Earlier generated API docs, now published under `docs/user/reference/`
 - Live probes confirmed `financialData` and `defaultKeyStatistics` Arrow output
   and confirmed that the current allowlist rejects `earningsTrend`.
 

@@ -1,6 +1,6 @@
 """Tests for bounded screener registry drift tooling (0.2-D).
 
-RED-first: every test fails until ``finvizp._dev.screener_drift`` exists.
+RED-first: every test fails until ``scripts.screener_drift`` exists.
 Hermetic: pure diff comparisons use in-memory payload dicts; the live command
 path is exercised against a transport double, never live HTTP.
 """
@@ -40,7 +40,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 
 def test_identical_payloads_report_no_changes() -> None:
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     report = compare_registries(_payload(), _payload())
     assert report["unchanged"] is True
@@ -49,7 +49,7 @@ def test_identical_payloads_report_no_changes() -> None:
 
 
 def test_added_and_removed_entries_are_reported_per_namespace() -> None:
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     live = _payload(
         signals=[
@@ -69,7 +69,7 @@ def test_added_and_removed_entries_are_reported_per_namespace() -> None:
 
 
 def test_changed_code_and_metadata_are_reported() -> None:
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     live = _payload(views=[{"name": "overview", "code": "112", "columns": ["No."]}])
     report = compare_registries(_payload(), live)
@@ -88,7 +88,7 @@ def test_changed_code_and_metadata_are_reported() -> None:
 
 
 def test_filter_option_changes_are_reported() -> None:
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     checked_in = _payload(
         filters=[
@@ -125,7 +125,7 @@ def test_filter_option_changes_are_reported() -> None:
 
 
 def test_comparison_is_deterministic_and_order_insensitive() -> None:
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     live = _payload(
         signals=[
@@ -149,7 +149,7 @@ def test_comparison_is_deterministic_and_order_insensitive() -> None:
 
 def test_filter_grammar_violations_are_reported_not_raised() -> None:
     """Codes the checked-in grammar would reject are drift evidence, not crashes."""
-    from finvizp._dev.screener_drift import compare_registries
+    from scripts.screener_drift import compare_registries
 
     live = _payload(
         orders=[
@@ -224,7 +224,7 @@ def _client(fake: _DriftTransport, **kwargs: Any):
 
 
 async def test_collect_observations_is_bounded_and_safe() -> None:
-    from finvizp._dev.screener_drift import OBSERVATION_PATHS, collect_observations
+    from scripts.screener_drift import OBSERVATION_PATHS, collect_observations
 
     fake = _DriftTransport()
     observations = await collect_observations(client=_client(fake))
@@ -236,7 +236,7 @@ async def test_collect_observations_is_bounded_and_safe() -> None:
 
 
 def test_live_report_requires_explicit_opt_in_flag() -> None:
-    from finvizp._dev.screener_drift import build_live_report
+    from scripts.screener_drift import build_live_report
 
     with pytest.raises(TypeError):
         build_live_report()  # live access must be an explicit keyword argument
@@ -250,8 +250,8 @@ def test_live_report_never_mutates_the_registry(tmp_path) -> None:
     """The report goes where the caller points it; the package registry is read-only."""
     from pathlib import Path
 
-    from finvizp._dev import screener_drift
     from finvizp._queries import screener as qs
+    from scripts import screener_drift
 
     registry_path = Path(str(qs._registry_path()))
     before = registry_path.read_text("utf-8")
@@ -265,7 +265,7 @@ def test_live_report_never_mutates_the_registry(tmp_path) -> None:
 
 
 def test_report_json_is_reviewable_and_ordered() -> None:
-    from finvizp._dev.screener_drift import build_live_report
+    from scripts.screener_drift import build_live_report
 
     text = build_live_report(live=False, observations={"orders": {}})
     data = json.loads(text)
@@ -279,7 +279,7 @@ def test_report_json_is_reviewable_and_ordered() -> None:
 
 
 def test_report_carries_no_secrets_or_raw_bodies() -> None:
-    from finvizp._dev.screener_drift import build_live_report
+    from scripts.screener_drift import build_live_report
 
     text = build_live_report(
         live=False,
@@ -294,7 +294,7 @@ def test_report_carries_no_secrets_or_raw_bodies() -> None:
 
 def test_report_emits_added_live_entries(tmp_path) -> None:
     """A live entry absent from the registry shows up as reviewable added drift."""
-    from finvizp._dev.screener_drift import build_live_report
+    from scripts.screener_drift import build_live_report
 
     text = build_live_report(
         live=False,

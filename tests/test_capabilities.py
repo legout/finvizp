@@ -268,7 +268,7 @@ def test_charts_capability_entry_links_the_artifact_surface() -> None:
     assert charts.access_tier == "PUBLIC"
     assert charts.fixture == "tests/fixtures/artifacts/sample.png"
     assert charts.tests == "tests/test_artifacts.py"
-    assert charts.docs == "docs/reference/markets-and-artifacts.md"
+    assert charts.docs == "docs/user/reference/markets-and-artifacts.md"
 
     from finvizp import artifacts as artifacts_module
 
@@ -285,7 +285,7 @@ def test_markets_capability_entries_link_the_merged_surface() -> None:
     assert forex.representation == "embedded_json"
     assert forex.fixture == "tests/fixtures/markets/forex-tiles.html"
     assert forex.tests == "tests/test_forex.py"
-    assert forex.docs == "docs/reference/markets-and-artifacts.md"
+    assert forex.docs == "docs/user/reference/markets-and-artifacts.md"
 
     crypto = capability("crypto.structured")
     assert crypto.operation == "finvizp.crypto:tiles"
@@ -293,7 +293,7 @@ def test_markets_capability_entries_link_the_merged_surface() -> None:
     assert crypto.representation == "embedded_json"
     assert crypto.fixture == "tests/fixtures/markets/crypto-tiles.html"
     assert crypto.tests == "tests/test_crypto.py"
-    assert crypto.docs == "docs/reference/markets-and-artifacts.md"
+    assert crypto.docs == "docs/user/reference/markets-and-artifacts.md"
 
     # The performance tables and chart galleries ride the same modules.
     from finvizp import crypto as crypto_module
@@ -314,7 +314,7 @@ def test_markets_capability_entries_link_the_merged_surface() -> None:
     assert futures.schema == ("futures_tiles",)
     assert futures.fixture == "tests/fixtures/futures/current-tiles.html"
     assert futures.tests == "tests/test_futures.py"
-    assert futures.docs == "docs/reference/markets-and-artifacts.md"
+    assert futures.docs == "docs/user/reference/markets-and-artifacts.md"
 
 
 def test_0_4_markets_surface_exports_and_honest_temporal_semantics() -> None:
@@ -340,7 +340,7 @@ def test_groups_capability_entries_link_the_merged_surface() -> None:
     assert views.operation == "finvizp.groups:group"
     assert views.access_tier == "PUBLIC"
     assert views.representation == "html_tables"
-    assert views.docs == "docs/reference/groups-maps-events.md"
+    assert views.docs == "docs/user/reference/groups-maps-events.md"
     assert views.fixture == "tests/fixtures/groups/overview.html"
     assert views.tests == "tests/test_groups.py"
 
@@ -364,7 +364,7 @@ def test_maps_capability_entry_is_structured_only() -> None:
     assert maps.representation == "embedded_json"
     assert maps.fixture == "tests/fixtures/maps/sp500-embedded.html"
     assert maps.tests == "tests/test_maps.py"
-    assert maps.docs == "docs/reference/groups-maps-events.md"
+    assert maps.docs == "docs/user/reference/groups-maps-events.md"
     # Structured data, never a renderer: no canvas/image output.
     assert maps.output_kind != "artifact"
 
@@ -453,7 +453,7 @@ def test_screener_capability_entries_link_the_merged_surface() -> None:
     assert views.operation == "finvizp.screener:screen"
     assert views.access_tier == "PUBLIC"
     assert views.representation == "html_tables"
-    assert views.docs == "docs/reference/screener.md"
+    assert views.docs == "docs/user/reference/screener.md"
 
     signals = capability("screener.signals")
     assert signals.operation == "finvizp.screener:signal"
@@ -597,12 +597,12 @@ class TestDocs:
         for relative in (
             "docs/index.md",
             "README.md",
-            "docs/reference/results.md",
-            "docs/reference/schemas-0.1.md",
-            "docs/reference/screener.md",
-            "docs/reference/groups-maps-events.md",
-            "docs/reference/markets-and-artifacts.md",
-            "docs/how-to/proxies-and-cache.md",
+            "docs/user/reference/results.md",
+            "docs/user/reference/schemas-0.1.md",
+            "docs/user/reference/screener.md",
+            "docs/user/reference/groups-maps-events.md",
+            "docs/user/reference/markets-and-artifacts.md",
+            "docs/user/how-to/proxies-and-cache.md",
         ):
             assert (REPO_ROOT / relative).exists(), relative
 
@@ -659,21 +659,25 @@ def test_legacy_export_helpers_are_documented_not_ported() -> None:
     assert not hasattr(finvizp, "to_csv")
     assert not hasattr(finvizp, "to_excel")
 
-    guide = (REPO_ROOT / "docs" / "how-to" / "migrate-from-finvizfinance.md").read_text("utf-8")
+    guide = (REPO_ROOT / "docs" / "user" / "how-to" / "migrate-from-finvizfinance.md").read_text(
+        "utf-8"
+    )
     for fragment in ("to_csv", "to_excel"):
         assert fragment in guide, fragment
 
 
 def test_capability_matrix_document_is_complete() -> None:
-    """docs/reference/capability-matrix.md names every manifest entry."""
-    text = (REPO_ROOT / "docs" / "reference" / "capability-matrix.md").read_text("utf-8")
+    """docs/user/reference/capability-matrix.md names every manifest entry."""
+    text = (REPO_ROOT / "docs" / "user" / "reference" / "capability-matrix.md").read_text("utf-8")
     for entry in capabilities():
         assert entry.id in text, entry.id
 
 
 def test_migration_guide_covers_every_replaced_capability() -> None:
-    """docs/how-to/migrate-from-finvizfinance.md documents every replacement."""
-    text = (REPO_ROOT / "docs" / "how-to" / "migrate-from-finvizfinance.md").read_text("utf-8")
+    """docs/user/how-to/migrate-from-finvizfinance.md documents every replacement."""
+    text = (REPO_ROOT / "docs" / "user" / "how-to" / "migrate-from-finvizfinance.md").read_text(
+        "utf-8"
+    )
     for entry in capabilities():
         if entry.status != "implemented" or entry.replaced is None:
             continue

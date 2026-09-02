@@ -44,6 +44,7 @@ from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import FinvizQueryError
 from finvizp.results import FetchResult, ResultMetadata, ResultStatus
+from finvizp.symbols import _client_or_transient
 
 __all__ = [
     "GLOBAL_PATH",
@@ -215,8 +216,8 @@ async def global_news_async(
     fresh copy. Exactly one request is ever made — article URLs are never
     requested.
     """
-    async with _transient(client) as op_client:
-        op = op_client._endpoint_op(
+    async with _client_or_transient(client) as op_client:
+        return await op_client._endpoint_op(
             GLOBAL_PATH,
             cache=cache,
             refresh=refresh,
@@ -225,7 +226,6 @@ async def global_news_async(
             schema_version=_SCHEMA_VERSION,
             parse=_parse_global,
         )
-        return await op()
 
 
 def global_news(
@@ -252,8 +252,8 @@ async def publisher_news_async(
     request. Related-ticker badges are decorative text and never requested.
     """
     _validate_slug(slug)
-    async with _transient(client) as op_client:
-        op = op_client._endpoint_op(
+    async with _client_or_transient(client) as op_client:
+        return await op_client._endpoint_op(
             f"{GLOBAL_PATH}/{slug}",
             cache=cache,
             refresh=refresh,
@@ -262,7 +262,6 @@ async def publisher_news_async(
             schema_version=_SCHEMA_VERSION,
             parse=_parse_publisher_for(slug),
         )
-        return await op()
 
 
 def publisher_news(
@@ -274,9 +273,3 @@ def publisher_news(
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`publisher_news_async`; rejects an active loop."""
     return run_sync(publisher_news_async(slug, client=client, refresh=refresh, cache=cache))
-
-
-def _transient(client: FinvizClient):
-    from finvizp.symbols import _client_or_transient as _ctx
-
-    return _ctx(client)

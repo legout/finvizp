@@ -17,7 +17,7 @@ The drift tool is developer-only and is not part of the public API.
 from pathlib import Path
 
 from finvizp import FinvizClient
-from finvizp._dev.screener_drift import build_live_report
+from scripts.screener_drift import build_live_report
 
 with FinvizClient() as client:
     report = build_live_report(live=True, client=client)

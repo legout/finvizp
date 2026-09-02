@@ -14,7 +14,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/symbols/stock-sitemap.xml",
       "tests": "tests/test_symbols.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -29,7 +29,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/symbols/suggestions.json",
       "tests": "tests/test_symbols.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -44,7 +44,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/income-annual.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -59,7 +59,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/income-annual.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -74,7 +74,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/balance-quarterly.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -89,7 +89,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/balance-quarterly.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -104,7 +104,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/cashflow-annual.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -119,7 +119,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/statements/cashflow-annual.json",
       "tests": "tests/test_statements.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -143,7 +143,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -158,7 +158,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -173,7 +173,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -188,7 +188,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -203,7 +203,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -218,7 +218,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -233,7 +233,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/quote/stock-current.html",
       "tests": "tests/test_quote_projections.py",
-      "docs": "docs/reference/schemas-0.1.md",
+      "docs": "docs/user/reference/schemas-0.1.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -248,7 +248,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/screener/overview-page-1.html",
       "tests": "tests/test_screener.py",
-      "docs": "docs/reference/screener.md",
+      "docs": "docs/user/reference/screener.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -263,7 +263,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/screener/overview-page-1.html",
       "tests": "tests/test_screener_signals.py",
-      "docs": "docs/reference/screener.md",
+      "docs": "docs/user/reference/screener.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -278,7 +278,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/reference/capability-matrix.md",
+      "docs": "docs/user/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -293,7 +293,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/artifacts/sample.png",
       "tests": "tests/test_artifacts.py",
-      "docs": "docs/reference/markets-and-artifacts.md",
+      "docs": "docs/user/reference/markets-and-artifacts.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -308,7 +308,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/maps/sp500-embedded.html",
       "tests": "tests/test_maps.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -323,7 +323,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/groups/overview.html",
       "tests": "tests/test_groups.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -338,7 +338,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/reference/capability-matrix.md",
+      "docs": "docs/user/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -353,7 +353,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/news/global.html",
       "tests": "tests/test_news.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -368,7 +368,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/news/publisher.html",
       "tests": "tests/test_news.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -383,7 +383,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/insider/global.html",
       "tests": "tests/test_insider.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -398,7 +398,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/insider/fund.html",
       "tests": "tests/test_insider.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -413,7 +413,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/screener/custom-columns.html",
       "tests": "tests/test_earnings.py",
-      "docs": "docs/reference/screener.md",
+      "docs": "docs/user/reference/screener.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -428,7 +428,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/calendar/current-embedded.html",
       "tests": "tests/test_calendar.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -443,7 +443,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/calendar/detail.html",
       "tests": "tests/test_calendar.py",
-      "docs": "docs/reference/groups-maps-events.md",
+      "docs": "docs/user/reference/groups-maps-events.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -458,7 +458,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/markets/forex-tiles.html",
       "tests": "tests/test_forex.py",
-      "docs": "docs/reference/markets-and-artifacts.md",
+      "docs": "docs/user/reference/markets-and-artifacts.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -473,7 +473,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/markets/crypto-tiles.html",
       "tests": "tests/test_crypto.py",
-      "docs": "docs/reference/markets-and-artifacts.md",
+      "docs": "docs/user/reference/markets-and-artifacts.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -488,7 +488,7 @@
       "status": "implemented",
       "fixture": "tests/fixtures/futures/current-tiles.html",
       "tests": "tests/test_futures.py",
-      "docs": "docs/reference/markets-and-artifacts.md",
+      "docs": "docs/user/reference/markets-and-artifacts.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -503,7 +503,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/reference/capability-matrix.md",
+      "docs": "docs/user/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -518,7 +518,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/reference/capability-matrix.md",
+      "docs": "docs/user/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -533,7 +533,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/reference/capability-matrix.md",
+      "docs": "docs/user/reference/capability-matrix.md",
       "observation_date": "2026-08-27"
     },
     {
@@ -548,7 +548,7 @@
       "status": "planned",
       "fixture": null,
       "tests": null,
-      "docs": "docs/how-to/migrate-from-finvizfinance.md",
+      "docs": "docs/user/how-to/migrate-from-finvizfinance.md",
       "observation_date": "2026-08-27"
     }
   ]

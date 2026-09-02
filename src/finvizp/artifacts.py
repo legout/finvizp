@@ -35,7 +35,7 @@ from urllib.parse import urljoin, urlsplit
 
 from fastreq.backends.base import NormalizedResponse, RequestConfig
 
-from finvizp._symbols import SymbolInputError, canonical_symbols
+from finvizp._symbols import SymbolInputError, _resolve
 from finvizp.client import (
     _MAX_REDIRECTS,
     FinvizClient,
@@ -138,7 +138,7 @@ def _is_elite_hop(url: str) -> bool:
 def _canonical_symbol(symbol: str) -> str:
     """Validate through the shared symbol grammar; return the canonical form."""
     try:
-        (canonical,) = canonical_symbols([symbol])
+        (canonical,) = _resolve([symbol])[0]
     except (SymbolInputError, ValueError) as exc:
         msg = f"chart symbol violates the canonical grammar: {symbol!r}"
         raise FinvizQueryError(msg) from exc

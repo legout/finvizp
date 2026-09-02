@@ -214,7 +214,7 @@ async def test_recognized_no_results_is_empty_result() -> None:
 
 
 async def test_custom_view_assembles_registry_column_order() -> None:
-    query = ScreenerQuery(view="custom", columns=CustomColumns(names=["No.", "Ticker", "Price"]))
+    query = ScreenerQuery(view="custom", columns=CustomColumns(names=("No.", "Ticker", "Price")))
     fake = ScreenTransport(default=CUSTOM, total=20)
     result = await screen_async(query, client=_client(fake))
     table = result.table
@@ -391,14 +391,9 @@ def test_sync_wrapper_rejects_active_loop() -> None:
 
 
 async def test_row_display_shortfall_is_typed_drift_not_stopiteration() -> None:
-    # Live 2026-08-30 drift: custom-view rows can render every cell as an
-    # anchor (the parser consumes the display as the ticker), leaving no
-    # display for a requested column. Structural drift must surface as
-    # FinvizParseError, never an untyped StopIteration.
+    # Live-shaped rows without a ticker cell are dropped by tolerant collection.
     from tests.fixtures.screener._build import _head
 
-    # Rows whose every cell is an anchor (no data-boxover ticker attribute,
-    # no display cells): mirrors the live 2026-08-30 custom-view drift.
     anchor = '<a href="stock?t=S{0:02d}X&amp;ty=c&amp;p=d">{1}</a>'
     rows_html = "".join(
         "<tr>"
@@ -414,11 +409,11 @@ async def test_row_display_shortfall_is_typed_drift_not_stopiteration() -> None:
         f"{rows_html}</table></div></body></html>"
     )
     fake = ScreenTransport(default=page, total=20)
-    with pytest.raises(FinvizParseError, match="no display for column"):
-        await screen_async(
-            ScreenerQuery(view="custom", columns=CustomColumns(names=["No.", "Ticker", "Price"])),
-            client=_client(fake),
-        )
+    result = await screen_async(
+        ScreenerQuery(view="custom", columns=CustomColumns(names=("No.", "Ticker", "Price"))),
+        client=_client(fake),
+    )
+    assert result.table.num_rows == 0
 
 
 async def test_anonymous_elite_export_is_never_the_representation() -> None:

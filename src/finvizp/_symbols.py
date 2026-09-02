@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator
 
 from finvizp.results import SymbolResolutionRecord
 
-__all__ = ["SymbolInputError", "canonical_symbols", "normalize_symbols", "resolve_symbols"]
+__all__ = ["SymbolInputError", "normalize_symbols"]
 
 # Finviz dash notation plus reviewed dot/slash class-share forms.
 _ALLOWED = re.compile(r"^[A-Z0-9]+(?:[-./][A-Z0-9]+)*$")
@@ -82,16 +82,3 @@ def normalize_symbols(
     """
     canonical, records = _resolve(symbols)
     return records if resolve else canonical
-
-
-def canonical_symbols(symbols: str | Iterable[str] | None) -> list[str]:
-    """Return canonical dash-notation symbols, deduped in first-occurrence order."""
-    canonical, _ = _resolve(symbols)
-    return canonical
-
-
-def resolve_symbols(
-    symbols: str | Iterable[str] | None,
-) -> tuple[list[str], list[SymbolResolutionRecord]]:
-    """Canonical deduped symbols plus one resolution record per input position."""
-    return _resolve(symbols)

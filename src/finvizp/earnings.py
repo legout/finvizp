@@ -33,7 +33,7 @@ from finvizp.errors import FinvizParseError, FinvizQueryError
 from finvizp.results import FetchResult, ResultStatus
 from finvizp.screener import ProgressCallback, _field_name, screen_async
 
-__all__ = ["earnings_async", "earnings_options", "earnings_screen"]
+__all__ = ["earnings_async", "earnings_screen"]
 
 _EARNINGS_DATE_LABEL = "Earnings Date"
 # The provider's grid header for custom-column code 68 is ``Earnings``, while
@@ -50,24 +50,6 @@ _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }  # fmt: skip
-
-
-def earnings_options() -> Any:
-    """Return ``(when, session=None) -> registry option name`` callables.
-
-    The mapping is derived from the checked-in registry, so the reviewed
-    ``when``/``session`` vocabulary can never drift from provider codes:
-
-    - ``session=None`` -> the option named exactly ``when`` (``Today``,
-      ``This Week``, ...);
-    - ``session`` given -> ``<when> <session>`` (``Today Before Market
-      Open``, ``Tomorrow After Market Close``, ...).
-    """
-
-    def compose(when: str, session: str | None = None) -> str:
-        return when if session is None else f"{when} {session}"
-
-    return compose
 
 
 def _option_for(when: str | None, session: str | None) -> str:

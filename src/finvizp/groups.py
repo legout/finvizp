@@ -25,7 +25,6 @@ from typing import Any
 
 import pyarrow as pa
 
-from finvizp._parsers import _displays
 from finvizp._parsers.groups import GroupPage, parse_groups_page, parse_spectrum_page
 from finvizp._queries.groups import (
     GroupColumn,
@@ -36,10 +35,12 @@ from finvizp._queries.groups import (
     groups_registry,
 )
 from finvizp._sync import run_sync
+from finvizp.arrow import parse_compact, parse_int, parse_percent
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import FinvizParseError, FinvizQueryError
 from finvizp.models import Artifact
 from finvizp.results import FetchResult, ResultMetadata, ResultStatus
+from finvizp.symbols import _client_or_transient
 
 __all__ = [
     "GROUPS_PATH",
@@ -132,13 +133,13 @@ def _convert(label: str, display: str) -> Any:
     unit = _COLUMN_UNITS.get(label)
     try:
         if unit == "int64":
-            return _displays.parse_int(display)
+            return parse_int(display)
         if unit == "compact":
-            return _displays.parse_compact(display)
+            return parse_compact(display)
         if unit == "float64":
             return float(display.replace(",", ""))
         if unit == "percent":
-            return _displays.parse_percent(display)
+            return parse_percent(display)
     except ValueError as exc:
         raise FinvizParseError(
             f"cannot convert display to {unit} for column {label!r}",
@@ -300,7 +301,7 @@ async def group_async(
     """
     _validate_group_query(query)
     async with _client_or_transient(client) as op_client:
-        op = op_client._endpoint_op(
+        return await op_client._endpoint_op(
             GROUPS_PATH,
             query=query.provider_params(),
             cache=cache,
@@ -310,7 +311,6 @@ async def group_async(
             schema_version=_SCHEMA_VERSION,
             parse=_parse_groups_page(query),
         )
-        return await op()
 
 
 def group(
@@ -341,7 +341,7 @@ async def spectrum_async(
     """
     _validate_group_query(query)
     async with _client_or_transient(client) as op_client:
-        op = op_client._endpoint_op(
+        return await op_client._endpoint_op(
             GROUPS_PATH,
             query=query.provider_params(),
             cache=cache,
@@ -351,7 +351,6 @@ async def spectrum_async(
             schema_version=_SCHEMA_VERSION,
             parse=_parse_spectrum_response(query),
         )
-        return await op()
 
 
 def spectrum(
@@ -363,9 +362,3 @@ def spectrum(
 ) -> FetchResult[Any]:
     """Sync wrapper for :func:`spectrum_async`; rejects an active event loop."""
     return run_sync(spectrum_async(query, client=client, refresh=refresh, cache=cache))
-
-
-def _client_or_transient(client: FinvizClient):
-    from finvizp.symbols import _client_or_transient as _ctx
-
-    return _ctx(client)

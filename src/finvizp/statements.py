@@ -18,7 +18,7 @@ from typing import Any
 
 from finvizp import arrow as fa
 from finvizp._parsers import statements as stmt_parser
-from finvizp._symbols import resolve_symbols
+from finvizp._symbols import _resolve
 from finvizp._sync import run_sync
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
@@ -218,7 +218,7 @@ async def statements_async(
     ``{"error": "no data"}`` payload is a recognized ``EMPTY`` result.
     """
     kind, periodicity = _validate(statement)
-    canonical, records = resolve_symbols(symbols)
+    canonical, records = _resolve(symbols)
     if len(canonical) != 1:
         msg = (
             "statements_async() takes exactly one symbol; use statements_batch_async() for batches"
@@ -277,7 +277,7 @@ async def _statements_via(
         proxy=proxy,
         strict_schema=strict_schema,
     )
-    result = await op()
+    result = await op
     return dataclasses.replace(
         result,
         metadata=dataclasses.replace(
@@ -342,7 +342,7 @@ async def statements_batch_async(
     always raises :class:`FinvizBatchError`.
     """
     kind, periodicity = _validate(statement)
-    canonical, records = resolve_symbols(symbols)
+    canonical, records = _resolve(symbols)
     if len(canonical) > MAX_BATCH_SYMBOLS:
         msg = f"batch exceeds the bounded limit of {MAX_BATCH_SYMBOLS} symbols"
         raise FinvizQueryError(msg)
@@ -407,7 +407,7 @@ async def _run_batch(
     # finish, so it is not usable here). Reaping is non-blocking: done
     # callbacks consume each task's outcome so the loop never reports
     # "exception was never retrieved".
-    tasks = [asyncio.ensure_future(op()) for op in ops]
+    tasks = [asyncio.ensure_future(op) for op in ops]
 
     def _consume(task: asyncio.Future[Any]) -> None:
         if not task.cancelled():

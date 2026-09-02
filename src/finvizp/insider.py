@@ -152,7 +152,7 @@ async def _disclosure_async(
 ) -> FetchResult[Any]:
     _validate_slug(kind, slug)
     base = _FUND_PATH if kind == "fund" else _MANAGER_PATH
-    op = client._endpoint_op(
+    return await client._endpoint_op(
         f"{base}/{slug}",
         query={},
         cache=cache,
@@ -165,7 +165,6 @@ async def _disclosure_async(
             insider_parser.parse_fund_page if kind == "fund" else insider_parser.parse_manager_page,
         ),
     )
-    return await op()
 
 
 async def global_async(
@@ -192,7 +191,7 @@ async def global_async(
     the registered ``quote_insider`` columns.
     """
     params = _validate_feed(feed)
-    op = client._endpoint_op(
+    return await client._endpoint_op(
         _FEED_PATH,
         query=params,
         cache=cache,
@@ -202,7 +201,6 @@ async def global_async(
         schema_version=_SCHEMA_VERSION,
         parse=lambda response: _parse_global(response, strict_schema=strict_schema),
     )
-    return await op()
 
 
 async def fund_async(

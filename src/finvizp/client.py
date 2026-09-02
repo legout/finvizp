@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import json
 import re
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import UTC, datetime
 from time import monotonic
@@ -917,7 +917,7 @@ class FinvizClient:
             return 0
         return store.clear()
 
-    def _endpoint_op(
+    async def _endpoint_op(
         self,
         path: str,
         *,
@@ -931,38 +931,21 @@ class FinvizClient:
         follow_redirects: bool = True,
         retry: bool = True,
         parse: Callable[[ClientResponse], FetchResult[Any]],
-    ) -> Callable[[], Coroutine[Any, Any, FetchResult[Any]]]:
-        """Bind one reviewed endpoint operation to its route and cache inputs.
-
-        Returns a zero-argument coroutine function; endpoint modules expose
-        named operations built on this seam instead of a generic request
-        method. ``parse`` is required — the reviewed endpoint parser that
-        turns the classified transport envelope into the endpoint's immutable
-        ``FetchResult``; only that parsed value is ever cached. Per-call
-        ``cache=False``/``refresh=True``, the strict ``follow_redirects=False``
-        one-request contract (with ``retry=False`` forbidding retry attempts
-        as well), and the representation/parser/schema key facets are bound
-        here so endpoint modules can expose the required controls without a
-        generic-request hatch.
-        """
-        params = dict(query or {})
-
-        async def op() -> FetchResult[Any]:
-            return await self._cached_fetch(
-                path,
-                params=params,
-                proxy=proxy,
-                cache=cache,
-                refresh=refresh,
-                representation=representation,
-                parser_version=parser_version,
-                schema_version=schema_version,
-                follow_redirects=follow_redirects,
-                retry=retry,
-                parse=parse,
-            )
-
-        return op
+    ) -> FetchResult[Any]:
+        """Fetch one reviewed endpoint operation through the cache seam."""
+        return await self._cached_fetch(
+            path,
+            params=dict(query or {}),
+            proxy=proxy,
+            cache=cache,
+            refresh=refresh,
+            representation=representation,
+            parser_version=parser_version,
+            schema_version=schema_version,
+            follow_redirects=follow_redirects,
+            retry=retry,
+            parse=parse,
+        )
 
     async def _fetch(
         self,

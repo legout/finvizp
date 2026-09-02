@@ -168,7 +168,7 @@ async def futures_async(
     ``strict_schema`` stays a parser-level seam (not exposed): futures rows
     are fully registry-typed with no client-side display parsing.
     """
-    return await _futures_op(client, refresh=refresh, cache=cache)()
+    return await _futures_op(client, refresh=refresh, cache=cache)
 
 
 def futures(

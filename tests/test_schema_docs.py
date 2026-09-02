@@ -1,6 +1,6 @@
 """Docs validate against the live registry (Card 0.5-B, step 6).
 
-``docs/reference/schema-versioning.md`` is hand-written but registry-bound:
+``docs/user/reference/schema-versioning.md`` is hand-written but registry-bound:
 its dataset/version table must always match ``schema_registry.json``, so the
 reference can never silently drift from the contract the code enforces.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from finvizp import schemas
 
-PAGE = Path("docs/reference/schema-versioning.md")
+PAGE = Path("docs/user/reference/schema-versioning.md")
 ROW = re.compile(r"^\| `([a-z_]+)` \| (\d+) \|", re.MULTILINE)
 
 

@@ -20,9 +20,7 @@ async def main() -> None:
         overview = await screen_async(
             ScreenerQuery(
                 view="overview",
-                filters=[
-                    Filter(name="Market Cap.", option="+Large (over $10bln)")
-                ],
+                filters=[Filter(name="Market Cap.", option="+Large (over $10bln)")],
             ),
             client=client,
         )
@@ -109,8 +107,6 @@ The result exposes:
 - `earnings_date`: provider date as Arrow `date32`;
 - `earnings_date_raw`: exact provider display, such as `Nov 12 BMO`;
 - `earnings_session`: `BMO` or `AMC` only when Finviz states it.
-
-`earnings_options()` returns the reviewed window and session mapping.
 
 ## Access and provenance
 

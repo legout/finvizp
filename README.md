@@ -66,7 +66,7 @@ identical.
 | 1.0 | Stable release | pending |
 
 The full implemented/planned ledger lives in the
-[capability matrix](docs/reference/capability-matrix.md) and
+[capability matrix](docs/user/reference/capability-matrix.md) and
 `finvizp.capabilities()`.
 
 ## Design in one screen
@@ -97,15 +97,15 @@ with [Zensical](https://zensical.org) from
 | Use the sync API | [Use the sync API](docs/user/how-to/sync-api.md) |
 | Set proxies / caching | [Proxies & cache](docs/user/how-to/proxies-and-cache.md) |
 | Migrate from `finvizfinance` | [Migration guide](docs/user/how-to/migrate-from-finvizfinance.md) |
-| Check a dataset's columns | [Arrow schemas](docs/reference/schemas-0.1.md) |
-| Understand result envelopes | [Results](docs/reference/results.md) |
-| See every capability + status | [Capability matrix](docs/reference/capability-matrix.md) |
+| Check a dataset's columns | [Arrow schemas](docs/user/reference/schemas-0.1.md) |
+| Understand result envelopes | [Results](docs/user/reference/results.md) |
+| See every capability + status | [Capability matrix](docs/user/reference/capability-matrix.md) |
 
-Deep links: [screener](docs/reference/screener.md) ·
-[screener registry](docs/reference/screener-registry.md) ·
-[groups/maps/events](docs/reference/groups-maps-events.md) ·
-[markets/artifacts](docs/reference/markets-and-artifacts.md) ·
-[schema versioning](docs/reference/schema-versioning.md) ·
+Deep links: [screener](docs/user/reference/screener.md) ·
+[screener registry](docs/user/reference/screener-registry.md) ·
+[groups/maps/events](docs/user/reference/groups-maps-events.md) ·
+[markets/artifacts](docs/user/reference/markets-and-artifacts.md) ·
+[schema versioning](docs/user/reference/schema-versioning.md) ·
 [keep your own history](docs/user/how-to/caller-owned-history.md) ·
 [access & responsible use](docs/user/explanation/access-and-responsible-use.md)
 
@@ -119,8 +119,8 @@ Background research (surface inventory, finvizfinance audit, Yahoo overlap,
 snapshot-history semantics) lives under
 [`docs/research/`](docs/research) and
 [`docs/brainstorming/`](docs/brainstorming); the
-[implementation roadmap](docs/plans/2026-08-27-implementation-roadmap.md)
-tracks milestone execution. Publication mechanics:
+[foundation design](docs/superpowers/specs/2026-08-27-finvizp-foundation-design.md)
+tracks the approved architecture. Publication mechanics:
 [`docs/publishing.md`](docs/publishing.md).
 
 ## Development

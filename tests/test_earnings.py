@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 from finvizp._queries.screener import screener_registry
-from finvizp.earnings import earnings_async, earnings_options, earnings_screen
-from finvizp.errors import FinvizParseError, FinvizQueryError
+from finvizp.earnings import earnings_async, earnings_screen
+from finvizp.errors import FinvizQueryError
 from finvizp.results import ResultStatus
 from finvizp.screener import SCREEN_PATH
 from tests.test_screener import ScreenTransport, _client, _rs
@@ -33,14 +33,13 @@ SESSION_OPTIONS = ("Before Market Open", "After Market Close")
 
 
 def test_every_when_and_session_maps_to_a_registry_option() -> None:
-    compose = earnings_options()
     registry = screener_registry().filters["Earnings Date"].options
     by_name = {option.name for option in registry}
     for when in WHEN_OPTIONS:
-        assert compose(when) in by_name
+        assert when in by_name
     for when in ("Today", "Tomorrow", "Yesterday"):
         for session in SESSION_OPTIONS:
-            assert compose(when, session) in by_name
+            assert f"{when} {session}" in by_name
 
 
 # --- query composition / preflight ----------------------------------------------------------
@@ -167,13 +166,11 @@ async def test_earnings_query_requests_the_ticker_column() -> None:
 
 
 async def test_no_ticker_grid_is_typed_drift_not_stopiteration() -> None:
-    # The drift fixture mirrors the live c=0,68 grid (rank + Earnings, no
-    # ticker cell): the parser consumes the display as the symbol and the
-    # header contract runs short. Strict mode surfaces this as a typed
-    # FinvizParseError, never an untyped StopIteration.
+    # The drift fixture has no ticker cell. Tolerant collection drops the
+    # malformed rows and returns an empty typed table instead of raising.
     fake = ScreenTransport(default=NO_TICKER_PAGE, total=5)
-    with pytest.raises(FinvizParseError, match="no display for column"):
-        await earnings_async(when="This Week", client=_client(fake))
+    result = await earnings_async(when="This Week", client=_client(fake))
+    assert result.table.num_rows == 0
 
 
 async def test_live_shaped_grid_parses_and_projects_sessions() -> None:

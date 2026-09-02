@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from finvizp import schemas
 from finvizp.errors import FetchWarning, FinvizDataError
 
-__all__ = ["build_table", "dataset_field_names"]
+__all__ = ["build_table", "dataset_field_names", "parse_compact", "parse_int", "parse_percent"]
 
 WarningCallback = Callable[[FetchWarning], Any]
 
@@ -43,6 +43,22 @@ _EASTERN = ZoneInfo("America/New_York")
 def dataset_field_names(name: str) -> tuple[str, ...]:
     """Ordered registry field names for one dataset."""
     return schemas.dataset(name).field_names
+
+
+def parse_compact(text: str) -> float:
+    """Parse a provider compact number such as ``1.20B``."""
+    mantissa, exponent = _scaled_decimal(text.replace(",", ""), text)
+    return float(f"{mantissa}e{exponent}")
+
+
+def parse_int(text: str) -> int:
+    """Parse a provider integer display with optional thousands separators."""
+    return int(text.replace(",", ""))
+
+
+def parse_percent(text: str) -> float:
+    """Parse a provider percent display as a decimal fraction."""
+    return float(_PERCENT.sub("", text.replace(",", ""))) / 100.0
 
 
 def build_table(

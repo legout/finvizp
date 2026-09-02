@@ -206,11 +206,11 @@ async def map_async(
         parser_version=PARSER_VERSION,
         schema_version=SCHEMA_VERSION,
         parse=_parse_page,
-    )()
+    )
     if not isinstance(page_result.data, tuple):
         return page_result  # the cached EMPTY verdict, replayed as-is
     hierarchy_url, page_text = page_result.data
-    asset_result = await _asset_op(client, hierarchy_url, cache=cache, refresh=refresh)()
+    asset_result = await _asset_op(client, hierarchy_url, cache=cache, refresh=refresh)
     bundle = _build_bundle(
         page_text,
         asset_result.data,

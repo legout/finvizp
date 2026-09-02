@@ -29,10 +29,10 @@ from typing import Any
 
 import pyarrow as pa
 
-from finvizp._parsers import _displays
 from finvizp._parsers.screener import ScreenerPage, parse_screener_page
 from finvizp._queries.screener import CustomColumns, ScreenerQuery, Signal, screener_registry
 from finvizp._sync import run_sync
+from finvizp.arrow import parse_compact, parse_int, parse_percent
 from finvizp.client import ClientResponse, FinvizClient
 from finvizp.errors import (
     FetchWarning,
@@ -42,6 +42,7 @@ from finvizp.errors import (
     FinvizQueryError,
 )
 from finvizp.results import AccessTier, FetchResult, ResultMetadata, ResultStatus
+from finvizp.symbols import _client_or_transient
 
 __all__ = [
     "DEFAULT_MAX_PAGES",
@@ -174,13 +175,19 @@ def _convert(label: str, display: str) -> Any:
     unit = _COLUMN_UNITS.get(label)
     try:
         if unit == "int64":
-            return _displays.parse_int(display)
+            return parse_int(display)
         if unit == "compact":
-            return _displays.parse_compact(display)
+            return parse_compact(display)
         if unit == "float64":
-            return float(display.replace(",", ""))
+            cleaned = display.replace(",", "")
+            if cleaned.endswith("%"):
+                # The provider sometimes renders a ratio column as a percent
+                # display (e.g. P/FCF "0.00%" for zero free cash flow). The
+                # display's own unit marker wins: parse as a percent fraction.
+                return parse_percent(display)
+            return float(cleaned)
         if unit == "percent":
-            return _displays.parse_percent(display)
+            return parse_percent(display)
     except ValueError as exc:
         raise FinvizParseError(
             f"cannot convert display to {unit} for column {label!r}",
@@ -336,18 +343,17 @@ async def screen_async(
             page_query = (
                 query if page_in_screen == query.page else replace(query, page=page_in_screen)
             )
-            op = op_client._endpoint_op(
-                SCREEN_PATH,
-                query=page_query.provider_params(),
-                cache=cache,
-                refresh=refresh and page_in_screen == query.page,
-                representation="screener_table",
-                parser_version=_PARSER_VERSION,
-                schema_version=_SCHEMA_VERSION,
-                parse=_parse_screen_page,
-            )
             try:
-                result = await op()
+                result = await op_client._endpoint_op(
+                    SCREEN_PATH,
+                    query=page_query.provider_params(),
+                    cache=cache,
+                    refresh=refresh and page_in_screen == query.page,
+                    representation="screener_table",
+                    parser_version=_PARSER_VERSION,
+                    schema_version=_SCHEMA_VERSION,
+                    parse=_parse_screen_page,
+                )
             except FinvizError as exc:
                 # Cancellation (BaseException) never lands here. A strict call
                 # raises the original typed failure; with rows already in hand,
@@ -476,12 +482,6 @@ async def screen_async(
             schema_version=_SCHEMA_VERSION,
         )
         return FetchResult(combined, metadata)
-
-
-def _client_or_transient(client: FinvizClient):
-    from finvizp.symbols import _client_or_transient as _ctx
-
-    return _ctx(client)
 
 
 # Signal screens ride the same collector: the custom view requests a fixed

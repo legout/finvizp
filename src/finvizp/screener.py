@@ -179,17 +179,24 @@ def _convert(label: str, display: str) -> Any:
         if unit == "compact":
             return parse_compact(display)
         if unit == "float64":
-            # Tolerant numeric grammar: the provider's custom view sometimes
-            # renders float columns with a unit marker — percents ("0.00%"
-            # for zero ratios) or compact suffixes (ragged cells bleeding in
-            # from neighbouring columns). The display's own markers win; the
+            # Tolerant numeric grammar: the provider's wide custom view
+            # serves ragged cells (percents, compact suffixes, even dates
+            # bleeding across columns). The display's own markers win when
+            # they parse; anything unparseable becomes an Arrow null — the
             # raw display survives in the page for drift review.
             cleaned = display.replace(",", "")
-            if cleaned.endswith("%"):
-                return parse_percent(display)
-            if cleaned and cleaned[-1] in "KMBT" and cleaned[:-1].replace(".", "", 1).lstrip("-").isdigit():
-                return parse_compact(display)
-            return float(cleaned)
+            try:
+                if cleaned.endswith("%"):
+                    return parse_percent(display)
+                if (
+                    cleaned
+                    and cleaned[-1] in "KMBT"
+                    and cleaned[:-1].replace(".", "", 1).lstrip("-").isdigit()
+                ):
+                    return parse_compact(display)
+                return float(cleaned)
+            except ValueError:
+                return None
         if unit == "percent":
             return parse_percent(display)
     except ValueError as exc:

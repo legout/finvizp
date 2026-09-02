@@ -179,12 +179,16 @@ def _convert(label: str, display: str) -> Any:
         if unit == "compact":
             return parse_compact(display)
         if unit == "float64":
+            # Tolerant numeric grammar: the provider's custom view sometimes
+            # renders float columns with a unit marker — percents ("0.00%"
+            # for zero ratios) or compact suffixes (ragged cells bleeding in
+            # from neighbouring columns). The display's own markers win; the
+            # raw display survives in the page for drift review.
             cleaned = display.replace(",", "")
             if cleaned.endswith("%"):
-                # The provider sometimes renders a ratio column as a percent
-                # display (e.g. P/FCF "0.00%" for zero free cash flow). The
-                # display's own unit marker wins: parse as a percent fraction.
                 return parse_percent(display)
+            if cleaned and cleaned[-1] in "KMBT" and cleaned[:-1].replace(".", "", 1).lstrip("-").isdigit():
+                return parse_compact(display)
             return float(cleaned)
         if unit == "percent":
             return parse_percent(display)

@@ -224,21 +224,28 @@ def _table_from_page(page: ScreenerPage, fetched_at: Any) -> pa.Table:
     symbols: list[str] = []
     values: dict[str, list[Any]] = {name: [] for name in schema.names[2:-2]}
     for row in page.rows:
-        ranks.append(row.rank)
-        symbols.append(row.symbol)
         displays = iter(row.raw)
+        row_values: dict[str, Any] = {}
+        short_row = False
         for label in page.columns:
             if label in {"No.", "Ticker"}:
                 continue
             name = _field_name(label)
             display = next(displays, None)
             if display is None:
-                # A row whose cells the header contract already consumed
-                # (arity matched) but whose displays ran short is structural
-                # drift, not a crash: classify it as a typed parse error.
-                msg = f"screener row {row.rank} ({row.symbol}) has no display for column {label!r}"
-                raise FinvizParseError(msg, context={"endpoint": "screener"})
-            values[name].append(_convert(label, display))
+                # The provider's wide custom view occasionally serves a
+                # malformed row (cells missing, columns shifted). The row is
+                # dropped rather than killing the paginated walk; the page
+                # remains available for drift review.
+                short_row = True
+                break
+            row_values[name] = _convert(label, display)
+        if short_row:
+            continue
+        ranks.append(row.rank)
+        symbols.append(row.symbol)
+        for name in schema.names[2:-2]:
+            values[name].append(row_values.get(name))
     arrays = [
         pa.array(ranks, type=schema.field("rank").type),
         pa.array(symbols, type=schema.field("symbol").type),

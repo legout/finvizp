@@ -12,7 +12,9 @@ implemented versus planned.
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+from importlib.metadata import version as _version
+
+__version__ = _version("finvizp")
 
 from finvizp.arrow import build_table, dataset_field_names
 from finvizp.artifacts import (

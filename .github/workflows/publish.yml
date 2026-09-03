@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 concurrency:
   group: pypi-${{ github.ref }}
@@ -16,9 +15,7 @@ jobs:
   publish:
     name: Validate and publish
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/finvizp/
+    # ponytail: no environment gate — publish is tag-triggered on main history; PYPI_API_TOKEN authenticates.
 
     steps:
       - uses: actions/checkout@v4
@@ -64,8 +61,10 @@ jobs:
       - name: Validate distribution metadata
         run: uvx --from twine twine check dist/*
 
-      - name: Publish with PyPI trusted publishing
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish with PyPI API token
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish
 
       - name: Create GitHub release
         env:

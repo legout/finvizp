@@ -33,6 +33,7 @@ from finvizp.cache import CacheEntry, ResultCache
 from finvizp.errors import (
     _SENSITIVE_KEY,
     REDACTED,
+    CircuitOpenError,
     FinvizBlockedError,
     FinvizEntitlementError,
     FinvizError,
@@ -51,6 +52,12 @@ __all__ = ["ClientEvent", "ClientResponse", "FinvizClient", "classify_response"]
 
 BASE_URL = "https://finviz.com"
 _DEFAULT_BROWSER_PROFILE = "chrome"
+
+# 429 circuit breaker: consecutive-429 threshold and cooldown when the
+# provider sends no Retry-After. The deadline is the whole state machine -
+# past it, the next request is the half-open probe.
+_CIRCUIT_TRIP_AFTER = 3
+_CIRCUIT_COOLDOWN = 60.0
 
 # Transient statuses classified as retryable; Retry-After honored.
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -409,6 +416,13 @@ class FinvizClient:
         retry_attempts: bounded retries for transient transport/5xx/429 only.
         retry_backoff: base seconds for exponential backoff (capped at 60s).
         on_event: opt-in diagnostic callback receiving ``ClientEvent`` values.
+
+        A per-client 429 circuit breaker runs ahead of the transport: after
+        3 consecutive 429 responses every further call raises
+        ``CircuitOpenError`` (a ``FinvizRateLimitError`` subclass) without
+        any HTTP request until the cooldown (``Retry-After`` if provided,
+        else 60s) elapses; the first post-deadline request is the half-open
+        probe and any non-429 outcome closes the circuit.
         cache_ttl: seconds a parsed result stays fresh; ``None`` (the
             default) disables caching entirely.
         cache: bounded LRU store of parsed immutable ``FetchResult`` values;
@@ -551,6 +565,10 @@ class FinvizClient:
         self._cache: ResultCache | None = effective_cache
         self._stale_if_error = bool(stale_if_error)
         self._inflight: dict[str, asyncio.Task[FetchResult[Any] | FinvizError]] = {}
+        # 429 circuit: consecutive-429 count and the open-until deadline
+        # (monotonic); 0 means closed. Shared by every route.
+        self._circuit_429s = 0
+        self._circuit_open_until = 0.0
         # Opaque, non-secret per-auth-state scope: cookie VALUES are hashed
         # with the browser identity into a fingerprint, so distinct sessions
         # never share cache entries while nothing secret enters any key.
@@ -979,6 +997,8 @@ class FinvizClient:
             raise FinvizQueryError(msg)
         url = f"{self.base_url}{path}"
         query = dict(params or {})
+        # Input validation precedes the breaker: bad routes always raise.
+        self._gate_circuit(path)
         per_call_proxy = self._normalize_per_call_proxy(proxy)
         # A per-call URL wins over forced-direct; a per-call False/None on a
         # forced-direct client keeps direct. Conflicts surface via
@@ -1071,6 +1091,8 @@ class FinvizClient:
                 await asyncio.sleep(delay)
             else:
                 if response.status_code in _RETRYABLE_STATUSES:
+                    if response.status_code == 429:
+                        self._note_429(_parse_retry_after(response.headers.get("retry-after")))
                     last_error = RetryableResponse(
                         f"retryable status {response.status_code} from {url}",
                         status_code=response.status_code,
@@ -1119,6 +1141,31 @@ class FinvizClient:
             else FinvizTransportError("fetch failed")
         )
 
+    # --- 429 circuit breaker -------------------------------------------------
+
+    def _gate_circuit(self, path: str) -> None:
+        """Raise CircuitOpenError without any HTTP request while open.
+
+        Past the deadline the request is the half-open probe and passes.
+        """
+        if self._circuit_429s >= _CIRCUIT_TRIP_AFTER and monotonic() < self._circuit_open_until:
+            retry_after = max(0.0, self._circuit_open_until - monotonic())
+            raise CircuitOpenError(
+                "circuit open: consecutive rate limits (429)",
+                context={"endpoint": path, "retry_after": round(retry_after, 3)},
+            )
+
+    def _note_success(self) -> None:
+        self._circuit_429s = 0
+        self._circuit_open_until = 0.0
+
+    def _note_429(self, retry_after: float | None) -> None:
+        self._circuit_429s += 1
+        if self._circuit_429s >= _CIRCUIT_TRIP_AFTER:
+            self._circuit_open_until = monotonic() + (
+                retry_after if retry_after is not None else _CIRCUIT_COOLDOWN
+            )
+
     def _headers(self) -> dict[str, str]:
         headers = dict(_DEFAULT_HEADERS)
         if self.browser_profile == "none":
@@ -1158,6 +1205,10 @@ class FinvizClient:
     ) -> ClientResponse:
         status = response.status_code
         final_url = response.url
+        if status != 429:
+            # Any non-429 verdict (including blocked/entitlement/not-found)
+            # closes the circuit; only consecutive 429s keep it open.
+            self._note_success()
         error: FinvizError | None = None
         if status == 200 and _is_elite_location(final_url):
             error = FinvizEntitlementError(

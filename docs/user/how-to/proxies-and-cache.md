@@ -19,6 +19,25 @@ Retries apply only to transient transport, 5xx, and 429 responses. The client
 does not retry query, parse, entitlement, challenge, or strict one-request
 manifest failures.
 
+## Rate-limit circuit breaker
+
+After 3 consecutive 429 responses, the client stops sending requests: each
+further call raises `CircuitOpenError` (a `FinvizRateLimitError` subclass)
+immediately, without touching the network, until the cooldown elapses. The
+cooldown is the provider's `Retry-After` value when present, otherwise 60
+seconds. The first request after the deadline is a probe: any non-429 outcome
+closes the circuit, another 429 re-opens it. Blocked (403) and entitlement
+failures never count toward the circuit.
+
+```python
+import finvizp
+
+try:
+    result = await finvizp.quote_async("AAPL", client=client)
+except finvizp.CircuitOpenError as exc:
+    wait = exc.context.get("retry_after")  # seconds to back off
+```
+
 ## Set a proxy
 
 Precedence is explicit arguments, `FINVIZP_PROXY`, standard fastreq resolution,

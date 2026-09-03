@@ -81,7 +81,9 @@ The full implemented/planned ledger lives in the
 - **Structured-first sources** — public JSON/XHR or embedded payloads when
   same-tier, complete, direct, and snapshot-coherent; lxml parsing otherwise.
 - **Explicit proxies, route-isolated auth, conservative pacing/retries,
-  bounded result caching, single-flight coalescing.**
+  bounded result caching, single-flight coalescing.** A per-client 429
+  circuit breaker trips after 3 consecutive rate limits and fails fast
+  (`CircuitOpenError`, no request sent) until the cooldown passes.
 - **No** login/browser automation, bulk crawling, pandas contract,
   persistence layer, telemetry, or entitlement bypass.
 

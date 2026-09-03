@@ -31,6 +31,7 @@ from finvizp.capabilities import (
 from finvizp.client import ClientEvent, ClientResponse, FinvizClient, classify_response
 from finvizp.earnings import earnings, earnings_async, earnings_screen
 from finvizp.errors import (
+    CircuitOpenError,
     FetchWarning,
     FinvizBatchError,
     FinvizBlockedError,
@@ -122,6 +123,7 @@ __all__ = [
     "CacheEntry",
     # capability manifest
     "Capability",
+    "CircuitOpenError",
     "ClientEvent",
     "ClientResponse",
     "FetchResult",

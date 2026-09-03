@@ -167,6 +167,10 @@ class FinvizTransportError(FinvizError): ...
 class FinvizRateLimitError(FinvizError): ...
 
 
+class CircuitOpenError(FinvizRateLimitError):
+    """Raised without any HTTP request while the client's 429 circuit is open."""
+
+
 class FinvizBlockedError(FinvizError): ...
 
 

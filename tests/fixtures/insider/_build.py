@@ -114,6 +114,26 @@ _ROWS = (
 )
 
 
+_MALFORMED_ROW = (
+    # Live defect (2026-09-05): a Form 4 row whose Ticker cell has no anchor
+    # and no text. Position 5 (after the three well-formed rows and a spacer
+    # row without cells), identical to the provider's row numbering.
+    '<tr class="fv-insider-row is-buy-2 cursor-pointer">'
+    "<td></td>"
+    '<td><a href="insidertrading?oc=9999999&amp;tc=7&amp;b=2">SAMPLE OWNER</a></td>'
+    "<td>Director</td>"
+    "<td>Sep 4 '26</td>"
+    '<td class="transaction"><span>Sale</span></td>'
+    '<td class="value">1.00</td>'
+    '<td class="value">1</td>'
+    '<td class="value">1</td>'
+    '<td class="value">1</td>'
+    '<td><a href="http://www.sec.gov/Archives/edgar/data/9/form4-x.xml" target="_blank" '
+    'rel="nofollow">Sep 5 09:00 PM</a></td>'
+    "</tr>"
+)
+
+
 def write_global() -> Path:
     table = (
         '<table id="insider-table" class="styled-table-new is-rounded is-condensed '
@@ -122,6 +142,24 @@ def write_global() -> Path:
         + f"</tr></thead><tbody>{_ROWS}</tbody></table>"
     )
     path = HERE / "global.html"
+    path.write_text(PAGE.format(title="Latest Insider Trading", table=table), "utf-8")
+    return path
+
+
+def write_global_malformed_row() -> Path:
+    """global.html plus one provider-malformed row with no ticker anchor.
+
+    Mirrors the live defect (observed 2026-09-05): the provider serves a Form 4
+    event row whose Ticker cell carries no ``<a>`` and no text, which used to
+    normalize to an empty symbol and crash the non-nullable contract.
+    """
+    table = (
+        '<table id="insider-table" class="styled-table-new is-rounded is-condensed '
+        'mt-2 w-full table-fixed"><thead><tr>'
+        + "".join(f"<th>{head}</th>" for head in _HEADS)
+        + f"</tr></thead><tbody>{_ROWS}{_MALFORMED_ROW}</tbody></table>"
+    )
+    path = HERE / "global-malformed-row.html"
     path.write_text(PAGE.format(title="Latest Insider Trading", table=table), "utf-8")
     return path
 
@@ -303,5 +341,5 @@ def write_manager() -> Path:
 
 
 if __name__ == "__main__":
-    for path in (write_global(), write_fund(), write_manager()):
+    for path in (write_global(), write_global_malformed_row(), write_fund(), write_manager()):
         print(path)

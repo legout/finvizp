@@ -95,7 +95,11 @@ def _validate_slug(kind: str, slug: str) -> str:
 def _parse_global(response: ClientResponse, *, strict_schema: bool = False) -> FetchResult[Any]:
     """Reviewed endpoint parser: classified envelope -> immutable FetchResult."""
     warnings: list[Any] = []
-    rows = insider_parser.parse_insider_table(response.data)
+    rows = insider_parser.parse_insider_table(
+        response.data,
+        strict_schema=strict_schema,
+        on_skip=warnings.append,
+    )
     table = build_table(
         "quote_insider",
         rows,

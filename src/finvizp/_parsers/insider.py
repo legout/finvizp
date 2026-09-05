@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
 from lxml import html as lxml_html
 
-from finvizp.errors import FinvizParseError
+from finvizp.errors import FetchWarning, FinvizParseError
 
 __all__ = ["parse_fund_page", "parse_insider_table", "parse_manager_page"]
 
@@ -36,6 +37,11 @@ _MONTHS = {
 # Provider event date display: ``Aug 27 '26`` (quote-page insider tables use
 # the same two-digit apostrophe year).
 _DATE_DISPLAY = re.compile(r"^(?P<month>[A-Za-z]{3}) (?P<day>\d{1,2}) '(?P<year>\d{2})$")
+
+
+def _discard_warning(warning: FetchWarning) -> None:
+    """Default skip sink: warnings are opt-in via ``on_skip``."""
+
 
 # Required header contract of the global insider table. Parsing maps by header
 # text (never position); a table missing any of these is structure drift.
@@ -64,14 +70,22 @@ def _transaction_date(raw: str, row_key: str) -> str | None:
     return f"20{match['year']}-{_MONTHS[match['month'].lower()]:02d}-{int(match['day']):02d}"
 
 
-def parse_insider_table(html: str) -> list[dict[str, Any]]:
+def parse_insider_table(
+    html: str,
+    *,
+    strict_schema: bool = False,
+    on_skip: Callable[[FetchWarning], Any] | None = None,
+) -> list[dict[str, Any]]:
     """Parse the global insider table into source-near ``quote_insider`` rows.
 
     Rows keep provider order. Numeric displays are handed over as text for the
     registry-driven builder to convert (its raw companions retain the exact
     displays). A page without the required table/columns raises typed parse
-    drift.
+    drift. A row with no ticker at all is skipped with a ``row_skipped``
+    warning (``on_skip`` callback, else discarded); under
+    ``strict_schema=True`` it raises typed drift instead.
     """
+    emit_skip = on_skip if on_skip is not None else _discard_warning
     document = lxml_html.fromstring(html)
     target = None
     for table in document.xpath(".//table[@id='insider-table']"):
@@ -100,6 +114,17 @@ def parse_insider_table(html: str) -> list[dict[str, Any]]:
         ticker = (ticker_anchor[0].text_content().strip() if ticker_anchor else "") or cell(
             cells, "Ticker"
         )
+        if not ticker:
+            # Live defect (2026-09-05): the provider serves Form 4 rows whose
+            # Ticker cell is empty. Symbol-less records cannot be keyed or
+            # stored (quote_insider.symbol is non-nullable), so the row is
+            # skipped with a structured warning; strict_schema promotes it to
+            # typed drift instead of silently dropping provider data.
+            message = f"skipping insider row {position}: no ticker"
+            if strict_schema:
+                raise FinvizParseError(message, context={"endpoint": "insider"})
+            emit_skip(FetchWarning(code="row_skipped", message=message, endpoint="insider"))
+            continue
         sec_position = column["SEC Form 4"]
         sec_url = None
         if sec_position < len(cells):

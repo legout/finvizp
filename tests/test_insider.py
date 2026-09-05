@@ -25,7 +25,11 @@ import pytest
 from fastreq.backends.base import Backend, NormalizedResponse
 
 from finvizp.client import FinvizClient
-from finvizp.errors import FinvizNotFoundError, FinvizQueryError
+from finvizp.errors import (
+    FinvizNotFoundError,
+    FinvizParseError,
+    FinvizQueryError,
+)
 from finvizp.insider import (
     INSIDER_FEEDS,
     fund_async,
@@ -235,6 +239,39 @@ async def test_not_found_title_is_typed_not_found() -> None:
     fake = InsiderTransport({}, not_found={"/insidertrading.ashx"})
     with pytest.raises(FinvizNotFoundError):
         await global_async(client=_client(fake))
+
+
+# --- malformed rows: symbol-less Form 4 events ----------------------------------------
+
+
+def _global_with_malformed_row() -> InsiderTransport:
+    """Fixture page with one provider-malformed row (no ticker anchor)."""
+    return InsiderTransport({"/insidertrading.ashx": _fixture("global-malformed-row.html")})
+
+
+async def test_symbol_less_row_is_skipped_with_warning_not_fatal() -> None:
+    fake = _global_with_malformed_row()
+    result = await global_async(client=_client(fake))
+    # The three well-formed rows survive; the symbol-less row is dropped.
+    assert result.table.num_rows == 3
+    assert result.table.column("symbol").to_pylist() == ["VTSI", "SNTH", "FESK"]
+    warnings = result.metadata.warnings
+    assert [w.code for w in warnings].count("row_skipped") == 1
+    skipped = next(w for w in warnings if w.code == "row_skipped")
+    assert "row 4" in skipped.message
+    assert skipped.endpoint == "insider"
+
+
+async def test_symbol_less_row_skips_never_leak_into_result_metadata() -> None:
+    result = await global_async(client=_client(_global_with_malformed_row()))
+    assert result.metadata.status == ResultStatus.COMPLETE
+    assert result.table.num_rows == 3
+
+
+async def test_strict_schema_promotes_symbol_less_row_to_typed_error() -> None:
+    fake = _global_with_malformed_row()
+    with pytest.raises(FinvizParseError, match="no ticker"):
+        await global_async(client=_client(fake), strict_schema=True)
 
 
 async def test_page_without_insider_table_is_parse_drift() -> None:

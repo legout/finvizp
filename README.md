@@ -63,7 +63,7 @@ identical.
 | 0.3 | Groups, spectrum, maps, news, insider, calendar | ✅ |
 | 0.4 | Markets, artifacts (charts/spectrum), forex/crypto, futures | ✅ |
 | 0.5 | Frozen-surface + finvizfinance parity audit | ✅ |
-| 1.0 | Stable release | pending |
+| 1.0 | Stable release | ✅ |
 
 The full implemented/planned ledger lives in the
 [capability matrix](docs/user/reference/capability-matrix.md) and

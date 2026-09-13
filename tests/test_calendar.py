@@ -34,7 +34,7 @@ from finvizp.results import FetchResult, ResultStatus
 FIXTURES = Path(__file__).parent / "fixtures" / "calendar"
 FETCHED_AT = dt.datetime(2026, 8, 30, 14, 30, tzinfo=dt.UTC)
 
-CALENDAR_PATH = "/calendar.ashx"
+CALENDAR_PATH = "/calendar/economic.ashx"
 DETAIL_PREFIX = "/calendar/economic/detail/"
 
 

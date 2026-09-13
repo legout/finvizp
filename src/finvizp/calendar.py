@@ -1,6 +1,6 @@
 """Economic calendar and release details: embedded-JSON event tables.
 
-Endpoint module in the foundation architecture: ``/calendar.ashx`` and
+Endpoint module in the foundation architecture: ``/calendar/economic.ashx`` and
 ``/calendar/economic/detail/<RELEASE>`` both serve a SPA shell whose embedded
 ``route-init-data`` JSON carries the complete structured payload (verified
 2026-08-30; no legacy ``table.calendar`` HTML remains, so there is no fallback
@@ -32,7 +32,7 @@ __all__ = [
     "calendar_detail_async",
 ]
 
-CALENDAR_PATH = "/calendar.ashx"
+CALENDAR_PATH = "/calendar/economic.ashx"
 DETAIL_PREFIX = "/calendar/economic/detail/"
 
 # Release slug contract (observed provider slugs like ``USACSA``, ``NFP TCH``

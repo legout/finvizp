@@ -138,3 +138,36 @@ def test_duplicate_rank_is_drift() -> None:
     )
     with pytest.raises(FinvizParseError, match="rank"):
         parse_screener_page(html)
+
+
+# --- 2026-10 embedded JSON redesign ----------------------------------------------
+
+
+def test_json_overview_page_parses_rows_and_pagination() -> None:
+    page = parse_screener_page(_page("json-overview-page-1.html"))
+    assert not page.is_empty
+    assert page.columns[0:2] == ("No.", "Ticker")
+    assert "Company" in page.columns
+    assert "Market Cap" in page.columns
+    assert len(page.rows) == 20
+    assert page.page_start == 1
+    assert page.total_rows == 733
+    assert page.rows[0].rank == 1
+    assert page.rows[0].symbol == "AAMI"
+    assert page.rows[0].raw  # value displays present
+
+
+def test_json_earnings_custom_exposes_earnings_date() -> None:
+    page = parse_screener_page(_page("json-earnings-custom.html"))
+    assert not page.is_empty
+    assert "Earnings Date" in page.columns
+    idx = page.columns.index("Earnings Date") - 2  # raw omits No./Ticker
+    assert page.rows[0].symbol
+    assert page.rows[0].raw[idx]  # e.g. "Oct 29, 2026 BMO"
+
+
+def test_json_empty_screen_is_positively_empty() -> None:
+    page = parse_screener_page(_page("json-empty.html"))
+    assert page.is_empty
+    assert page.rows == ()
+    assert page.total_rows == 0

@@ -167,7 +167,7 @@ def _ssr_page(payload: dict, title: str) -> str:
     return (
         "<!DOCTYPE html><html><head>"
         f"<title>{title} - Finviz</title></head>"
-        '<body><div data-ssr-root></div>'
+        "<body><div data-ssr-root></div>"
         '<script type="application/json" data-ssr-props="ssr-island-1">'
         f"{body}</script>"
         "</body></html>"

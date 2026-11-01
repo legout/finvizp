@@ -43,6 +43,11 @@ __all__ = [
 _ROUTE_INIT = re.compile(
     r'<script id="route-init-data" type="application/json">\s*(.*?)\s*</script>', re.S
 )
+# 2026-11 drift: the SPA shell now carries the same payload inside a
+# server-rendered island instead of the id-keyed script.
+_SSR_PROPS = re.compile(
+    r'<script type="application/json" data-ssr-props="[^"]*">\s*(.*?)\s*</script>', re.S
+)
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WarningCallback = Callable[[Any], Any]
 
@@ -78,7 +83,7 @@ def parse_calendar_page(
 ) -> CalendarRecords:
     """Parse one current-calendar page into source-near row mappings."""
     payload = _route_init_payload(html)
-    data = _data_of(payload)
+    data = _section_of(payload, "economic")
     entries = data.get("entries")
     if not isinstance(entries, list):
         msg = "calendar payload has no entries list"
@@ -103,7 +108,7 @@ def parse_release_detail_page(
 ) -> ReleaseDetailRecords:
     """Parse one release-detail page into history rows plus category metadata."""
     payload = _route_init_payload(html)
-    data = _data_of(payload)
+    data = _section_of(payload, "economicDetail")
     table = data.get("table")
     if not isinstance(table, list):
         msg = "release detail payload has no table list"
@@ -126,7 +131,7 @@ def parse_release_detail_page(
 
 
 def _route_init_payload(html: str) -> dict[str, Any]:
-    match = _ROUTE_INIT.search(html)
+    match = _ROUTE_INIT.search(html) or _SSR_PROPS.search(html)
     if match is None:
         msg = "calendar page has no route-init-data payload"
         raise FinvizParseError(msg, context={"endpoint": "calendar"})
@@ -147,6 +152,18 @@ def _data_of(payload: dict[str, Any]) -> dict[str, Any]:
         msg = "calendar payload has no data object"
         raise FinvizParseError(msg, context={"endpoint": "calendar"})
     return data
+
+
+def _section_of(payload: dict[str, Any], name: str) -> dict[str, Any]:
+    """Resolve one payload section across page generations.
+
+    2026-11 drift: sections moved from ``data.<section>`` to top-level keys
+    (``economic``, ``economicDetail``); legacy pages keep the ``data`` wrapper.
+    """
+    section = payload.get(name)
+    if isinstance(section, dict):
+        return section
+    return _data_of(payload)
 
 
 def _source_near_row(entry: dict[str, Any]) -> dict[str, Any]:

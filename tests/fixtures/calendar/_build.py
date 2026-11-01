@@ -159,6 +159,21 @@ def _page(payload: dict, title: str) -> str:
     )
 
 
+def _ssr_page(payload: dict, title: str) -> str:
+    """2026-11 page generation: payload inside an SSR island, sections at the
+    top level (``economic``, ``earnings``, ``economicDetail``) instead of a
+    ``data`` wrapper."""
+    body = json.dumps(payload, separators=(",", ":"))
+    return (
+        "<!DOCTYPE html><html><head>"
+        f"<title>{title} - Finviz</title></head>"
+        '<body><div data-ssr-root></div>'
+        '<script type="application/json" data-ssr-props="ssr-island-1">'
+        f"{body}</script>"
+        "</body></html>"
+    )
+
+
 def current_embedded_page() -> str:
     """Current calendar: complete entries array in the embedded JSON."""
     return _page(
@@ -186,6 +201,26 @@ def detail_page() -> str:
     )
 
 
+def current_ssr_page() -> str:
+    """2026-11 current calendar: SSR island payload, top-level sections."""
+    return _ssr_page(
+        {
+            "view": "economic",
+            "url": "/calendar/economic",
+            "today": "2026-11-01",
+            "hasUserPremium": False,
+            "hasDarkTheme": True,
+            "showTickerLogos": True,
+            "economic": {"initialDateFrom": "2026-08-31", "entries": ENTRIES},
+            "earnings": {"entries": []},
+            "dividends": [],
+            "economicDetail": {},
+            "earningsSeasonPreview": [],
+        },
+        "Economic Calendar",
+    )
+
+
 def malformed_entries_page() -> str:
     """Payload drift: entries is not a list."""
     return _page({"data": {"entries": {"broken": True}}, "version": 3}, "Economic Calendar")
@@ -207,6 +242,7 @@ def not_found_page() -> str:
 
 def main() -> None:
     (HERE / "current-embedded.html").write_text(current_embedded_page(), "utf-8")
+    (HERE / "current-embedded-ssr.html").write_text(current_ssr_page(), "utf-8")
     (HERE / "detail.html").write_text(detail_page(), "utf-8")
     (HERE / "_drift-malformed-entries.html").write_text(malformed_entries_page(), "utf-8")
     (HERE / "_drift-missing-entries.html").write_text(missing_entries_page(), "utf-8")

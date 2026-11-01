@@ -43,6 +43,7 @@ def _fixture(name: str) -> str:
 
 
 CURRENT_PAGE = _fixture("current-embedded.html")
+CURRENT_SSR_PAGE = _fixture("current-embedded-ssr.html")
 DETAIL_PAGE = _fixture("detail.html")
 NOT_FOUND_PAGE = _fixture("not-found.html")
 
@@ -173,6 +174,18 @@ def test_parse_calendar_page_rows_are_source_near() -> None:
     assert first["actual"] == "0.2%"
     assert first["forecast"] == "0.2%"
     assert first["previous"] == "0.3%"
+
+
+def test_parse_calendar_page_ssr_island_payload() -> None:
+    """2026-11 drift: SSR-island wrapper + top-level ``economic`` section parse
+    to the same source-near rows as the legacy route-init-data page."""
+
+    from finvizp._parsers.calendar import parse_calendar_page
+
+    legacy = parse_calendar_page(CURRENT_PAGE, fetched_at=FETCHED_AT)
+    ssr = parse_calendar_page(CURRENT_SSR_PAGE, fetched_at=FETCHED_AT)
+    assert ssr.rows == legacy.rows
+    assert ssr.displays == legacy.displays
 
 
 def test_parse_calendar_page_preserves_raw_displays() -> None:
